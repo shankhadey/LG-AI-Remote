@@ -173,6 +173,8 @@ private fun Header(tv: TvController) {
     var macDialog by remember { mutableStateOf(false) }
     if (macDialog) MacDialog(tv) { macDialog = false }
     var diag by remember { mutableStateOf(false) }
+    var tapDialog by remember { mutableStateOf(false) }
+    if (tapDialog) TapDialog(tv) { tapDialog = false }
     if (diag) DiagnosticsDialog(tv) { diag = false }
     Row(Modifier.fillMaxWidth().padding(vertical = 10.dp), verticalAlignment = Alignment.CenterVertically) {
         Box(Modifier.size(9.dp).clip(CircleShape).background(if (tv.connected) Palette.ok else if (tv.connecting) Palette.muted else Palette.danger))
@@ -191,11 +193,47 @@ private fun Header(tv: TvController) {
             DropdownMenu(menu, onDismissRequest = { menu = false }) {
                 DropdownMenuItem(text = { Text("Reconnect") }, onClick = { menu = false; tv.connect() })
                 DropdownMenuItem(text = { Text(if (tv.macKnown) "Power-on settings" else "Set up power on") }, onClick = { menu = false; macDialog = true })
+                DropdownMenuItem(text = { Text("Fix touchpad tap") }, onClick = { menu = false; tapDialog = true })
                 DropdownMenuItem(text = { Text("Diagnostics") }, onClick = { menu = false; diag = true })
                 DropdownMenuItem(text = { Text("Choose a different TV") }, onClick = { menu = false; tv.forget() })
             }
         }
     }
+}
+
+/** Lets the user find which tap method their TV responds to, by trying each on a real tile. */
+@Composable
+private fun TapDialog(tv: TvController, onClose: () -> Unit) {
+    val options = listOf(
+        "click" to "A · Pointer click",
+        "ok" to "B · Remote's OK button",
+        "enter" to "C · Keyboard Enter",
+    )
+    AlertDialog(
+        onDismissRequest = onClose,
+        title = { Text("Make taps select") },
+        text = {
+            Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                Text("1. Close this, drag the cursor onto an app tile on the TV, then reopen it (⋮ › Fix touchpad tap).", fontSize = 14.sp)
+                Text("2. Tap A, B and C in turn. Stop at the one that opens the tile — it's saved as what a tap does.", fontSize = 14.sp)
+                for ((id, label) in options) {
+                    val selected = tv.tapMethod == id
+                    Row(
+                        Modifier.fillMaxWidth().clip(RoundedCornerShape(12.dp))
+                            .background(if (selected) Palette.accent else Palette.surface2)
+                            .clickable { tv.setTap(id); tv.sendTap(id); tv.say("Sent $label — did the tile open?") }
+                            .padding(14.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                    ) {
+                        Text(label, color = if (selected) Color.White else Palette.text, fontWeight = FontWeight.SemiBold, modifier = Modifier.weight(1f))
+                        if (selected) Text("in use", color = Color.White, fontSize = 12.sp)
+                    }
+                }
+            }
+        },
+        confirmButton = { TextButton(onClick = onClose) { Text("Done") } },
+        containerColor = Palette.surface, titleContentColor = Palette.text, textContentColor = Palette.muted,
+    )
 }
 
 @Composable

@@ -164,7 +164,20 @@ class TvController(app: Application) : AndroidViewModel(app) {
     fun ssap(uri: String, payload: JSONObject? = null) = enqueue { tv().request(uri, payload) }
     fun volume(up: Boolean) = ssap(if (up) "ssap://audio/volumeUp" else "ssap://audio/volumeDown")
     fun move(dx: Float, dy: Float) = enqueue { tv().move(dx, dy) }
-    fun click() = enqueue { tv().click() }
+    /**
+     * What a touchpad tap sends. Some LG firmware ignores the pointer "click" message, so this is
+     * selectable: "click" (pointer click), "ok" (the remote's OK button), "enter" (keyboard Enter).
+     */
+    var tapMethod by mutableStateOf(prefs.getString("tapMethod", "click")!!)
+    fun setTap(method: String) { tapMethod = method; prefs.edit().putString("tapMethod", method).apply() }
+    fun click() = sendTap(tapMethod)
+    fun sendTap(method: String) = enqueue {
+        when (method) {
+            "ok" -> tv().button("ENTER")
+            "enter" -> tv().request("ssap://com.webos.service.ime/sendEnterKey")
+            else -> tv().click()
+        }
+    }
     fun scroll(dy: Float) = enqueue { tv().scroll(dy) }
     /**
      * Opens an app and checks it actually came to the front. If the usual launch call is rejected
