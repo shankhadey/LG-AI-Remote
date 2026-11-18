@@ -56,8 +56,17 @@ class LgTv(
     val isConnected get() = ws != null && registered.isCompleted && !registered.isCancelled
 
     /** Opens the socket and registers. First time, the TV shows a prompt the user must accept. */
+    // Only one connect at a time: the wake loop, the power button and normal reconnects can all
+    // ask at once, and two overlapping handshakes leave a socket that looks open but isn't paired.
+    private val connectLock = kotlinx.coroutines.sync.Mutex()
+
     suspend fun connect(onPrompt: () -> Unit = {}) {
         if (isConnected) return
+        connectLock.lock()
+        try { if (!isConnected) connectOnce(onPrompt) } finally { connectLock.unlock() }
+    }
+
+    private suspend fun connectOnce(onPrompt: () -> Unit) {
         var lastError: Exception? = null
         for (url in urls) {
             try {

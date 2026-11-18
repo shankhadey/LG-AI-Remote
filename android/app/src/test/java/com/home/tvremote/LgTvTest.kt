@@ -6,6 +6,7 @@ import com.home.tvremote.lg.Pointer
 import com.home.tvremote.lg.WakeOnLan
 import com.home.tvremote.lg.TvException
 import kotlinx.coroutines.runBlocking
+import kotlinx.coroutines.async
 import okhttp3.Response
 import okhttp3.WebSocket
 import okhttp3.WebSocketListener
@@ -100,6 +101,16 @@ class LgTvTest {
         assertTrue(!unsigned.has("signed"))
         assertEquals("1.0", unsigned.getString("appVersion"))
         assertTrue(unsigned.getJSONArray("permissions").toString().contains("CONTROL_MOUSE_AND_KEYBOARD"))
+        assertEquals(12, tv.request("ssap://audio/getVolume").getInt("volume"))
+        tv.close()
+    }
+
+    @Test fun overlappingConnectsShareOneHandshake() = runBlocking {
+        startTv()
+        val tv = LgTv("127.0.0.1", "OLDKEY", onClientKey = {}, urls = listOf(url()))
+        val jobs = List(4) { kotlinx.coroutines.GlobalScope.async(kotlinx.coroutines.Dispatchers.IO) { tv.connect() } }
+        jobs.forEach { it.await() }
+        assertEquals(1, requests.count { it.getString("type") == "register" })
         assertEquals(12, tv.request("ssap://audio/getVolume").getInt("volume"))
         tv.close()
     }
