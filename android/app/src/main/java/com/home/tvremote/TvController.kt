@@ -197,21 +197,51 @@ class TvController(app: Application) : AndroidViewModel(app) {
         }
     }
 
+    var waking by mutableStateOf(false)
+
     private fun powerOn() {
         val macs = prefs.getString("mac", null)?.split(',')?.filter { it.isNotBlank() }.orEmpty()
         if (macs.isEmpty()) {
             say("To turn the TV on I need its MAC address — add it from the ⋮ menu.", error = true); return
         }
+        if (waking) return
+        val ip = prefs.getString("ip", null)
+        waking = true
         viewModelScope.launch {
-            say("Turning on…")
-            runCatching { WakeOnLan.send(getApplication(), macs, prefs.getString("ip", null)) }.onFailure { showError(it) }
-            // Give the TV time to wake, then reconnect.
-            repeat(10) {
-                delay(2000)
-                if (connected && tv?.isConnected == true) { say("TV is on"); return@launch }
-                connect()
-            }
-            say("The TV didn't wake up. On the TV, turn on Settings › General › Devices › External Devices › TV On With Mobile › Turn on via Wi-Fi.", error = true)
+            try {
+                // Keep sending the wake signal for ~40 s: a TV that was just switched off ignores it
+                // until it has finished shutting down, and routers sometimes drop a single packet.
+                val start = System.currentTimeMillis()
+                var sent = 0
+                var lastErr: Throwable? = null
+                while (System.currentTimeMillis() - start < 40_000) {
+                    val elapsed = (System.currentTimeMillis() - start) / 1000
+                    say(if (elapsed < 8) "Turning on…" else "Turning on… (${elapsed}s, waiting for the TV)")
+                    runCatching { sent += WakeOnLan.send(getApplication(), macs, ip) }.onFailure { lastErr = it }
+                    if (ip != null && WakeOnLan.reachable(ip)) {
+                        // The TV's network is back; connect quietly (it may still be booting).
+                        repeat(5) {
+                            val t = tv ?: run { connect(); return@launch }
+                            if (runCatching { t.connect(); true }.getOrDefault(false)) {
+                                // Right after "off" the TV answers for a few seconds while shutting down;
+                                // only call it on once it reports itself awake.
+                                val state = runCatching {
+                                    t.request("ssap://com.webos.service.tvpower/power/getPowerState").optString("state")
+                                }.getOrNull()
+                                if (state == null || state == "Active" || state.isEmpty()) {
+                                    connected = true; afterConnect(t); say("TV is on"); return@launch
+                                }
+                            }
+                            delay(1500)
+                        }
+                    }
+                    delay(2500)
+                }
+                when {
+                    sent == 0 -> say("This phone couldn't send the wake-up signal (${lastErr?.message ?: "no Wi-Fi?"}). Make sure the phone is on Wi-Fi.", error = true)
+                    else -> say("The TV didn't respond to the wake-up signal. If it's on Wi-Fi, see ⋮ › Power-on settings for what to check.", error = true)
+                }
+            } finally { waking = false }
         }
     }
 

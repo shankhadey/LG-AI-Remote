@@ -196,6 +196,7 @@ private fun MacDialog(tv: TvController, onClose: () -> Unit) {
         text = {
             Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
                 Text("1. On the TV, turn on Settings › General › Devices › External Devices › TV On With Mobile › Turn on via Wi-Fi.", fontSize = 14.sp)
+                Text("If it still won't wake: TVs on Wi-Fi can switch Wi-Fi fully off in standby, and some routers and mesh systems don't pass the wake-up signal. An Ethernet cable to the TV is the most reliable fix.", fontSize = 14.sp)
                 Text("2. The app sends a wake-up signal to the TV's MAC address. It's normally filled in automatically; if it's empty, find it on the TV under Settings › General › About This TV (or Network › Wi-Fi › Advanced).", fontSize = 14.sp)
                 BasicTextField(mac, { mac = it }, singleLine = true,
                     textStyle = TextStyle(color = Palette.text, fontSize = 16.sp), cursorBrush = SolidColor(Palette.accent),

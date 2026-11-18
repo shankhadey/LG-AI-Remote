@@ -177,12 +177,22 @@ object Discovery {
  * which of these they pass to a sleeping TV.
  */
 object WakeOnLan {
-    suspend fun send(context: Context, macs: List<String>, tvIp: String?) = withContext(Dispatchers.IO) {
+    /** Quick check: is the TV's control port answering? */
+    suspend fun reachable(ip: String): Boolean = withContext(Dispatchers.IO) {
+        listOf(3001, 3000).any { port ->
+            try { java.net.Socket().use { it.connect(InetSocketAddress(ip, port), 800); true } } catch (_: Exception) { false }
+        }
+    }
+
+    /** Sends the packets; returns how many actually left the phone (0 = nothing could be sent). */
+    suspend fun send(context: Context, macs: List<String>, tvIp: String?): Int = withContext(Dispatchers.IO) {
         val cm = context.getSystemService(Context.CONNECTIVITY_SERVICE) as ConnectivityManager
         @Suppress("DEPRECATION")
         val net = cm.allNetworks.firstOrNull { cm.getNetworkCapabilities(it)?.hasTransport(NetworkCapabilities.TRANSPORT_WIFI) == true }
         val link = net?.let { cm.getLinkProperties(it) }?.linkAddresses?.firstOrNull { it.address is Inet4Address }
         val targets = listOfNotNull("255.255.255.255", link?.let { subnetBroadcast(it.address.hostAddress!!, it.prefixLength) }, tvIp).distinct()
+        var ok = 0
+        var last: Exception? = null
         DatagramSocket().use { s ->
             net?.bindSocket(s)
             s.broadcast = true
@@ -190,12 +200,15 @@ object WakeOnLan {
                 for (mac in macs) {
                     val bytes = packet(mac)
                     for (t in targets) for (port in listOf(9, 7)) {
-                        runCatching { s.send(DatagramPacket(bytes, bytes.size, InetAddress.getByName(t), port)) }
+                        try { s.send(DatagramPacket(bytes, bytes.size, InetAddress.getByName(t), port)); ok++ }
+                        catch (e: Exception) { last = e; android.util.Log.w("TvRemote", "WOL to $t:$port failed: ${e.message}") }
                     }
                 }
                 Thread.sleep(100)
             }
         }
+        if (ok == 0) throw last ?: IllegalStateException("no packets sent")
+        ok
     }
 
     fun subnetBroadcast(ip: String, prefixLength: Int): String {
