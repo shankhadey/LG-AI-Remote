@@ -36,7 +36,11 @@ import org.junit.Test
 class ScreenshotTest {
     @get:Rule val paparazzi = Paparazzi(deviceConfig = DeviceConfig.PIXEL_6, showSystemUi = false)
 
-    private class FakeApp(base: Context) : Application() { init { attachBaseContext(base) } }
+    private class FakeApp(base: Context, val prefs: FakePrefs = FakePrefs()) : Application() {
+        init { attachBaseContext(base) }
+        override fun getSharedPreferences(name: String?, mode: Int) = prefs
+        override fun getApplicationContext(): Context = this
+    }
 
     @OptIn(ExperimentalCoroutinesApi::class)
     @Before fun main() { Dispatchers.setMain(UnconfinedTestDispatcher()) }
@@ -68,6 +72,14 @@ class ScreenshotTest {
     @Test fun liveTvLight() { Palette.dark = false; val tv = remoteTv().apply { foregroundApp = "com.webos.app.livetv" }; shot { RemoteScreen(tv) { true } } }
     @Test fun typingOnTv() { Palette.dark = true; val tv = remoteTv().apply { tvKeyboardOpen = true; foregroundApp = "youtube.leanback.v4" }; shot { RemoteScreen(tv) { true } } }
     @Test fun offDark() { Palette.dark = true; val tv = remoteTv().apply { connected = false; tvOff = true }; shot { RemoteScreen(tv) { true } } }
+    /** Regression: v0.3.1 crashed on launch whenever a TV was already saved. */
+    @Test fun startsWithSavedTvWithoutCrashing() {
+        Palette.dark = true
+        val saved = FakePrefs(mutableMapOf("ip" to "192.0.2.1", "clientKey" to "k", "name" to "Living Room"))
+        val tv = TvController(FakeApp(paparazzi.context, saved))   // runs init → refresh()
+        shot { RemoteScreen(tv) { true } }
+    }
+
     @Test fun checkingDark() { Palette.dark = true; val tv = remoteTv().apply { connected = false; checking = true }; shot { RemoteScreen(tv) { true } } }
     @Test fun listeningDark() { Palette.dark = true; shot { ListeningPanel("Search YouTube for easy weeknight pasta recipes", 0.7f, {}, {}) } }
     @Test fun listeningLight() { Palette.dark = false; shot { ListeningPanel("Search YouTube for easy weeknight pasta recipes", 0.7f, {}, {}) } }

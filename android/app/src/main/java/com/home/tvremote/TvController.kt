@@ -61,6 +61,8 @@ class TvController(app: Application) : AndroidViewModel(app) {
 
     /** True for the first second or so after opening, while we check whether the TV is on. */
     var checking by mutableStateOf(false)
+    /** True while the wake-up signal is being sent and we wait for the TV. (Declared before init: refresh() reads it.) */
+    var waking by mutableStateOf(false)
 
     init {
         viewModelScope.launch { for (job in queue) runCatching { job() }.onFailure { showError(it) } }
@@ -389,7 +391,6 @@ class TvController(app: Application) : AndroidViewModel(app) {
     /** Press-and-hold on the power button: always try to wake the TV. */
     fun forcePowerOn() { if (!waking) powerOn() }
 
-    var waking by mutableStateOf(false)
 
     private fun powerOn() {
         val macs = prefs.getString("mac", null)?.split(',')?.filter { it.isNotBlank() }.orEmpty()
