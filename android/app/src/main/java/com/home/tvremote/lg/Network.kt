@@ -170,15 +170,39 @@ object Discovery {
     } catch (_: Exception) { null }
 }
 
-/** Wake-on-LAN magic packet: turns on an LG TV that has "Turn on via Wi-Fi" enabled. */
+/**
+ * Wake-on-LAN magic packet: turns on an LG TV that has "Turn on via Wi-Fi" enabled.
+ * Sent over the Wi-Fi network (not mobile data) to the global broadcast, the subnet's
+ * broadcast address and the TV's own address, on ports 9 and 7 — routers differ in
+ * which of these they pass to a sleeping TV.
+ */
 object WakeOnLan {
-    suspend fun send(mac: String) = withContext(Dispatchers.IO) {
-        val bytes = packet(mac)
+    suspend fun send(context: Context, macs: List<String>, tvIp: String?) = withContext(Dispatchers.IO) {
+        val cm = context.getSystemService(Context.CONNECTIVITY_SERVICE) as ConnectivityManager
+        @Suppress("DEPRECATION")
+        val net = cm.allNetworks.firstOrNull { cm.getNetworkCapabilities(it)?.hasTransport(NetworkCapabilities.TRANSPORT_WIFI) == true }
+        val link = net?.let { cm.getLinkProperties(it) }?.linkAddresses?.firstOrNull { it.address is Inet4Address }
+        val targets = listOfNotNull("255.255.255.255", link?.let { subnetBroadcast(it.address.hostAddress!!, it.prefixLength) }, tvIp).distinct()
         DatagramSocket().use { s ->
+            net?.bindSocket(s)
             s.broadcast = true
-            val addr = InetAddress.getByName("255.255.255.255")
-            repeat(3) { s.send(DatagramPacket(bytes, bytes.size, addr, 9)) }
+            repeat(3) {
+                for (mac in macs) {
+                    val bytes = packet(mac)
+                    for (t in targets) for (port in listOf(9, 7)) {
+                        runCatching { s.send(DatagramPacket(bytes, bytes.size, InetAddress.getByName(t), port)) }
+                    }
+                }
+                Thread.sleep(100)
+            }
         }
+    }
+
+    fun subnetBroadcast(ip: String, prefixLength: Int): String {
+        val p = ip.split('.').map { it.toInt() }
+        val addr = (p[0] shl 24) or (p[1] shl 16) or (p[2] shl 8) or p[3]
+        val bc = addr or (-1 ushr prefixLength.coerceIn(0, 32)).let { if (prefixLength >= 32) 0 else it }
+        return "${(bc ushr 24) and 255}.${(bc ushr 16) and 255}.${(bc ushr 8) and 255}.${bc and 255}"
     }
 
     fun packet(mac: String): ByteArray {

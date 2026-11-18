@@ -135,6 +135,12 @@ class LgTvTest {
         assertEquals(1021, Discovery.hostsToScan("10.0.3.9", 16).size) // capped at /22
     }
 
+    @Test fun wakeOnLanTargets() {
+        assertEquals("192.168.1.255", WakeOnLan.subnetBroadcast("192.168.1.37", 24))
+        assertEquals("192.168.7.255", WakeOnLan.subnetBroadcast("192.168.5.20", 22))
+        assertEquals("10.0.0.255", WakeOnLan.subnetBroadcast("10.0.0.9", 24))
+    }
+
     @Test fun helpers() {
         val pkt = WakeOnLan.packet("A8:23:FE:01:02:03")
         assertEquals(102, pkt.size)

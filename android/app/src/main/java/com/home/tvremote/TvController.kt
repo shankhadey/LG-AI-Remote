@@ -19,6 +19,9 @@ import kotlinx.coroutines.Job
 import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withTimeoutOrNull
+import android.util.Log
+import com.home.tvremote.lg.TvException
 import org.json.JSONObject
 import java.net.URLEncoder
 
@@ -34,6 +37,7 @@ class TvController(app: Application) : AndroidViewModel(app) {
     var scanning by mutableStateOf(false)
     val found = mutableStateListOf<FoundTv>()
     var scanReport by mutableStateOf<String?>(null)
+    var macKnown by mutableStateOf(prefs.getString("mac", null) != null)
     val apps = mutableStateListOf<TvApp>()
     var tvKeyboardOpen by mutableStateOf(false)
     var feedback by mutableStateOf<String?>(null)   // short "what just happened" line
@@ -70,7 +74,7 @@ class TvController(app: Application) : AndroidViewModel(app) {
     }
 
     fun choose(ip: String, name: String) {
-        if (ip != prefs.getString("ip", null)) prefs.edit().remove("clientKey").remove("mac").apply()
+        if (ip != prefs.getString("ip", null)) { prefs.edit().remove("clientKey").remove("mac").apply(); macKnown = false }
         prefs.edit().putString("ip", ip).putString("name", name).apply()
         tvName = name
         tv?.close(); tv = null
@@ -80,7 +84,7 @@ class TvController(app: Application) : AndroidViewModel(app) {
     fun forget() {
         tv?.close(); tv = null
         prefs.edit().clear().apply()
-        apps.clear(); found.clear(); connected = false
+        apps.clear(); found.clear(); connected = false; macKnown = false
         screen = Screen.Setup
     }
 
@@ -132,10 +136,10 @@ class TvController(app: Application) : AndroidViewModel(app) {
         }
         if (prefs.getString("mac", null) == null) runCatching {
             val info = t.request("ssap://com.webos.service.connectionmanager/getinfo")
-            val mac = info.optJSONObject("wiredInfo")?.optString("macAddress")?.takeIf { it.length >= 12 }
-                ?: info.optJSONObject("wifiInfo")?.optString("macAddress")?.takeIf { it.length >= 12 }
-            mac?.let { prefs.edit().putString("mac", it).apply() }
-        }
+            // Keep both: Wake-on-LAN only works on the interface the TV actually uses (Wi-Fi vs cable).
+            val macs = listOf("wifiInfo", "wiredInfo").mapNotNull { info.optJSONObject(it)?.optString("macAddress")?.takeIf { m -> m.length >= 12 } }
+            if (macs.isNotEmpty()) { prefs.edit().putString("mac", macs.joinToString(",")).apply(); macKnown = true }
+        }.onFailure { Log.w("TvRemote", "Couldn't read TV MAC: ${it.message}") }
     }
 
     private suspend fun tv(): LgTv {
@@ -167,18 +171,47 @@ class TvController(app: Application) : AndroidViewModel(app) {
         say(if (muted) "Sound on" else "Muted")
     }
 
+    fun currentMac() = prefs.getString("mac", null).orEmpty()
+    fun setMac(value: String) {
+        val clean = value.split(',', ' ').map { it.trim() }.filter { it.count { c -> c.isLetterOrDigit() } == 12 }
+        if (clean.isEmpty()) { say("That doesn't look like a MAC address (e.g. A8:23:FE:01:02:03)", error = true); return }
+        prefs.edit().putString("mac", clean.joinToString(",")).apply(); macKnown = true; say("Saved. Power on is ready.")
+    }
+
+    /**
+     * One power button. After "off", LG TVs with Quick Start+ stay on the network in standby and
+     * keep the connection open, so "connected" doesn't mean "on" — ask the TV for its power state.
+     */
     fun power() {
-        if (connected) { say("Turning off"); ssap("ssap://system/turnOff") } else powerOn()
+        viewModelScope.launch {
+            val t = tv
+            val state = if (t != null && t.isConnected) withTimeoutOrNull(2500) {
+                runCatching { t.request("ssap://com.webos.service.tvpower/power/getPowerState").optString("state") }
+                    .getOrElse { if (it is TvException && t.isConnected) "unknown-but-reachable" else null }
+            } else null
+            when (state) {
+                "Active", "unknown-but-reachable" -> { say("Turning off"); ssap("ssap://system/turnOff") }
+                "Screen Off" -> { say("Turning the screen on"); ssap("ssap://com.webos.service.tvpower/power/turnOnScreen") }
+                else -> powerOn() // null (unreachable), "Active Standby", "Suspend", ...
+            }
+        }
     }
 
     private fun powerOn() {
-        val mac = prefs.getString("mac", null)
-        if (mac == null) { say("Can't turn the TV on: connect once while it's on so I can learn its address.", error = true); return }
+        val macs = prefs.getString("mac", null)?.split(',')?.filter { it.isNotBlank() }.orEmpty()
+        if (macs.isEmpty()) {
+            say("To turn the TV on I need its MAC address — add it from the ⋮ menu.", error = true); return
+        }
         viewModelScope.launch {
-            runCatching { WakeOnLan.send(mac) }.onFailure { showError(it) }
             say("Turning on…")
-            // Give the TV time to boot, then reconnect.
-            repeat(8) { delay(2500); if (!connected) connect() else return@launch }
+            runCatching { WakeOnLan.send(getApplication(), macs, prefs.getString("ip", null)) }.onFailure { showError(it) }
+            // Give the TV time to wake, then reconnect.
+            repeat(10) {
+                delay(2000)
+                if (connected && tv?.isConnected == true) { say("TV is on"); return@launch }
+                connect()
+            }
+            say("The TV didn't wake up. On the TV, turn on Settings › General › Devices › External Devices › TV On With Mobile › Turn on via Wi-Fi.", error = true)
         }
     }
 
@@ -188,6 +221,17 @@ class TvController(app: Application) : AndroidViewModel(app) {
 
     // ---- voice / search bar -------------------------------------------------
     /** Handles anything said or typed. Returns false if it wasn't understood. */
+    /** Voice gives several guesses; use the first one that's a real command (else the top guess). */
+    fun handleSpoken(guesses: List<String>): String {
+        val parser = CommandParser(apps)
+        val pick = guesses.firstOrNull { g -> parser.parse(g).let { it != null && it !is Command.NoSuchApp } } ?: guesses.first()
+        handle(pick)
+        return pick
+    }
+
+    fun voiceHints(): List<String> = (apps.map { it.title } + CommandParser.KNOWN_APPS.map { it.title }).distinct() +
+        listOf("open", "volume", "mute", "pause", "play", "HDMI", "channel", "search", "turn off")
+
     fun handle(text: String): Boolean {
         val t = text.trim()
         if (t.isEmpty()) return false
@@ -220,6 +264,7 @@ class TvController(app: Application) : AndroidViewModel(app) {
             is Command.Input -> { say("HDMI ${cmd.hdmi}"); ssap("ssap://system.launcher/launch", JSONObject().put("id", "com.webos.app.hdmi${cmd.hdmi}")) }
             is Command.OpenApp -> launch(cmd.app)
             is Command.Search -> search(cmd.query, cmd.app)
+            is Command.NoSuchApp -> say("There's no app called \"${cmd.name}\" on the TV", error = true)
         }
     }
 

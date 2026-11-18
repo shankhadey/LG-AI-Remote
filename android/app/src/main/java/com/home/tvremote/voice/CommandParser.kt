@@ -14,13 +14,17 @@ sealed interface Command {
     data class Input(val hdmi: Int) : Command
     data class OpenApp(val app: TvApp) : Command
     data class Search(val query: String, val app: TvApp?) : Command
+    /** "open X" where X isn't an app on the TV. */
+    data class NoSuchApp(val name: String) : Command
 }
 
 /**
  * Turns what someone says or types ("open netflix", "louder", "find the office on youtube")
  * into a TV command. Runs on the phone, no network or account needed.
  */
-class CommandParser(private val apps: List<TvApp>) {
+class CommandParser(tvApps: List<TvApp>) {
+    // The TV's own list first; well-known LG app IDs fill in if the TV didn't share its list.
+    private val apps: List<TvApp> = tvApps + KNOWN_APPS.filter { k -> tvApps.none { it.id == k.id || key(it.title) == key(k.title) } }
 
     fun parse(raw: String): Command? {
         val t = normalize(raw)
@@ -85,7 +89,7 @@ class CommandParser(private val apps: List<TvApp>) {
         Regex("(?:search(?: for)?|find|look up|look for|play|watch|show me|put on) (.+?)(?: (?:on|in|using) (.+))?").matchEntire(t)?.let { m ->
             val query = m.groupValues[1]
             val appName = m.groupValues[2]
-            val app = if (appName.isNotEmpty()) matchApp(appName) else null
+            val app = if (appName.isNotEmpty()) matchApp(appName) ?: fuzzyApp(appName, lenient = true) else null
             // "put on netflix" / "watch youtube" → just open the app
             if (appName.isEmpty()) matchApp(query, exactOnly = true)?.let { return Command.OpenApp(it) }
             if (appName.isNotEmpty() && app == null) {
@@ -97,9 +101,12 @@ class CommandParser(private val apps: List<TvApp>) {
 
         // Apps: "open netflix", "launch prime video", or just "netflix"
         Regex("(?:open|launch|start|go to|switch to|run|load)(?: up)?(?: the)? (.+?)(?: app)?").matchEntire(t)?.let { m ->
-            matchApp(m.groupValues[1])?.let { return Command.OpenApp(it) }
+            val name = m.groupValues[1]
+            // They clearly asked for an app, so accept a looser sound-alike ("netflex", "nerfkex").
+            return (matchApp(name) ?: fuzzyApp(name, lenient = true))?.let { Command.OpenApp(it) } ?: Command.NoSuchApp(name)
         }
         matchApp(t, exactOnly = true)?.let { return Command.OpenApp(it) }
+        fuzzyApp(t, lenient = false)?.let { return Command.OpenApp(it) }
 
         return null
     }
@@ -114,7 +121,47 @@ class CommandParser(private val apps: List<TvApp>) {
         return apps.firstOrNull { val k = key(it.title); k.length >= 3 && s.contains(k) }
     }
 
+    /** Closest app by edit distance. Strict: 1 typo in 5+ letters. Lenient: ~45% of letters. */
+    fun fuzzyApp(spoken: String, lenient: Boolean): TvApp? {
+        val s = key(ALIASES[normalize(spoken)] ?: spoken)
+        if (s.length < (if (lenient) 3 else 5)) return null
+        val scored = apps.map { it to distance(s, key(it.title)) }.sortedBy { it.second }
+        val best = scored.firstOrNull() ?: return null
+        val longest = maxOf(s.length, key(best.first.title).length)
+        val allowed = if (lenient) (longest * 0.45).toInt() else 1
+        if (best.second > allowed) return null
+        // Ambiguous between two apps: don't guess.
+        if (scored.size > 1 && scored[1].second == best.second) return null
+        return best.first
+    }
+
     companion object {
+        /** Common LG webOS app IDs, used when the TV doesn't share its installed-app list. */
+        val KNOWN_APPS = listOf(
+            TvApp("netflix", "Netflix"),
+            TvApp("youtube.leanback.v4", "YouTube"),
+            TvApp("amazon", "Prime Video"),
+            TvApp("com.disney.disneyplus-prod", "Disney+"),
+            TvApp("hulu", "Hulu"),
+            TvApp("com.apple.appletv", "Apple TV"),
+            TvApp("spotify-beehive", "Spotify"),
+            TvApp("com.webos.app.livetv", "Live TV"),
+            TvApp("com.webos.app.browser", "Web Browser"),
+        )
+
+        fun distance(a: String, b: String): Int {
+            val dp = IntArray(b.length + 1) { it }
+            for (i in 1..a.length) {
+                var prev = dp[0]; dp[0] = i
+                for (j in 1..b.length) {
+                    val tmp = dp[j]
+                    dp[j] = minOf(dp[j] + 1, dp[j - 1] + 1, prev + if (a[i - 1] == b[j - 1]) 0 else 1)
+                    prev = tmp
+                }
+            }
+            return dp[b.length]
+        }
+
         private val ALIASES = mapOf(
             "amazon" to "prime video", "prime" to "prime video", "amazon prime" to "prime video",
             "disney" to "disney+", "disney plus" to "disney+", "hbo" to "max", "hbo max" to "max",

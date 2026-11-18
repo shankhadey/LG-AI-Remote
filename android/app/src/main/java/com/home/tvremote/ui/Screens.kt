@@ -48,7 +48,9 @@ import androidx.compose.material.icons.rounded.PowerSettingsNew
 import androidx.compose.material.icons.rounded.Remove
 import androidx.compose.material.icons.rounded.Search
 import androidx.compose.material.icons.rounded.Tv
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.TextButton
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.Icon
@@ -110,14 +112,14 @@ fun RemoteScreen(tv: TvController, hasMicPermission: () -> Boolean) {
     val voice = remember {
         VoiceInput(context,
             onPartial = { heard = it },
-            onResult = { heard = it; tv.handle(it) },
+            onResult = { guesses -> heard = tv.handleSpoken(guesses) },
             onError = { tv.say(it, error = true) },
             onEnd = { listening = false })
     }
-    DisposableEffect(Unit) { onDispose { voice.stop() } }
+    DisposableEffect(Unit) { onDispose { voice.release() } }
     fun listen() {
         if (!voice.available) { tv.say("No speech recognizer on this phone (install the Google app)", error = true); return }
-        heard = ""; listening = true; voice.start()
+        heard = ""; listening = true; voice.hints = tv.voiceHints(); voice.start()
     }
     val micPermission = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) { granted ->
         if (granted) listen() else tv.say("Voice needs microphone permission", error = true)
@@ -162,6 +164,8 @@ fun RemoteScreen(tv: TvController, hasMicPermission: () -> Boolean) {
 @Composable
 private fun Header(tv: TvController) {
     var menu by remember { mutableStateOf(false) }
+    var macDialog by remember { mutableStateOf(false) }
+    if (macDialog) MacDialog(tv) { macDialog = false }
     Row(Modifier.fillMaxWidth().padding(vertical = 10.dp), verticalAlignment = Alignment.CenterVertically) {
         Box(Modifier.size(9.dp).clip(CircleShape).background(if (tv.connected) Palette.ok else if (tv.connecting) Palette.muted else Palette.danger))
         Spacer(Modifier.width(10.dp))
@@ -176,10 +180,33 @@ private fun Header(tv: TvController) {
             }
             DropdownMenu(menu, onDismissRequest = { menu = false }) {
                 DropdownMenuItem(text = { Text("Reconnect") }, onClick = { menu = false; tv.connect() })
+                DropdownMenuItem(text = { Text(if (tv.macKnown) "Power-on settings" else "Set up power on") }, onClick = { menu = false; macDialog = true })
                 DropdownMenuItem(text = { Text("Choose a different TV") }, onClick = { menu = false; tv.forget() })
             }
         }
     }
+}
+
+@Composable
+private fun MacDialog(tv: TvController, onClose: () -> Unit) {
+    var mac by remember { mutableStateOf(tv.currentMac()) }
+    AlertDialog(
+        onDismissRequest = onClose,
+        title = { Text("Turning the TV on") },
+        text = {
+            Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                Text("1. On the TV, turn on Settings › General › Devices › External Devices › TV On With Mobile › Turn on via Wi-Fi.", fontSize = 14.sp)
+                Text("2. The app sends a wake-up signal to the TV's MAC address. It's normally filled in automatically; if it's empty, find it on the TV under Settings › General › About This TV (or Network › Wi-Fi › Advanced).", fontSize = 14.sp)
+                BasicTextField(mac, { mac = it }, singleLine = true,
+                    textStyle = TextStyle(color = Palette.text, fontSize = 16.sp), cursorBrush = SolidColor(Palette.accent),
+                    decorationBox = { inner -> Box { if (mac.isEmpty()) Text("A8:23:FE:01:02:03", color = Palette.muted); inner() } },
+                    modifier = Modifier.fillMaxWidth().clip(RoundedCornerShape(12.dp)).background(Palette.surface2).padding(12.dp))
+            }
+        },
+        confirmButton = { TextButton(onClick = { tv.setMac(mac); onClose() }) { Text("Save") } },
+        dismissButton = { TextButton(onClick = onClose) { Text("Cancel") } },
+        containerColor = Palette.surface, titleContentColor = Palette.text, textContentColor = Palette.muted,
+    )
 }
 
 /** One box for everything: commands ("open netflix"), searches, and live typing into the TV. */

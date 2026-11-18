@@ -76,6 +76,22 @@ class CommandParserTest {
         check("look up how to tie a tie", Command.Search("how to tie a tie", null))
     }
 
+    @Test fun misheardAppNames() {
+        check("open netflex", Command.OpenApp(netflix))      // what the phone actually heard
+        check("open nerfkex", Command.OpenApp(netflix))      // what was typed in the bug report
+        check("Netflex", Command.OpenApp(netflix))
+        check("launch you tube", Command.OpenApp(youtube))
+        check("search for the crown on netflex", Command.Search("the crown", netflix))
+        check("open zebra cakes", Command.NoSuchApp("zebra cakes"))
+    }
+
+    @Test fun knownAppsWorkWhenTvDoesNotShareItsList() {
+        val bare = CommandParser(emptyList())
+        assertEquals(Command.OpenApp(TvApp("netflix", "Netflix")), bare.parse("open netflix"))
+        assertEquals(Command.OpenApp(TvApp("youtube.leanback.v4", "YouTube")), bare.parse("open youtube"))
+        assertEquals(Command.OpenApp(TvApp("netflix", "Netflix")), bare.parse("open netflex"))
+    }
+
     @Test fun nonsenseIsNotACommand() {
         assertNull(p.parse(""))
         assertNull(p.parse("the quick brown fox"))
