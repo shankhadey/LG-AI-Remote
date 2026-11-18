@@ -14,6 +14,8 @@ import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.safeDrawingPadding
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.darkColorScheme
+import androidx.compose.material3.lightColorScheme
+import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.ui.Modifier
 import androidx.compose.foundation.background
 import com.home.tvremote.ui.Palette
@@ -28,7 +30,10 @@ class MainActivity : ComponentActivity() {
         super.onCreate(savedInstanceState)
         enableEdgeToEdge()
         setContent {
-            MaterialTheme(colorScheme = darkColorScheme(primary = Palette.accent, background = Palette.bg, surface = Palette.surface)) {
+            Palette.dark = isSystemInDarkTheme()
+            val scheme = if (Palette.dark) darkColorScheme(primary = Palette.text, background = Palette.bg, surface = Palette.surface)
+                else lightColorScheme(primary = Palette.text, background = Palette.bg, surface = Palette.surface)
+            MaterialTheme(colorScheme = scheme) {
                 Box(Modifier.fillMaxSize().background(Palette.bg).safeDrawingPadding().imePadding()) {
                     when (tv.screen) {
                         Screen.Setup -> SetupScreen(tv)

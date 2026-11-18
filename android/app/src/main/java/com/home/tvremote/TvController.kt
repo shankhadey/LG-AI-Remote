@@ -4,6 +4,7 @@ import android.app.Application
 import android.content.Context
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateListOf
+import androidx.compose.runtime.mutableStateMapOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import androidx.lifecycle.AndroidViewModel
@@ -41,6 +42,15 @@ class TvController(app: Application) : AndroidViewModel(app) {
     var macKnown by mutableStateOf(prefs.getString("mac", null) != null)
     val apps = mutableStateListOf<TvApp>()
     var tvKeyboardOpen by mutableStateOf(false)
+    /** App currently on the TV screen (from the TV), e.g. "netflix", "com.webos.app.livetv". */
+    var foregroundApp by mutableStateOf<String?>(null)
+    val isLiveTv get() = foregroundApp == "com.webos.app.livetv"
+    /** True when the TV is believed to be off: the remote shows a single "Turn on" button. */
+    var tvOff by mutableStateOf(false)
+    /** How often each app was opened on the TV, learned on this phone (the TV doesn't share this). */
+    private val usage = mutableStateMapOf<String, Int>().apply {
+        runCatching { JSONObject(prefs.getString("usage", "{}")!!).let { j -> j.keys().forEach { k -> put(k, j.getInt(k)) } } }
+    }
     var feedback by mutableStateOf<String?>(null)   // short "what just happened" line
     var feedbackIsError by mutableStateOf(false)
     private var feedbackJob: Job? = null
@@ -104,6 +114,7 @@ class TvController(app: Application) : AndroidViewModel(app) {
                 val firstTime = prefs.getString("clientKey", null) == null
                 t.connect(onPrompt = { screen = Screen.Pairing })
                 connected = true
+                tvOff = false
                 screen = Screen.Remote
                 if (firstTime || pairing) {
                     runCatching { t.request("ssap://system.notifications/createToast", JSONObject().put("message", "Phone remote connected")) }
@@ -113,7 +124,9 @@ class TvController(app: Application) : AndroidViewModel(app) {
             } catch (e: Exception) {
                 connected = false
                 if (screen == Screen.Pairing) screen = if (prefs.getString("clientKey", null) == null) Screen.Setup else Screen.Remote
-                showError(e)
+                // Unreachable after pairing = most likely switched off: show the "Turn on" screen instead of an error.
+                if (e.message?.startsWith("Can't reach") == true && prefs.getString("clientKey", null) != null) tvOff = true
+                else showError(e)
             } finally { connecting = false }
         }
     }
@@ -135,6 +148,13 @@ class TvController(app: Application) : AndroidViewModel(app) {
             }
         }
         runCatching {
+            // What's on screen: drives the status line, Live TV channel buttons and "Most used".
+            t.subscribe("ssap://com.webos.applicationManager/getForegroundAppInfo") { p ->
+                p.optString("appId").takeIf { it.isNotEmpty() }?.let { onForeground(it) }
+            }
+        }
+        runCatching { onForeground(t.request("ssap://com.webos.applicationManager/getForegroundAppInfo").optString("appId")) }
+        runCatching {
             // Tell us when a text box is focused on the TV, so typing/voice goes straight into it.
             t.subscribe("ssap://com.webos.service.ime/registerRemoteKeyboard") { p ->
                 p.optJSONObject("currentWidget")?.let { tvKeyboardOpen = it.optBoolean("focus", false) }
@@ -149,6 +169,52 @@ class TvController(app: Application) : AndroidViewModel(app) {
             val merged = mergeMacs(prefs.getString("mac", null).orEmpty().split(',') + fresh)
             if (merged.isNotEmpty()) { prefs.edit().putString("mac", merged.joinToString(",")).apply(); macKnown = true }
         }.onFailure { Log.w("TvRemote", "Couldn't read TV MAC: ${it.message}") }
+    }
+
+    private fun onForeground(appId: String) {
+        if (appId.isEmpty() || appId == foregroundApp) return
+        foregroundApp = appId
+        if (appId in SYSTEM_APPS) return
+        usage[appId] = (usage[appId] ?: 0) + 1
+        prefs.edit().putString("usage", JSONObject(usage.toMap() as Map<*, *>).toString()).apply()
+        // Apps the TV wouldn't list become voice targets once they've been opened.
+        if (apps.none { it.id == appId }) apps += TvApp(appId, appTitle(appId))
+    }
+
+    /** Top 4 apps by how often they were opened, topped up with common ones. */
+    fun mostUsed(): List<TvApp> {
+        val learned = usage.entries.sortedByDescending { it.value }.map { TvApp(it.key, appTitle(it.key)) }
+        val defaults = CommandParser.KNOWN_APPS.filter { !it.id.startsWith("com.webos") }
+        return (learned + defaults).distinctBy { it.id }.take(4)
+    }
+
+    fun appTitle(id: String): String =
+        CommandParser.KNOWN_APPS.firstOrNull { it.id == id }?.title
+            ?: apps.firstOrNull { it.id == id && it.title.isNotBlank() }?.title
+            ?: when {
+                id == "com.webos.app.home" -> "Home"
+                id.startsWith("com.webos.app.hdmi") -> "HDMI " + id.removePrefix("com.webos.app.hdmi")
+                else -> id.substringAfterLast('.').replace('-', ' ').replace('_', ' ')
+                    .replaceFirstChar { it.uppercase() }
+            }
+
+    /** Short line under the TV name: what's on screen. */
+    fun nowShowing(): String = when {
+        tvOff -> "Off"
+        waking -> "Turning on…"
+        connecting && !connected -> "Connecting…"
+        !connected -> "Not connected — tap to retry"
+        foregroundApp == "com.webos.app.livetv" -> "Live TV"
+        foregroundApp != null -> appTitle(foregroundApp!!)
+        else -> "Connected"
+    }
+
+    /** The big "Turn on" button: connect if the TV is actually reachable, otherwise wake it. */
+    fun turnOn() {
+        viewModelScope.launch {
+            val ip = prefs.getString("ip", null)
+            if (ip != null && WakeOnLan.reachable(ip)) { tvOff = false; connect() } else powerOn()
+        }
     }
 
     private suspend fun tv(): LgTv {
@@ -282,7 +348,7 @@ class TvController(app: Application) : AndroidViewModel(app) {
                     "Screen Off" -> { say("Turning the screen on"); ssap("ssap://com.webos.service.tvpower/power/turnOnScreen") }
                     "Active Standby", "Suspend", "Power Off" -> powerOn()
                     // "Active", or the TV answered but didn't say: it's on, so turn it off.
-                    else -> { say("Turning off"); ssap("ssap://system/turnOff") }
+                    else -> { say("Turning off"); ssap("ssap://system/turnOff"); tvOff = true; foregroundApp = null }
                 }
             } finally { powerBusy = false }
         }
@@ -323,7 +389,7 @@ class TvController(app: Application) : AndroidViewModel(app) {
                                     t.request("ssap://com.webos.service.tvpower/power/getPowerState").optString("state")
                                 }.getOrNull()
                                 if (state == null || state == "Active" || state.isEmpty()) {
-                                    connected = true; afterConnect(t); say("TV is on"); return@launch
+                                    connected = true; tvOff = false; afterConnect(t); say("TV is on"); return@launch
                                 }
                             }
                             delay(1500)
@@ -380,7 +446,7 @@ class TvController(app: Application) : AndroidViewModel(app) {
 
     fun run(cmd: Command) {
         when (cmd) {
-            is Command.Power -> if (cmd.on) powerOn() else { say("Turning off"); ssap("ssap://system/turnOff") }
+            is Command.Power -> if (cmd.on) powerOn() else { say("Turning off"); ssap("ssap://system/turnOff"); tvOff = true; foregroundApp = null }
             is Command.VolumeStep -> {
                 say(if (cmd.up) "Louder" else "Quieter")
                 enqueue { repeat(cmd.steps) { tv().request(if (cmd.up) "ssap://audio/volumeUp" else "ssap://audio/volumeDown"); delay(40) } }
@@ -421,4 +487,12 @@ class TvController(app: Application) : AndroidViewModel(app) {
     private fun showError(e: Throwable) = say(e.message ?: "Something went wrong", error = true)
 
     override fun onCleared() { tv?.close() }
+
+    companion object {
+        /** Screens that aren't "apps you use" and shouldn't count towards Most used. */
+        val SYSTEM_APPS = setOf(
+            "com.webos.app.home", "com.webos.app.livetv", "com.webos.surfacemanager", "com.webos.app.inputpicker",
+            "com.webos.app.screensaver", "com.webos.app.settings", "com.palm.app.settings", "com.webos.app.notificationcenter",
+        ) + (1..4).map { "com.webos.app.hdmi$it" }
+    }
 }

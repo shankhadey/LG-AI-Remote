@@ -21,6 +21,8 @@ class VoiceInput(
     private val onResult: (List<String>) -> Unit,
     private val onError: (String) -> Unit,
     private val onEnd: () -> Unit,
+    /** Microphone loudness 0..1, for the listening waveform. */
+    private val onLevel: (Float) -> Unit = {},
 ) {
     private var recognizer: SpeechRecognizer? = null
     private val main = Handler(Looper.getMainLooper())
@@ -78,13 +80,16 @@ class VoiceInput(
         }
         override fun onReadyForSpeech(p: Bundle?) {}
         override fun onBeginningOfSpeech() {}
-        override fun onRmsChanged(rms: Float) {}
+        override fun onRmsChanged(rms: Float) { onLevel(((rms + 2f) / 12f).coerceIn(0f, 1f)) }
         override fun onBufferReceived(b: ByteArray?) {}
         override fun onEndOfSpeech() {}
         override fun onEvent(t: Int, p: Bundle?) {}
     }
 
     fun stop() { active = false; recognizer?.cancel() }
+
+    /** "Done": stop listening now and use what was heard so far. */
+    fun finish() { recognizer?.stopListening() }
 
     fun release() { active = false; recognizer?.destroy(); recognizer = null }
 

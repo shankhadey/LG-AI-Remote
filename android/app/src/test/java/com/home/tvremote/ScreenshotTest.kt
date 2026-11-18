@@ -21,6 +21,7 @@ import com.home.tvremote.lg.FoundTv
 import com.home.tvremote.ui.Palette
 import com.home.tvremote.ui.PairingScreen
 import com.home.tvremote.ui.RemoteScreen
+import com.home.tvremote.ui.ListeningPanel
 import com.home.tvremote.ui.SetupScreen
 import com.home.tvremote.voice.TvApp
 import kotlinx.coroutines.Dispatchers
@@ -56,19 +57,19 @@ class ScreenshotTest {
         }
     }
 
-    @Test fun remote() {
-        val tv = controller().apply {
-            screen = Screen.Remote; tvName = "Living Room OLED"; connected = true; scanning = false
-            apps.addAll(listOf("Netflix", "YouTube", "Prime Video", "Disney+", "Live TV", "Spotify").map { TvApp(it.lowercase(), it) })
-            say("Opening Netflix")
-        }
-        shot { RemoteScreen(tv) { true } }
+    private fun remoteTv() = controller().apply {
+        screen = Screen.Remote; tvName = "Living Room"; connected = true; scanning = false
+        foregroundApp = "netflix"
     }
 
-    @Test fun remoteTypingOnTv() {
-        val tv = controller().apply { screen = Screen.Remote; tvName = "Living Room OLED"; connected = true; scanning = false; tvKeyboardOpen = true }
-        shot { RemoteScreen(tv) { true } }
-    }
+    @Test fun remoteDark() { Palette.dark = true; val tv = remoteTv(); shot { RemoteScreen(tv) { true } } }
+    @Test fun remoteLight() { Palette.dark = false; val tv = remoteTv(); shot { RemoteScreen(tv) { true } } }
+    @Test fun liveTvDark() { Palette.dark = true; val tv = remoteTv().apply { foregroundApp = "com.webos.app.livetv" }; shot { RemoteScreen(tv) { true } } }
+    @Test fun liveTvLight() { Palette.dark = false; val tv = remoteTv().apply { foregroundApp = "com.webos.app.livetv" }; shot { RemoteScreen(tv) { true } } }
+    @Test fun typingOnTv() { Palette.dark = true; val tv = remoteTv().apply { tvKeyboardOpen = true; foregroundApp = "youtube.leanback.v4" }; shot { RemoteScreen(tv) { true } } }
+    @Test fun offDark() { Palette.dark = true; val tv = remoteTv().apply { connected = false; tvOff = true }; shot { RemoteScreen(tv) { true } } }
+    @Test fun listeningDark() { Palette.dark = true; shot { ListeningPanel("Search YouTube for easy weeknight pasta recipes", 0.7f, {}, {}) } }
+    @Test fun listeningLight() { Palette.dark = false; shot { ListeningPanel("Search YouTube for easy weeknight pasta recipes", 0.7f, {}, {}) } }
 
     @Test fun setup() {
         val tv = controller().apply { scanning = false; found.add(FoundTv("192.168.1.42", "[LG] webOS TV OLED55C1", "OLED55C1PUB")) }

@@ -1,8 +1,7 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <style name="Theme.TvRemote" parent="android:Theme.Material.NoActionBar">
-        <item name="android:windowBackground">#FF0F1115</item>
-        <item name="android:statusBarColor">#FF0F1115</item>
-        <item name="android:navigationBarColor">#FF0F1115</item>
+    <!-- Light by default; values-night/ switches to dark with the phone's setting. -->
+    <style name="Theme.TvRemote" parent="android:Theme.Material.Light.NoActionBar">
+        <item name="android:windowBackground">#FFF6F6F8</item>
     </style>
 </resources>
