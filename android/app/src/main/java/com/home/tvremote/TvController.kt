@@ -168,7 +168,7 @@ class TvController(app: Application) : AndroidViewModel(app) {
      * What a touchpad tap sends. Some LG firmware ignores the pointer "click" message, so this is
      * selectable: "click" (pointer click), "ok" (the remote's OK button), "enter" (keyboard Enter).
      */
-    var tapMethod by mutableStateOf(prefs.getString("tapMethod", "click")!!)
+    var tapMethod by mutableStateOf(prefs.getString("tapMethod", "ok")!!)
     fun setTap(method: String) { tapMethod = method; prefs.edit().putString("tapMethod", method).apply() }
     fun click() = sendTap(tapMethod)
     fun sendTap(method: String) = enqueue {

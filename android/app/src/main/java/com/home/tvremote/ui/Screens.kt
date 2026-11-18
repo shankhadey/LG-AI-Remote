@@ -205,8 +205,8 @@ private fun Header(tv: TvController) {
 @Composable
 private fun TapDialog(tv: TvController, onClose: () -> Unit) {
     val options = listOf(
-        "click" to "A · Pointer click",
-        "ok" to "B · Remote's OK button",
+        "ok" to "A · Remote's OK button (default)",
+        "click" to "B · Pointer click",
         "enter" to "C · Keyboard Enter",
     )
     AlertDialog(
