@@ -134,11 +134,14 @@ class TvController(app: Application) : AndroidViewModel(app) {
                 p.optJSONObject("currentWidget")?.let { tvKeyboardOpen = it.optBoolean("focus", false) }
             }
         }
-        if (prefs.getString("mac", null) == null) runCatching {
+        // Refresh on every connect and MERGE: Wake-on-LAN only works on the interface the TV actually
+        // uses (Wi-Fi vs cable), and an older version saved only the wired address and never re-checked.
+        runCatching {
             val info = t.request("ssap://com.webos.service.connectionmanager/getinfo")
-            // Keep both: Wake-on-LAN only works on the interface the TV actually uses (Wi-Fi vs cable).
-            val macs = listOf("wifiInfo", "wiredInfo").mapNotNull { info.optJSONObject(it)?.optString("macAddress")?.takeIf { m -> m.length >= 12 } }
-            if (macs.isNotEmpty()) { prefs.edit().putString("mac", macs.joinToString(",")).apply(); macKnown = true }
+            val fresh = listOf("wifiInfo", "wiredInfo").mapNotNull { info.optJSONObject(it)?.optString("macAddress")?.takeIf { m -> m.length >= 12 } }
+            if (fresh.isEmpty()) Log.w("TvRemote", "TV reported no MAC addresses: ${info.keys().asSequence().toList()}")
+            val merged = mergeMacs(prefs.getString("mac", null).orEmpty().split(',') + fresh)
+            if (merged.isNotEmpty()) { prefs.edit().putString("mac", merged.joinToString(",")).apply(); macKnown = true }
         }.onFailure { Log.w("TvRemote", "Couldn't read TV MAC: ${it.message}") }
     }
 
@@ -171,11 +174,19 @@ class TvController(app: Application) : AndroidViewModel(app) {
         say(if (muted) "Sound on" else "Muted")
     }
 
+    /** Normalises to AA:BB:CC:DD:EE:FF, drops invalid entries and duplicates (case-insensitive). */
+    private fun mergeMacs(list: List<String>): List<String> = list
+        .map { it.filter { c -> c.isLetterOrDigit() }.uppercase() }
+        .filter { it.length == 12 && it.all { c -> c in "0123456789ABCDEF" } }
+        .distinct()
+        .map { it.chunked(2).joinToString(":") }
+
     fun currentMac() = prefs.getString("mac", null).orEmpty()
     fun setMac(value: String) {
-        val clean = value.split(',', ' ').map { it.trim() }.filter { it.count { c -> c.isLetterOrDigit() } == 12 }
+        val clean = mergeMacs(value.split(',', ' ', '\n'))
         if (clean.isEmpty()) { say("That doesn't look like a MAC address (e.g. A8:23:FE:01:02:03)", error = true); return }
-        prefs.edit().putString("mac", clean.joinToString(",")).apply(); macKnown = true; say("Saved. Power on is ready.")
+        prefs.edit().putString("mac", clean.joinToString(",")).apply(); macKnown = true
+        say(if (clean.size > 1) "Saved ${clean.size} addresses. Power on will try all of them." else "Saved. Power on is ready.")
     }
 
     /**
