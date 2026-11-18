@@ -1,5 +1,12 @@
 # TV Remote
 
+This repo has two remotes:
+
+- **`android/`: the Android app for LG webOS TVs.** It talks to the TV directly, with no bridge. See [android/README.md](android/README.md).
+- **Web bridge + phone web app** (below): works with Samsung, LG, Roku and Sony, and on iPhone, but needs a computer at home running the bridge.
+
+---
+
 Control the TV from your phones instead of the physical remote. It has two parts:
 
 - **Bridge** (`server.js`): a small Node program that runs on any always-on computer at home (Mac, PC, Raspberry Pi, NAS). It finds the TV on the network, pairs with it, and passes on button presses.
