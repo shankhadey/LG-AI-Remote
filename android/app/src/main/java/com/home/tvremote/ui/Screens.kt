@@ -14,6 +14,8 @@ import androidx.compose.animation.fadeOut
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.combinedClickable
+import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -158,6 +160,7 @@ fun RemoteScreen(tv: TvController, hasMicPermission: () -> Boolean) {
     if (listening) ListeningOverlay(heard) { voice.stop(); listening = false }
 }
 
+@OptIn(ExperimentalFoundationApi::class)
 @Composable
 private fun Header(tv: TvController) {
     var menu by remember { mutableStateOf(false) }
@@ -168,7 +171,9 @@ private fun Header(tv: TvController) {
         Spacer(Modifier.width(10.dp))
         Text(tv.tvName, color = Palette.text, fontSize = 18.sp, fontWeight = FontWeight.SemiBold, maxLines = 1,
             overflow = TextOverflow.Ellipsis, modifier = Modifier.weight(1f).clickable { if (!tv.connected) tv.connect() })
-        Box(Modifier.size(44.dp).clip(CircleShape).background(Palette.surface).clickable { tv.power() }, contentAlignment = Alignment.Center) {
+        Box(Modifier.size(44.dp).clip(CircleShape).background(Palette.surface)
+            .combinedClickable(onClick = { tv.power() }, onLongClick = { tv.forcePowerOn() }, onLongClickLabel = "Turn on"),
+            contentAlignment = Alignment.Center) {
             Icon(Icons.Rounded.PowerSettingsNew, "Power", tint = Palette.danger)
         }
         Box {

@@ -20,6 +20,7 @@ import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withTimeoutOrNull
+import kotlinx.coroutines.withTimeout
 import android.util.Log
 import com.home.tvremote.lg.TvException
 import org.json.JSONObject
@@ -193,20 +194,41 @@ class TvController(app: Application) : AndroidViewModel(app) {
      * One power button. After "off", LG TVs with Quick Start+ stay on the network in standby and
      * keep the connection open, so "connected" doesn't mean "on" — ask the TV for its power state.
      */
+    private var powerBusy = false
+
+    /**
+     * One power button. Decide from the NETWORK, not from whether the app happens to have a live
+     * connection right now (it may still be reconnecting after the app opened): if the TV answers
+     * on its control port it's on (or in screen-off/standby, which it reports), else wake it.
+     */
     fun power() {
+        if (powerBusy || waking) return
+        powerBusy = true
         viewModelScope.launch {
-            val t = tv
-            val state = if (t != null && t.isConnected) withTimeoutOrNull(2500) {
-                runCatching { t.request("ssap://com.webos.service.tvpower/power/getPowerState").optString("state") }
-                    .getOrElse { if (it is TvException && t.isConnected) "unknown-but-reachable" else null }
-            } else null
-            when (state) {
-                "Active", "unknown-but-reachable" -> { say("Turning off"); ssap("ssap://system/turnOff") }
-                "Screen Off" -> { say("Turning the screen on"); ssap("ssap://com.webos.service.tvpower/power/turnOnScreen") }
-                else -> powerOn() // null (unreachable), "Active Standby", "Suspend", ...
-            }
+            try {
+                val ip = prefs.getString("ip", null)
+                val t = tv
+                val reachable = (t?.isConnected == true) || (ip != null && WakeOnLan.reachable(ip))
+                if (!reachable) { powerOn(); return@launch }
+                say("Checking the TV…")
+                if (t != null && !t.isConnected) {
+                    runCatching { withTimeout(6000) { t.connect() }; connected = true }
+                }
+                val state = if (t?.isConnected == true) withTimeoutOrNull(3000) {
+                    runCatching { t.request("ssap://com.webos.service.tvpower/power/getPowerState").optString("state") }.getOrNull()
+                } else null
+                when (state) {
+                    "Screen Off" -> { say("Turning the screen on"); ssap("ssap://com.webos.service.tvpower/power/turnOnScreen") }
+                    "Active Standby", "Suspend", "Power Off" -> powerOn()
+                    // "Active", or the TV answered but didn't say: it's on, so turn it off.
+                    else -> { say("Turning off"); ssap("ssap://system/turnOff") }
+                }
+            } finally { powerBusy = false }
         }
     }
+
+    /** Press-and-hold on the power button: always try to wake the TV. */
+    fun forcePowerOn() { if (!waking) powerOn() }
 
     var waking by mutableStateOf(false)
 
