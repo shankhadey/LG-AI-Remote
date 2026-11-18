@@ -211,10 +211,26 @@ class LgTv(
         return s
     }
 
-    suspend fun button(name: String) { pointerSocket().send(Pointer.button(name)) }
-    suspend fun move(dx: Float, dy: Float) { pointerSocket().send(Pointer.move(dx, dy)) }
-    suspend fun click() { pointerSocket().send(Pointer.click()) }
-    suspend fun scroll(dy: Float) { pointerSocket().send(Pointer.scroll(dy)) }
+    suspend fun button(name: String) = sendPointer(Pointer.button(name), "button $name")
+    suspend fun move(dx: Float, dy: Float) = sendPointer(Pointer.move(dx, dy), null)
+    suspend fun click() = sendPointer(Pointer.click(), "click")
+    suspend fun scroll(dy: Float) = sendPointer(Pointer.scroll(dy), null)
+
+    /**
+     * The TV can drop the pointer connection (e.g. after switching apps) without the phone noticing,
+     * and a send on a dead socket silently goes nowhere. If a send is refused, fetch a fresh pointer
+     * socket and resend once. Taps and buttons are recorded for Diagnostics.
+     */
+    private suspend fun sendPointer(msg: String, label: String?) {
+        val started = System.currentTimeMillis()
+        var ok = runCatching { pointerSocket().send(msg) }.getOrDefault(false)
+        if (!ok) {
+            pointer?.cancel(); pointer = null
+            ok = runCatching { pointerSocket().send(msg) }.getOrDefault(false)
+        }
+        if (label != null || !ok) log((if (ok) "PTR " else "PTR FAILED ") + (label ?: msg.lineSequence().first()), started)
+        if (!ok) throw TvException("Couldn't reach the TV's pointer — try again")
+    }
 
     fun close() {
         pointer?.cancel(); pointer = null

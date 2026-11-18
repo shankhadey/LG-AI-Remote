@@ -120,7 +120,12 @@ class TvController(app: Application) : AndroidViewModel(app) {
 
     private suspend fun afterConnect(t: LgTv) {
         runCatching {
-            val lp = t.request("ssap://com.webos.applicationManager/listLaunchPoints").optJSONArray("launchPoints")
+            val lp = runCatching { t.request("ssap://com.webos.applicationManager/listLaunchPoints").optJSONArray("launchPoints") }
+                .getOrElse {
+                    // Newer firmware doesn't let this kind of pairing read the app list: show the common apps instead.
+                    if (apps.isEmpty()) apps.addAll(CommandParser.KNOWN_APPS.filter { a -> !a.id.startsWith("com.webos") })
+                    null
+                }
             if (lp != null) {
                 apps.clear()
                 for (i in 0 until lp.length()) {
@@ -167,16 +172,22 @@ class TvController(app: Application) : AndroidViewModel(app) {
      */
     fun launch(app: TvApp) {
         say("Opening ${app.title}")
-        enqueue {
-            val t = tv()
+        // Runs beside the command queue (not in it) so checking the result never holds up other buttons.
+        viewModelScope.launch {
+            val t = runCatching { tv() }.getOrElse { showError(it); return@launch }
             val payload = JSONObject().put("id", app.id)
             val first = runCatching { t.request("ssap://system.launcher/launch", payload) }
-            if (first.isSuccess && waitForForeground(t, app.id)) return@enqueue
+            if (first.isSuccess && waitForForeground(t, app.id)) return@launch
             val second = runCatching { t.request("ssap://com.webos.applicationManager/launch", JSONObject().put("id", app.id)) }
-            if (second.isSuccess && waitForForeground(t, app.id)) return@enqueue
-            val why = (second.exceptionOrNull() ?: first.exceptionOrNull())?.message
-                ?: "the TV accepted the request but didn't open it"
-            say("${app.title} didn't open: $why (details in ⋮ › Diagnostics)", error = true)
+            if (second.isSuccess && waitForForeground(t, app.id)) return@launch
+            val hung = listOf(first, second).all { it.exceptionOrNull()?.message == "The TV didn't respond" }
+            if (hung) {
+                // Seen with Netflix: the TV never answers the launch at all, while other apps open fine.
+                say("The TV isn't responding to opening ${app.title}. Try it with the TV remote; if it won't open there either, restart the TV or update ${app.title}.", error = true)
+            } else {
+                val why = (second.exceptionOrNull() ?: first.exceptionOrNull())?.message ?: "the TV accepted the request but didn't open it"
+                say("${app.title} didn't open: $why", error = true)
+            }
         }
     }
 
