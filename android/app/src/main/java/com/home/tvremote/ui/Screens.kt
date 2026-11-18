@@ -107,7 +107,6 @@ fun RemoteScreen(tv: TvController, hasMicPermission: () -> Boolean) {
     val haptic = LocalHapticFeedback.current
     var listening by remember { mutableStateOf(false) }
     var heard by remember { mutableStateOf("") }
-    var padMode by rememberSaveable { mutableStateOf(PadMode.Swipe) }
 
     val voice = remember {
         VoiceInput(context,
@@ -131,8 +130,6 @@ fun RemoteScreen(tv: TvController, hasMicPermission: () -> Boolean) {
         Feedback(tv)
         if (tv.apps.isNotEmpty()) AppStrip(tv)
         Touchpad(
-            mode = padMode, onModeChange = { padMode = it },
-            onArrow = tv::button, onOk = { tv.button("ENTER") },
             onMove = tv::move, onClick = tv::click, onScroll = tv::scroll,
             modifier = Modifier.fillMaxWidth().weight(1f).padding(vertical = 12.dp),
         )

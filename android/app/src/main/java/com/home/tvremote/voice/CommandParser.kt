@@ -50,8 +50,28 @@ class CommandParser(tvApps: List<TvApp>) {
             val steps = it.groupValues[2].toIntOrNull() ?: when (it.groupValues[3]) { "lot" -> 8; "bit", "little" -> 2; else -> 3 }
             return Command.VolumeStep(up, steps.coerceIn(1, 30))
         }
-        if (t.matches(Regex("(mute|silence|quiet)( (it|the tv|the sound|sound))?|shh+"))) return Command.Mute(true)
-        if (t.matches(Regex("unmute( (it|the tv|the sound))?|sound on"))) return Command.Mute(false)
+        if (t.matches(Regex("(mute|silence|quiet)( (it|the tv|the sound|sound|the volume|volume|the audio))?|shh+"))) return Command.Mute(true)
+        if (t.matches(Regex("unmute( (it|the tv|the sound|the volume|the audio))?|sound on|turn (the )?sound (back )?on"))) return Command.Mute(false)
+
+        // Looser volume phrasing: "reduce volume", "can you lower the sound", "it's too loud",
+        // "turn the volume to 15". Any sentence about volume with one clear direction.
+        val looksLikeSearch = Regex("^(search|find|look|play|watch|show me|put on)\\b").containsMatchIn(t)
+        val aboutVolume = !looksLikeSearch && Regex("\\b(volume|sound|audio|loud|louder|quiet|quieter|softer)\\b").containsMatchIn(t)
+        if (aboutVolume) {
+            Regex("\\b(?:to|at)\\s(\\d+)").find(t)?.let { return Command.VolumeSet(it.groupValues[1].toInt().coerceIn(0, 100)) }
+            val down = Regex("\\b(down|reduce|decrease|lower|less|quieter|softer|drop|cut|too loud)\\b").containsMatchIn(t)
+            val up = Regex("\\b(up|increase|raise|louder|higher|more|boost|too quiet|cant hear|can t hear)\\b").containsMatchIn(t)
+            if (up != down) {
+                val n = Regex("\\bby (\\d+)").find(t)?.groupValues?.get(1)?.toIntOrNull()
+                val steps = n ?: if (Regex("\\b(lot|way|much)\\b").containsMatchIn(t)) 8 else if (Regex("\\b(bit|little|slightly)\\b").containsMatchIn(t)) 2 else 3
+                return Command.VolumeStep(up, steps.coerceIn(1, 30))
+            }
+        }
+
+        // Looser playback phrasing: "pause the movie", "stop the video", "resume the show".
+        Regex("(pause|stop|resume|unpause|continue)(?: (?:the|this) (?:show|movie|video|film|episode|music|song|tv|game|match))?(?: for a (?:second|sec|minute|bit))?").matchEntire(t)?.let {
+            return Command.Media(when (it.groupValues[1]) { "pause" -> "pause"; "stop" -> "stop"; else -> "play" })
+        }
 
         // Playback (bare words only — "play X" is a search)
         when (t) {

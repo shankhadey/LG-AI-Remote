@@ -76,6 +76,22 @@ class CommandParserTest {
         check("look up how to tie a tie", Command.Search("how to tie a tie", null))
     }
 
+    @Test fun everydayVolumePhrasing() {
+        check("reduce volume", Command.VolumeStep(false, 3))
+        check("Reduce the volume", Command.VolumeStep(false, 3))
+        check("decrease the volume by 5", Command.VolumeStep(false, 5))
+        check("can you lower the sound", Command.VolumeStep(false, 3))
+        check("it's too loud", Command.VolumeStep(false, 3))
+        check("increase volume a lot", Command.VolumeStep(true, 8))
+        check("raise the volume a little", Command.VolumeStep(true, 2))
+        check("I can't hear it, more volume", Command.VolumeStep(true, 3))
+        check("turn the volume to 15", Command.VolumeSet(15))
+        check("mute the volume", Command.Mute(true))
+        check("pause the movie", Command.Media("pause"))
+        check("resume the show", Command.Media("play"))
+        check("play louder than words on youtube", Command.Search("louder than words", youtube))
+    }
+
     @Test fun misheardAppNames() {
         check("open netflex", Command.OpenApp(netflix))      // what the phone actually heard
         check("open nerfkex", Command.OpenApp(netflix))      // what was typed in the bug report

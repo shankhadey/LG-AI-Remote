@@ -255,14 +255,14 @@ class TvController(app: Application) : AndroidViewModel(app) {
     fun handleSpoken(guesses: List<String>): String {
         val parser = CommandParser(apps)
         val pick = guesses.firstOrNull { g -> parser.parse(g).let { it != null && it !is Command.NoSuchApp } } ?: guesses.first()
-        handle(pick)
+        handle(pick, fromVoice = true)
         return pick
     }
 
     fun voiceHints(): List<String> = (apps.map { it.title } + CommandParser.KNOWN_APPS.map { it.title }).distinct() +
         listOf("open", "volume", "mute", "pause", "play", "HDMI", "channel", "search", "turn off")
 
-    fun handle(text: String): Boolean {
+    fun handle(text: String, fromVoice: Boolean = false): Boolean {
         val t = text.trim()
         if (t.isEmpty()) return false
         if (tvKeyboardOpen) {
@@ -273,7 +273,13 @@ class TvController(app: Application) : AndroidViewModel(app) {
                 return true
             }
         }
-        val cmd = CommandParser(apps).parse(t) ?: Command.Search(t, null)
+        val parsed = CommandParser(apps).parse(t)
+        if (parsed == null && fromVoice) {
+            // Don't turn an unrecognised spoken command into a YouTube search; typed text still searches.
+            say("Didn't understand \"$t\". To search, say \"search for …\"", error = true)
+            return false
+        }
+        val cmd = parsed ?: Command.Search(t, null)
         run(cmd)
         return true
     }
