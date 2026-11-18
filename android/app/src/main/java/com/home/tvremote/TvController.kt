@@ -161,7 +161,44 @@ class TvController(app: Application) : AndroidViewModel(app) {
     fun move(dx: Float, dy: Float) = enqueue { tv().move(dx, dy) }
     fun click() = enqueue { tv().click() }
     fun scroll(dy: Float) = enqueue { tv().scroll(dy) }
-    fun launch(app: TvApp) { say("Opening ${app.title}"); ssap("ssap://system.launcher/launch", JSONObject().put("id", app.id)) }
+    /**
+     * Opens an app and checks it actually came to the front. If the usual launch call is rejected
+     * or silently ignored, retry through the application manager, and report what the TV said.
+     */
+    fun launch(app: TvApp) {
+        say("Opening ${app.title}")
+        enqueue {
+            val t = tv()
+            val payload = JSONObject().put("id", app.id)
+            val first = runCatching { t.request("ssap://system.launcher/launch", payload) }
+            if (first.isSuccess && waitForForeground(t, app.id)) return@enqueue
+            val second = runCatching { t.request("ssap://com.webos.applicationManager/launch", JSONObject().put("id", app.id)) }
+            if (second.isSuccess && waitForForeground(t, app.id)) return@enqueue
+            val why = (second.exceptionOrNull() ?: first.exceptionOrNull())?.message
+                ?: "the TV accepted the request but didn't open it"
+            say("${app.title} didn't open: $why (details in ⋮ › Diagnostics)", error = true)
+        }
+    }
+
+    /** Polls the foreground app for a few seconds. Unknown (no permission) counts as success. */
+    private suspend fun waitForForeground(t: LgTv, appId: String): Boolean {
+        repeat(8) {
+            delay(500)
+            val fg = runCatching { t.request("ssap://com.webos.applicationManager/getForegroundAppInfo").optString("appId") }
+            if (fg.isFailure) return true
+            if (fg.getOrNull() == appId) return true
+        }
+        return false
+    }
+
+    fun diagnostics(): String = buildString {
+        appendLine("App ${com.home.tvremote.BuildConfig.VERSION_NAME} · TV ${prefs.getString("ip", "?")} · connected=$connected")
+        appendLine("MACs saved: ${prefs.getString("mac", null)?.split(',')?.size ?: 0}")
+        appendLine("Apps listed by TV: ${apps.size}")
+        apps.firstOrNull { it.title.contains("netflix", true) }?.let { appendLine("Netflix id: ${it.id}") }
+        appendLine()
+        tv?.history?.forEach { appendLine(it) }
+    }
 
     fun togglePlayPause() = enqueue {
         playing = !playing

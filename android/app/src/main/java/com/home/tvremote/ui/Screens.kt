@@ -75,6 +75,12 @@ import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalClipboardManager
+import androidx.compose.ui.text.AnnotatedString
+import androidx.compose.ui.text.font.FontFamily
+import androidx.compose.foundation.layout.heightIn
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.text.TextStyle
@@ -166,6 +172,8 @@ private fun Header(tv: TvController) {
     var menu by remember { mutableStateOf(false) }
     var macDialog by remember { mutableStateOf(false) }
     if (macDialog) MacDialog(tv) { macDialog = false }
+    var diag by remember { mutableStateOf(false) }
+    if (diag) DiagnosticsDialog(tv) { diag = false }
     Row(Modifier.fillMaxWidth().padding(vertical = 10.dp), verticalAlignment = Alignment.CenterVertically) {
         Box(Modifier.size(9.dp).clip(CircleShape).background(if (tv.connected) Palette.ok else if (tv.connecting) Palette.muted else Palette.danger))
         Spacer(Modifier.width(10.dp))
@@ -183,10 +191,31 @@ private fun Header(tv: TvController) {
             DropdownMenu(menu, onDismissRequest = { menu = false }) {
                 DropdownMenuItem(text = { Text("Reconnect") }, onClick = { menu = false; tv.connect() })
                 DropdownMenuItem(text = { Text(if (tv.macKnown) "Power-on settings" else "Set up power on") }, onClick = { menu = false; macDialog = true })
+                DropdownMenuItem(text = { Text("Diagnostics") }, onClick = { menu = false; diag = true })
                 DropdownMenuItem(text = { Text("Choose a different TV") }, onClick = { menu = false; tv.forget() })
             }
         }
     }
+}
+
+@Composable
+private fun DiagnosticsDialog(tv: TvController, onClose: () -> Unit) {
+    val text = remember { tv.diagnostics() }
+    val clipboard = LocalClipboardManager.current
+    AlertDialog(
+        onDismissRequest = onClose,
+        title = { Text("Diagnostics") },
+        text = {
+            Column(Modifier.heightIn(max = 420.dp).verticalScroll(rememberScrollState())) {
+                Text("What the app asked the TV, and what it answered (newest first). Copy and send this to whoever is helping you.", fontSize = 13.sp)
+                Spacer(Modifier.height(10.dp))
+                Text(text, fontSize = 11.sp, fontFamily = FontFamily.Monospace, color = Palette.text)
+            }
+        },
+        confirmButton = { TextButton(onClick = { clipboard.setText(AnnotatedString(text)); tv.say("Copied") }) { Text("Copy") } },
+        dismissButton = { TextButton(onClick = onClose) { Text("Close") } },
+        containerColor = Palette.surface, titleContentColor = Palette.text, textContentColor = Palette.muted,
+    )
 }
 
 @Composable

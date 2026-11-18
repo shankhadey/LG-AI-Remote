@@ -158,10 +158,24 @@ class LgTv(
         val id = "req_${seq.incrementAndGet()}"
         val d = CompletableDeferred<JSONObject>()
         pending[id] = d
+        val started = System.currentTimeMillis()
+        val what = uri.removePrefix("ssap://") + (payload?.let { " $it" } ?: "")
         send(JSONObject().put("id", id).put("type", "request").put("uri", uri).apply { payload?.let { put("payload", it) } })
-        return try { withTimeout(6000) { d.await() } } catch (e: TimeoutCancellationException) {
-            pending.remove(id); throw TvException("The TV didn't respond")
+        return try {
+            withTimeout(6000) { d.await() }.also { log("OK  $what → ${it.toString().take(300)}", started) }
+        } catch (e: TimeoutCancellationException) {
+            pending.remove(id); log("TIMEOUT  $what", started); throw TvException("The TV didn't respond")
+        } catch (e: Exception) {
+            log("ERR $what → ${e.message}", started); throw e
         }
+    }
+
+    /** Last requests and the TV's replies, for the in-app diagnostics screen. */
+    val history = java.util.concurrent.ConcurrentLinkedDeque<String>()
+    private fun log(line: String, started: Long) {
+        val t = java.text.SimpleDateFormat("HH:mm:ss", java.util.Locale.US).format(java.util.Date())
+        history.addFirst("$t (${System.currentTimeMillis() - started} ms) $line")
+        while (history.size > 40) history.pollLast()
     }
 
     suspend fun subscribe(uri: String, onEvent: (JSONObject) -> Unit) {
