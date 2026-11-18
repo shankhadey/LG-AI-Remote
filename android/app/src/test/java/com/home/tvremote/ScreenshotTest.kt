@@ -28,6 +28,10 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.test.UnconfinedTestDispatcher
 import kotlinx.coroutines.test.setMain
+import androidx.compose.ui.draw.clip
+import androidx.compose.foundation.layout.size
+import androidx.compose.ui.unit.dp
+import androidx.compose.foundation.layout.padding
 import org.junit.Before
 import org.junit.Rule
 import org.junit.Test
@@ -78,6 +82,24 @@ class ScreenshotTest {
         val saved = FakePrefs(mutableMapOf("ip" to "192.0.2.1", "clientKey" to "k", "name" to "Living Room"))
         val tv = TvController(FakeApp(paparazzi.context, saved))   // runs init → refresh()
         shot { RemoteScreen(tv) { true } }
+    }
+
+    /** The launcher icon as phones mask it: round, rounded-square, and themed (tinted, background dropped). */
+    @Test fun launcherIcon() = paparazzi.snapshot {
+        androidx.compose.foundation.layout.Row(
+            Modifier.background(androidx.compose.ui.graphics.Color(0xFFE4E2DE)).padding(24.dp),
+            horizontalArrangement = androidx.compose.foundation.layout.Arrangement.spacedBy(24.dp)) {
+            for (shape in listOf(androidx.compose.foundation.shape.CircleShape, androidx.compose.foundation.shape.RoundedCornerShape(34))) {
+                Box(Modifier.size(120.dp).clip(shape)) {
+                    androidx.compose.foundation.Image(androidx.compose.ui.res.painterResource(R.drawable.ic_launcher_background), null, Modifier.fillMaxSize())
+                    androidx.compose.foundation.Image(androidx.compose.ui.res.painterResource(R.drawable.ic_launcher_foreground), null, Modifier.fillMaxSize())
+                }
+            }
+            Box(Modifier.size(120.dp).clip(androidx.compose.foundation.shape.CircleShape).background(androidx.compose.ui.graphics.Color(0xFFDDE3D3))) {
+                androidx.compose.foundation.Image(androidx.compose.ui.res.painterResource(R.drawable.ic_launcher_foreground), null, Modifier.fillMaxSize(),
+                    colorFilter = androidx.compose.ui.graphics.ColorFilter.tint(androidx.compose.ui.graphics.Color(0xFF3B4630)))
+            }
+        }
     }
 
     @Test fun checkingDark() { Palette.dark = true; val tv = remoteTv().apply { connected = false; checking = true }; shot { RemoteScreen(tv) { true } } }
