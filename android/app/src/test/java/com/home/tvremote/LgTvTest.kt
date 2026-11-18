@@ -146,6 +146,11 @@ class LgTvTest {
         assertEquals(1021, Discovery.hostsToScan("10.0.3.9", 16).size) // capped at /22
     }
 
+    @Test fun tvNames() {
+        assertEquals("LG OLED65B3PUA", Discovery.prettyName("[LG] webOS TV OLED65B3PUA"))
+        assertEquals("Living Room", Discovery.prettyName("Living Room"))
+    }
+
     @Test fun wakeOnLanTargets() {
         assertEquals("192.168.1.255", WakeOnLan.subnetBroadcast("192.168.1.37", 24))
         assertEquals("192.168.7.255", WakeOnLan.subnetBroadcast("192.168.5.20", 22))

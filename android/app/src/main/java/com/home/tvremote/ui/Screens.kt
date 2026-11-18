@@ -140,6 +140,7 @@ fun RemoteScreen(tv: TvController, hasMicPermission: () -> Boolean) {
     }
 
     if (tv.tvOff) { OffScreen(tv); return }
+    if (!tv.connected && (tv.checking || tv.connecting)) { CheckingScreen(tv); return }
 
     Column(Modifier.fillMaxSize().padding(horizontal = 20.dp)) {
         Header(tv)
@@ -177,16 +178,18 @@ fun RemoteScreen(tv: TvController, hasMicPermission: () -> Boolean) {
 
 @OptIn(ExperimentalFoundationApi::class)
 @Composable
-private fun Header(tv: TvController) {
+private fun Header(tv: TvController, showPower: Boolean = true) {
     var menu by remember { mutableStateOf(false) }
     var macDialog by remember { mutableStateOf(false) }
     var diag by remember { mutableStateOf(false) }
     var tapDialog by remember { mutableStateOf(false) }
+    var renameDialog by remember { mutableStateOf(false) }
+    if (renameDialog) RenameDialog(tv) { renameDialog = false }
     if (macDialog) MacDialog(tv) { macDialog = false }
     if (diag) DiagnosticsDialog(tv) { diag = false }
     if (tapDialog) TapDialog(tv) { tapDialog = false }
 
-    Row(Modifier.fillMaxWidth().padding(top = 12.dp), verticalAlignment = Alignment.CenterVertically) {
+    Row(Modifier.fillMaxWidth().padding(top = 2.dp), verticalAlignment = Alignment.CenterVertically) {
         Box(Modifier.weight(1f)) {
             Column(Modifier.clip(RoundedCornerShape(10.dp)).clickable { menu = true }.padding(vertical = 4.dp, horizontal = 2.dp)) {
                 Row(verticalAlignment = Alignment.CenterVertically) {
@@ -195,12 +198,13 @@ private fun Header(tv: TvController) {
                 }
                 Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.padding(top = 2.dp)) {
                     Box(Modifier.size(6.dp).clip(CircleShape).background(
-                        when { tv.connected -> Palette.ok; tv.connecting || tv.waking -> Palette.faint; else -> Palette.danger }))
+                        when { tv.connected -> Palette.ok; tv.tvOff || tv.checking || tv.connecting || tv.waking -> Palette.faint; else -> Palette.danger }))
                     Spacer(Modifier.width(6.dp))
                     Text(tv.nowShowing(), color = Palette.muted, fontSize = 13.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
                 }
             }
             DropdownMenu(menu, onDismissRequest = { menu = false }) {
+                DropdownMenuItem(text = { Text("Rename") }, onClick = { menu = false; renameDialog = true })
                 DropdownMenuItem(text = { Text("Reconnect") }, onClick = { menu = false; tv.connect() })
                 DropdownMenuItem(text = { Text(if (tv.macKnown) "Power-on settings" else "Set up power on") }, onClick = { menu = false; macDialog = true })
                 DropdownMenuItem(text = { Text("Fix touchpad tap") }, onClick = { menu = false; tapDialog = true })
@@ -208,10 +212,21 @@ private fun Header(tv: TvController) {
                 DropdownMenuItem(text = { Text("Choose a different TV") }, onClick = { menu = false; tv.forget() })
             }
         }
-        Box(Modifier.size(42.dp).card(CircleShape)
+        if (showPower) Box(Modifier.size(42.dp).card(CircleShape)
             .combinedClickable(onClick = { tv.power() }, onLongClick = { tv.forcePowerOn() }, onLongClickLabel = "Turn on"),
             contentAlignment = Alignment.Center) {
             Icon(Icons.Rounded.PowerSettingsNew, "Power", tint = Palette.muted, modifier = Modifier.size(20.dp))
+        }
+    }
+}
+
+/** The first moment after opening: calm and quiet until we know whether the TV is on. */
+@Composable
+private fun CheckingScreen(tv: TvController) {
+    Column(Modifier.fillMaxSize().padding(horizontal = 20.dp)) {
+        Header(tv, showPower = false)
+        Box(Modifier.fillMaxWidth().weight(1f), contentAlignment = Alignment.Center) {
+            CircularProgressIndicator(color = Palette.faint, strokeWidth = 2.dp, modifier = Modifier.size(28.dp))
         }
     }
 }
@@ -220,7 +235,7 @@ private fun Header(tv: TvController) {
 @Composable
 private fun OffScreen(tv: TvController) {
     Column(Modifier.fillMaxSize().padding(horizontal = 20.dp)) {
-        Header(tv)
+        Header(tv, showPower = false)
         Column(Modifier.fillMaxWidth().weight(1f), horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.Center) {
             Box(Modifier.size(176.dp).card(CircleShape).clickable(enabled = !tv.waking) { tv.turnOn() }, contentAlignment = Alignment.Center) {
                 if (tv.waking) CircularProgressIndicator(color = Palette.text, strokeWidth = 2.dp, modifier = Modifier.size(56.dp))
@@ -386,6 +401,24 @@ private fun TapDialog(tv: TvController, onClose: () -> Unit) {
             }
         },
         confirmButton = { TextButton(onClick = onClose) { Text("Done") } },
+        containerColor = Palette.surface, titleContentColor = Palette.text, textContentColor = Palette.muted,
+    )
+}
+
+@Composable
+private fun RenameDialog(tv: TvController, onClose: () -> Unit) {
+    var name by remember { mutableStateOf(tv.tvName) }
+    AlertDialog(
+        onDismissRequest = onClose,
+        title = { Text("Name this TV") },
+        text = {
+            BasicTextField(name, { name = it }, singleLine = true,
+                textStyle = TextStyle(color = Palette.text, fontSize = 17.sp), cursorBrush = SolidColor(Palette.accent),
+                decorationBox = { inner -> Box { if (name.isEmpty()) Text("Living Room", color = Palette.faint, fontSize = 17.sp); inner() } },
+                modifier = Modifier.fillMaxWidth().clip(RoundedCornerShape(12.dp)).background(Palette.surface2).padding(14.dp))
+        },
+        confirmButton = { TextButton(onClick = { tv.rename(name); onClose() }) { Text("Save") } },
+        dismissButton = { TextButton(onClick = onClose) { Text("Cancel") } },
         containerColor = Palette.surface, titleContentColor = Palette.text, textContentColor = Palette.muted,
     )
 }

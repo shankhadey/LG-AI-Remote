@@ -45,6 +45,19 @@ object Discovery {
         return scanSubnet(context, wifi)
     }
 
+    /** The TV's own name (as set on the TV), asked directly; null if it doesn't answer. */
+    suspend fun lookupName(context: Context, ip: String): String? = withContext(Dispatchers.IO) {
+        val net = wifiNetwork(context) ?: return@withContext null
+        val loc = unicastSearch(net, ip)?.takeIf { it.isNotEmpty() } ?: return@withContext null
+        describe(ip, loc).name.takeIf { it != "LG TV" }?.let { prettyName(it) }
+    }
+
+    /** "[LG] webOS TV OLED65B3PUA" → "LG OLED65B3PUA"; a name the owner set is kept as is. */
+    fun prettyName(friendly: String): String {
+        val m = Regex("^\\[LG\\]\\s*webOS TV\\s*(.*)$", RegexOption.IGNORE_CASE).find(friendly.trim())
+        return if (m != null) ("LG " + m.groupValues[1]).trim() else friendly.trim()
+    }
+
     /** Addresses to probe around [ip]: the real subnet, capped at a /22 (1022 hosts). */
     fun hostsToScan(ip: String, prefixLength: Int): List<String> {
         val parts = ip.split('.').map { it.toInt() }

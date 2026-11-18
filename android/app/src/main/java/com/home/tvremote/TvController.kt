@@ -59,9 +59,34 @@ class TvController(app: Application) : AndroidViewModel(app) {
     // All TV commands run in order through this queue so fast taps don't reorder.
     private val queue = Channel<suspend () -> Unit>(Channel.UNLIMITED)
 
+    /** True for the first second or so after opening, while we check whether the TV is on. */
+    var checking by mutableStateOf(false)
+
     init {
         viewModelScope.launch { for (job in queue) runCatching { job() }.onFailure { showError(it) } }
-        if (screen == Screen.Remote) connect()
+        if (screen == Screen.Remote) refresh()
+    }
+
+    /**
+     * On open/resume: a quick port check (under a second) decides between the remote and the
+     * "Turn on" screen, instead of showing a remote that can't do anything while a full
+     * connection attempt times out.
+     */
+    fun refresh() {
+        if (checking || connecting || connected || waking) return
+        val ip = prefs.getString("ip", null) ?: return
+        checking = true
+        viewModelScope.launch {
+            try {
+                if (WakeOnLan.reachable(ip)) { tvOff = false; connect() } else tvOff = true
+            } finally { checking = false }
+        }
+    }
+
+    fun rename(name: String) {
+        val n = name.trim().ifEmpty { return }
+        tvName = n
+        prefs.edit().putString("name", n).putBoolean("nameCustom", true).apply()
     }
 
     // ---- setup ------------------------------------------------------------
@@ -86,7 +111,7 @@ class TvController(app: Application) : AndroidViewModel(app) {
 
     fun choose(ip: String, name: String) {
         if (ip != prefs.getString("ip", null)) { prefs.edit().remove("clientKey").remove("mac").apply(); macKnown = false }
-        prefs.edit().putString("ip", ip).putString("name", name).apply()
+        prefs.edit().putString("ip", ip).putString("name", name).remove("nameCustom").apply()
         tvName = name
         tv?.close(); tv = null
         connect(pairing = true)
@@ -132,6 +157,12 @@ class TvController(app: Application) : AndroidViewModel(app) {
     }
 
     private suspend fun afterConnect(t: LgTv) {
+        if (!prefs.getBoolean("nameCustom", false)) viewModelScope.launch {
+            // In the background so it never delays a button press.
+            prefs.getString("ip", null)?.let { ip ->
+                Discovery.lookupName(getApplication(), ip)?.let { n -> if (n != tvName) { tvName = n; prefs.edit().putString("name", n).apply() } }
+            }
+        }
         runCatching {
             val lp = runCatching { t.request("ssap://com.webos.applicationManager/listLaunchPoints").optJSONArray("launchPoints") }
                 .getOrElse {
@@ -201,6 +232,7 @@ class TvController(app: Application) : AndroidViewModel(app) {
     /** Short line under the TV name: what's on screen. */
     fun nowShowing(): String = when {
         tvOff -> "Off"
+        checking -> "Checking…"
         waking -> "Turning on…"
         connecting && !connected -> "Connecting…"
         !connected -> "Not connected — tap to retry"

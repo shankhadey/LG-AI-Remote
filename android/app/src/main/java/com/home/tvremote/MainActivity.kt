@@ -49,7 +49,7 @@ class MainActivity : ComponentActivity() {
 
     override fun onResume() {
         super.onResume()
-        if (tv.screen == Screen.Remote && !tv.connected) tv.connect()
+        if (tv.screen == Screen.Remote && !tv.connected) tv.refresh()
     }
 
     // The phone's own volume buttons control the TV's volume.
