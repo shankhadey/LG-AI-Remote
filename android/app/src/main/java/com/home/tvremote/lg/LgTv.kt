@@ -107,7 +107,12 @@ class LgTv(
                     payload.optString("client-key").takeIf { it.isNotEmpty() }?.let { clientKey = it; onClientKey(it) }
                     registered.complete(Unit)
                 }
-                "error" -> registered.completeExceptionally(TvException("The TV declined pairing: ${msg.optString("error")}"))
+                "error" -> registered.completeExceptionally(TvException(
+                    msg.optString("error").let { err ->
+                        if (err.contains("cancel", true) || err.contains("denied", true) || err.contains("rejected", true) && !err.contains("blacklisted", true))
+                            "The TV declined pairing. Try again and choose Accept on the TV."
+                        else "The TV declined pairing: $err"
+                    }))
             }
             return
         }
@@ -119,9 +124,21 @@ class LgTv(
     }
 
     private suspend fun register(onPrompt: () -> Unit) {
+        try {
+            registerWith(Manifest.signed(), onPrompt)
+        } catch (e: TvException) {
+            // Newer LG firmware rejects the well-known signed manifest that every open-source
+            // remote uses ("blacklisted certificate"). Retry unsigned, as lgtv2 >= 2.0.1 does.
+            if (e.message?.contains("blacklisted", ignoreCase = true) != true) throw e
+            registered = CompletableDeferred()
+            registerWith(Manifest.unsigned(), onPrompt)
+        }
+    }
+
+    private suspend fun registerWith(payload: JSONObject, onPrompt: () -> Unit) {
         val id = "register_${seq.incrementAndGet()}"
         registerId = id
-        val payload = JSONObject(Manifest.REGISTER).apply { clientKey?.let { put("client-key", it) } }
+        clientKey?.let { payload.put("client-key", it) }
         send(JSONObject().put("id", id).put("type", "register").put("payload", payload))
         if (clientKey == null) onPrompt()
         try {

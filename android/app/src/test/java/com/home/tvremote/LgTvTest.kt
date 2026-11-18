@@ -28,6 +28,7 @@ class LgTvTest {
     private val requests = CopyOnWriteArrayList<JSONObject>()
     private val pointerMsgs = LinkedBlockingQueue<String>()
     var acceptPairing = true
+    var blacklistSigned = false
 
     private fun startTv() {
         pointerServer.enqueue(MockResponse().withWebSocketUpgrade(object : WebSocketListener() {
@@ -40,6 +41,8 @@ class LgTvTest {
                 val id = m.getString("id")
                 fun reply(type: String, payload: JSONObject) = webSocket.send(JSONObject().put("id", id).put("type", type).put("payload", payload).toString())
                 when {
+                    m.getString("type") == "register" && blacklistSigned && m.getJSONObject("payload").getJSONObject("manifest").has("signed") ->
+                        webSocket.send(JSONObject().put("id", id).put("type", "error").put("error", "403 Pairing rejected: blacklisted certificate detected").toString())
                     m.getString("type") == "register" -> {
                         reply("response", JSONObject().put("pairingType", "PROMPT"))
                         if (acceptPairing) reply("registered", JSONObject().put("client-key", "KEY123"))
@@ -84,6 +87,23 @@ class LgTvTest {
         tv.close()
     }
 
+    @Test fun fallsBackToUnsignedManifestWhenSignatureIsBlacklisted() = runBlocking {
+        blacklistSigned = true
+        startTv()
+        var saved: String? = null
+        val tv = LgTv("127.0.0.1", null, onClientKey = { saved = it }, urls = listOf(url()))
+        tv.connect()
+        assertEquals("KEY123", saved)
+        val regs = requests.filter { it.getString("type") == "register" }
+        assertEquals(2, regs.size)
+        val unsigned = regs[1].getJSONObject("payload").getJSONObject("manifest")
+        assertTrue(!unsigned.has("signed"))
+        assertEquals("1.0", unsigned.getString("appVersion"))
+        assertTrue(unsigned.getJSONArray("permissions").toString().contains("CONTROL_MOUSE_AND_KEYBOARD"))
+        assertEquals(12, tv.request("ssap://audio/getVolume").getInt("volume"))
+        tv.close()
+    }
+
     @Test fun reusesSavedKey() = runBlocking {
         startTv()
         val tv = LgTv("127.0.0.1", "OLDKEY", onClientKey = {}, urls = listOf(url()))
@@ -108,6 +128,8 @@ class LgTvTest {
         val pkt = WakeOnLan.packet("A8:23:FE:01:02:03")
         assertEquals(102, pkt.size)
         assertEquals(0xFF.toByte(), pkt[5]); assertEquals(0xA8.toByte(), pkt[6]); assertEquals(0x03.toByte(), pkt[101])
+        assertTrue(Discovery.looksLikeLg("SERVER: WebOS/4.1.0 UPnP/1.0\r\nST: urn:lge-com:service:webos-second-screen:1"))
+        assertTrue(!Discovery.looksLikeLg("SERVER: Linux UPnP/1.0 Sonos/70.3"))
         assertEquals("http://1.2.3.4:1234/", Discovery.header("HTTP/1.1 200 OK\r\nLocation: http://1.2.3.4:1234/\r\n", "location"))
         assertEquals("[LG] webOS TV OLED55C1", Discovery.tag("<root><device><friendlyName>[LG] webOS TV OLED55C1</friendlyName></device></root>", "friendlyName"))
         assertEquals("type:scroll\ndx:0\ndy:5\n\n", Pointer.scroll(5.9f))

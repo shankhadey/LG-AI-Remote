@@ -295,11 +295,11 @@ private fun ListeningOverlay(heard: String, onCancel: () -> Unit) {
 @Composable
 fun SetupScreen(tv: TvController) {
     var manualIp by remember { mutableStateOf("") }
-    LaunchedEffect(Unit) { tv.scan() }
+    LaunchedEffect(Unit) { if (tv.found.isEmpty()) tv.scan() }
     Column(Modifier.fillMaxSize().padding(horizontal = 20.dp, vertical = 24.dp), verticalArrangement = Arrangement.spacedBy(14.dp)) {
         Text("Find your LG TV", color = Palette.text, fontSize = 28.sp, fontWeight = FontWeight.Bold)
         Text("Turn the TV on and make sure this phone is on the same Wi-Fi.", color = Palette.muted, fontSize = 15.sp)
-        PrimaryButton(if (tv.scanning) "Searching…" else "Search again", enabled = !tv.scanning) { tv.scan() }
+        PrimaryButton(if (tv.scanning) "Searching your Wi-Fi…" else "Search again", enabled = !tv.scanning) { tv.scan() }
         if (tv.scanning) Box(Modifier.fillMaxWidth(), contentAlignment = Alignment.Center) { CircularProgressIndicator(color = Palette.accent) }
         for (f in tv.found) {
             Row(Modifier.fillMaxWidth().clip(RoundedCornerShape(16.dp)).background(Palette.surface).clickable { tv.choose(f.ip, f.name) }.padding(16.dp),

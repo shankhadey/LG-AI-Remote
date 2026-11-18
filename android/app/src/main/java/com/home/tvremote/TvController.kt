@@ -54,8 +54,13 @@ class TvController(app: Application) : AndroidViewModel(app) {
         scanning = true
         viewModelScope.launch {
             try {
-                found.clear(); found.addAll(Discovery.find(getApplication()))
-                if (found.isEmpty()) say("No LG TV answered. Make sure it's on and on the same Wi-Fi.", error = true)
+                val results = Discovery.find(getApplication())
+                // Keep TVs found earlier: discovery is lossy, and losing the list after a failed pairing is confusing.
+                for (r in results) {
+                    val i = found.indexOfFirst { it.ip == r.ip }
+                    if (i >= 0) found[i] = r else found += r
+                }
+                if (found.isEmpty()) say("No LG TV found. Check it's on and on the same Wi-Fi, or enter its IP address below.", error = true)
             } catch (e: Exception) { showError(e) }
             scanning = false
         }
