@@ -124,6 +124,17 @@ class LgTvTest {
         try { tv.connect(); fail() } catch (e: TvException) { assertTrue(e.message!!.startsWith("Can't reach the TV")) }
     }
 
+    @Test fun subnetScanCoversTheRealNetwork() {
+        val c24 = Discovery.hostsToScan("192.168.1.37", 24)
+        assertEquals(253, c24.size)
+        assertEquals("192.168.1.1", c24.first()); assertEquals("192.168.1.254", c24.last())
+        assertTrue("192.168.1.37" !in c24)
+        val c22 = Discovery.hostsToScan("192.168.5.20", 22) // eero-style /22
+        assertEquals(1021, c22.size)
+        assertEquals("192.168.4.1", c22.first()); assertEquals("192.168.7.254", c22.last())
+        assertEquals(1021, Discovery.hostsToScan("10.0.3.9", 16).size) // capped at /22
+    }
+
     @Test fun helpers() {
         val pkt = WakeOnLan.packet("A8:23:FE:01:02:03")
         assertEquals(102, pkt.size)

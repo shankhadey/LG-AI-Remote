@@ -33,6 +33,7 @@ class TvController(app: Application) : AndroidViewModel(app) {
     var connecting by mutableStateOf(false)
     var scanning by mutableStateOf(false)
     val found = mutableStateListOf<FoundTv>()
+    var scanReport by mutableStateOf<String?>(null)
     val apps = mutableStateListOf<TvApp>()
     var tvKeyboardOpen by mutableStateOf(false)
     var feedback by mutableStateOf<String?>(null)   // short "what just happened" line
@@ -60,7 +61,9 @@ class TvController(app: Application) : AndroidViewModel(app) {
                     val i = found.indexOfFirst { it.ip == r.ip }
                     if (i >= 0) found[i] = r else found += r
                 }
-                if (found.isEmpty()) say("No LG TV found. Check it's on and on the same Wi-Fi, or enter its IP address below.", error = true)
+                if (found.isEmpty()) scanReport = Discovery.lastReport.ifEmpty { "No LG TV found." } +
+                    " If the TV's address isn't in that range, the phone and TV are on different networks (e.g. a guest network). You can still enter the TV's IP below."
+                else scanReport = null
             } catch (e: Exception) { showError(e) }
             scanning = false
         }

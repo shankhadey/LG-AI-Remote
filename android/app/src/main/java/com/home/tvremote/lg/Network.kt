@@ -34,11 +34,28 @@ object Discovery {
         "ssdp:all",
     )
 
+    /** What the last search did, shown to the user when nothing is found. */
+    @Volatile var lastReport: String = ""
+
     suspend fun find(context: Context, timeoutMs: Int = 3500): List<FoundTv> {
         val wifi = wifiNetwork(context)
+        if (wifi == null) { lastReport = "This phone isn't connected to Wi-Fi."; return emptyList() }
         val viaSsdp = runCatching { ssdp(context, wifi, timeoutMs) }.getOrDefault(emptyList())
         if (viaSsdp.isNotEmpty()) return viaSsdp
         return scanSubnet(context, wifi)
+    }
+
+    /** Addresses to probe around [ip]: the real subnet, capped at a /22 (1022 hosts). */
+    fun hostsToScan(ip: String, prefixLength: Int): List<String> {
+        val parts = ip.split('.').map { it.toInt() }
+        val addr = (parts[0] shl 24) or (parts[1] shl 16) or (parts[2] shl 8) or parts[3]
+        val prefix = prefixLength.coerceIn(22, 30)
+        val mask = (-1 shl (32 - prefix))
+        val network = addr and mask
+        val size = 1 shl (32 - prefix)
+        return (1 until size - 1).map { network + it }.filter { it != addr }.map {
+            "${(it ushr 24) and 255}.${(it ushr 16) and 255}.${(it ushr 8) and 255}.${it and 255}"
+        }
     }
 
     private fun wifiNetwork(context: Context): Network? {
@@ -96,12 +113,15 @@ object Discovery {
     private suspend fun scanSubnet(context: Context, net: Network?): List<FoundTv> = withContext(Dispatchers.IO) {
         val n = net ?: return@withContext emptyList()
         val cm = context.getSystemService(Context.CONNECTIVITY_SERVICE) as ConnectivityManager
-        val me = cm.getLinkProperties(n)?.linkAddresses
-            ?.map { it.address }?.firstOrNull { it is Inet4Address && !it.isLoopbackAddress }
-            ?: return@withContext emptyList()
-        val prefix = me.hostAddress!!.substringBeforeLast('.')
-        val gate = Semaphore(48)
-        val hits = (1..254).map { "$prefix.$it" }.filter { it != me.hostAddress }.map { ip ->
+        val link = cm.getLinkProperties(n)?.linkAddresses
+            ?.firstOrNull { it.address is Inet4Address && !it.address.isLoopbackAddress }
+        if (link == null) { lastReport = "Couldn't read this phone's Wi-Fi address."; return@withContext emptyList() }
+        val myIp = link.address.hostAddress!!
+        val hosts = hostsToScan(myIp, link.prefixLength)
+        lastReport = "This phone is $myIp. Checked ${hosts.size} addresses on its Wi-Fi network " +
+            "(${hosts.first()} – ${hosts.last()}) and none answered like an LG TV."
+        val gate = Semaphore(64)
+        val hits = hosts.map { ip ->
             async { gate.withPermit { if (portOpen(n, ip, 3001) || portOpen(n, ip, 3000)) ip else null } }
         }.awaitAll().filterNotNull()
         // Port 3000 is common on other devices too; keep hosts that confirm they're LG over unicast SSDP,

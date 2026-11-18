@@ -312,6 +312,7 @@ fun SetupScreen(tv: TvController) {
                 }
             }
         }
+        tv.scanReport?.let { if (!tv.scanning && tv.found.isEmpty()) Text(it, color = Palette.muted, fontSize = 14.sp) }
         Spacer(Modifier.height(8.dp))
         Text("Or enter its IP address (TV Settings › Network › Wi-Fi › Advanced)", color = Palette.muted, fontSize = 13.sp)
         Row(verticalAlignment = Alignment.CenterVertically) {
