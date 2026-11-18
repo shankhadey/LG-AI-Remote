@@ -1,0 +1,146 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, user-scalable=no">
+<meta name="theme-color" content="#0f1115">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="TV Remote">
+<title>TV Remote</title>
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="icon" href="icon.svg" type="image/svg+xml">
+<link rel="apple-touch-icon" href="icon-180.png">
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+<header class="top">
+  <div class="tv-name"><span class="dot" id="dot"></span><span id="tvName">TV Remote</span></div>
+  <button class="icon-btn" id="settingsBtn" aria-label="Settings">
+    <svg viewBox="0 0 24 24"><path d="M12 15.5a3.5 3.5 0 1 1 0-7 3.5 3.5 0 0 1 0 7Zm7.4-2.5.1-1-.1-1 2.1-1.6-2-3.5-2.5 1a7 7 0 0 0-1.7-1L15 3h-4l-.4 2.6a7 7 0 0 0-1.7 1l-2.5-1-2 3.5L6.5 11l-.1 1 .1 1-2.1 1.6 2 3.5 2.5-1c.5.4 1.1.7 1.7 1L11 21h4l.4-2.6a7 7 0 0 0 1.7-1l2.5 1 2-3.5-2.2-1.9Z"/></svg>
+  </button>
+</header>
+
+<!-- Setup: find and pair the TV -->
+<main id="setup" class="screen" hidden>
+  <h1>Find your TV</h1>
+  <p class="muted">Make sure the TV is on and on the same Wi-Fi as this bridge.</p>
+  <button class="primary" id="scanBtn">Search the network</button>
+  <ul id="devices" class="devices"></ul>
+  <details class="manual">
+    <summary>Enter it by hand</summary>
+    <label>TV IP address <input id="manIp" inputmode="decimal" placeholder="192.168.1.50"></label>
+    <label>Brand
+      <select id="manBrand">
+        <option value="samsung">Samsung</option><option value="lg">LG (webOS)</option>
+        <option value="roku">Roku / Roku TV (TCL, Hisense, …)</option><option value="sony">Sony Bravia</option>
+      </select>
+    </label>
+    <button id="manBtn">Use this TV</button>
+  </details>
+  <div id="pairBox" class="pair" hidden>
+    <h2 id="pairTitle">Pairing…</h2>
+    <p id="pairHelp" class="muted"></p>
+    <label id="pskRow" hidden>Pre-Shared Key (set on the TV) <input id="pskInput" placeholder="e.g. 0000"></label>
+    <button class="primary" id="pairBtn">Connect</button>
+  </div>
+</main>
+
+<!-- Remote -->
+<main id="remote" class="screen" hidden>
+  <section class="tab" data-tab="remote">
+    <div class="row three">
+      <button class="pill power" data-key="POWER" aria-label="Power">
+        <svg viewBox="0 0 24 24"><path d="M12 3v9M6.3 6.3a8 8 0 1 0 11.4 0" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"/></svg>
+      </button>
+      <button class="pill" data-key="INPUT">Input</button>
+      <button class="pill" data-key="MUTE" aria-label="Mute">
+        <svg viewBox="0 0 24 24"><path d="M4 9h4l5-4v14l-5-4H4zM17 9l4 6m0-6-4 6" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round" stroke-linecap="round"/></svg>
+      </button>
+    </div>
+
+    <div class="dpad">
+      <button class="d up" data-key="UP" data-repeat aria-label="Up"><svg viewBox="0 0 24 24"><path d="m6 15 6-6 6 6"/></svg></button>
+      <button class="d left" data-key="LEFT" data-repeat aria-label="Left"><svg viewBox="0 0 24 24"><path d="m15 6-6 6 6 6"/></svg></button>
+      <button class="ok" data-key="OK">OK</button>
+      <button class="d right" data-key="RIGHT" data-repeat aria-label="Right"><svg viewBox="0 0 24 24"><path d="m9 6 6 6-6 6"/></svg></button>
+      <button class="d down" data-key="DOWN" data-repeat aria-label="Down"><svg viewBox="0 0 24 24"><path d="m6 9 6 6 6-6"/></svg></button>
+    </div>
+
+    <div class="row three">
+      <button class="round" data-key="BACK" aria-label="Back"><svg viewBox="0 0 24 24"><path d="M9 7 4 12l5 5M4 12h11a5 5 0 0 1 0 10h-2"/></svg></button>
+      <button class="round" data-key="HOME" aria-label="Home"><svg viewBox="0 0 24 24"><path d="M4 11 12 4l8 7v9h-5v-6H9v6H4z"/></svg></button>
+      <button class="round" data-key="MENU" aria-label="Menu"><svg viewBox="0 0 24 24"><path d="M5 7h14M5 12h14M5 17h14"/></svg></button>
+    </div>
+
+    <div class="rockers">
+      <div class="rocker">
+        <button data-key="VOL_UP" data-repeat aria-label="Volume up">+</button>
+        <span>VOL</span>
+        <button data-key="VOL_DOWN" data-repeat aria-label="Volume down">−</button>
+      </div>
+      <div class="media">
+        <button data-key="REW" aria-label="Rewind"><svg viewBox="0 0 24 24"><path d="M11 6 3 12l8 6zM21 6l-8 6 8 6z" class="fill"/></svg></button>
+        <button data-key="PLAY_PAUSE" aria-label="Play or pause"><svg viewBox="0 0 24 24"><path d="M3 6l8 6-8 6z M14 6h3v12h-3z M19 6h3v12h-3z" class="fill"/></svg></button>
+        <button data-key="FF" aria-label="Fast forward"><svg viewBox="0 0 24 24"><path d="m3 6 8 6-8 6zM13 6l8 6-8 6z" class="fill"/></svg></button>
+        <button data-key="INFO" class="wide">Info</button>
+      </div>
+      <div class="rocker">
+        <button data-key="CH_UP" data-repeat aria-label="Channel up"><svg viewBox="0 0 24 24"><path d="m6 15 6-6 6 6"/></svg></button>
+        <span>CH</span>
+        <button data-key="CH_DOWN" data-repeat aria-label="Channel down"><svg viewBox="0 0 24 24"><path d="m6 9 6 6 6-6"/></svg></button>
+      </div>
+    </div>
+  </section>
+
+  <section class="tab" data-tab="apps" hidden>
+    <div id="apps" class="apps"><p class="muted">Loading apps…</p></div>
+  </section>
+
+  <section class="tab" data-tab="keypad" hidden>
+    <div class="keypad">
+      <button data-key="NUM_1">1</button><button data-key="NUM_2">2</button><button data-key="NUM_3">3</button>
+      <button data-key="NUM_4">4</button><button data-key="NUM_5">5</button><button data-key="NUM_6">6</button>
+      <button data-key="NUM_7">7</button><button data-key="NUM_8">8</button><button data-key="NUM_9">9</button>
+      <button data-key="BACK" class="small">Back</button><button data-key="NUM_0">0</button><button data-key="OK" class="small">OK</button>
+    </div>
+  </section>
+
+  <section class="tab" data-tab="type" hidden>
+    <p class="muted">Open a search box on the TV first, then type here.</p>
+    <form id="typeForm" class="type">
+      <input id="typeInput" autocomplete="off" autocapitalize="off" placeholder="Search for a show…">
+      <button class="primary">Send</button>
+    </form>
+  </section>
+
+  <nav class="tabs">
+    <button data-goto="remote" class="on">Remote</button>
+    <button data-goto="apps">Apps</button>
+    <button data-goto="keypad">123</button>
+    <button data-goto="type">Type</button>
+  </nav>
+</main>
+
+<!-- Settings sheet -->
+<dialog id="settings">
+  <form method="dialog" class="sheet">
+    <h2>Settings</h2>
+    <p id="tvDetails" class="muted"></p>
+    <label>TV name <input id="setName"></label>
+    <label>MAC address (to turn the TV on) <input id="setMac" placeholder="aa:bb:cc:dd:ee:ff"></label>
+    <label id="setPskRow" hidden>Pre-Shared Key <input id="setPsk"></label>
+    <label>Remote PIN (only if the bridge uses one) <input id="setPin" inputmode="numeric"></label>
+    <button class="primary" id="saveSettings" value="save">Save</button>
+    <button id="powerOnBtn" value="cancel" type="button">Turn TV on</button>
+    <button id="repairBtn" value="cancel" type="button">Pair again</button>
+    <button id="forgetBtn" value="cancel" type="button" class="danger">Forget this TV</button>
+    <button value="cancel">Close</button>
+  </form>
+</dialog>
+
+<div id="toast" class="toast" role="status" aria-live="polite"></div>
+<script src="app.js"></script>
+</body>
+</html>

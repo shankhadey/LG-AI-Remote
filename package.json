@@ -1,0 +1,15 @@
+{
+  "name": "tv-remote",
+  "version": "0.1.0",
+  "description": "Phone remote for your smart TV: a small home bridge + mobile web app",
+  "type": "module",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js",
+    "probe": "node scripts/probe.js",
+    "test": "node --test test/*.test.js"
+  },
+  "engines": { "node": ">=18" },
+  "dependencies": { "ws": "8.18.0" },
+  "license": "MIT"
+}
