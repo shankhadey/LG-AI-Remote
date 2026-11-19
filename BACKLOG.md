@@ -2,6 +2,14 @@
 
 Things we decided to remember for later. Newest first.
 
+## Remote controls
+- **Tap the touchpad to pause/play, remove the Play button.** While something is playing, a tap *without dragging
+  first* sends a real pause/play command (consistent across apps, unlike OK: Prime pauses on OK, Netflix only shows
+  its controls). Drag-then-tap still selects, so "Skip intro" / "Next episode" keep working; menus are unchanged.
+  Detect "playing" from the TV's play state if our pairing is allowed to read it, else assume it whenever a
+  streaming app is in front. Buttons become Back · Home · Mute (or add ⏪ 10 s as a 4th). Test in Netflix, Prime,
+  Disney+, YouTube.
+
 ## Power / start-up
 - **TV starts on "No signal" after waking.** LG starts on Live TV (or the last input); there's no antenna/cable,
   so it shows "No signal" until Home is pressed. Options: the TV's *Home Auto Launch* / start-up screen setting
