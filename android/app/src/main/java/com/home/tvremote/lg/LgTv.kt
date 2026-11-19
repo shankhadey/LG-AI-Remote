@@ -125,7 +125,11 @@ class LgTv(
             }
             return
         }
-        subscriptions[id]?.let { it(payload); return }
+        subscriptions[id]?.let {
+            // Recorded for Diagnostics, e.g. which app is on screen / play state.
+            log("SUB ${if (type == "error") "ERR " + msg.optString("error") else payload.toString().take(200)}", System.currentTimeMillis())
+            it(payload); return
+        }
         val d = pending.remove(id) ?: return
         if (type == "error" || payload.optBoolean("returnValue", true) == false) {
             d.completeExceptionally(TvException(msg.optString("error").ifEmpty { payload.optString("errorText", "TV error") }))

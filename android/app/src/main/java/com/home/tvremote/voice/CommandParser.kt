@@ -16,6 +16,12 @@ sealed interface Command {
     data class Search(val query: String, val app: TvApp?) : Command
     /** "open X" where X isn't an app on the TV. */
     data class NoSuchApp(val name: String) : Command
+    /** Turn the TV off after [minutes], with pop-up reminders. */
+    data class SleepTimer(val minutes: Int) : Command
+    /** Show a full-screen countdown on the TV. */
+    data class ScreenTimer(val minutes: Int) : Command
+    data object CancelTimer : Command
+    data class ExtendTimer(val minutes: Int) : Command
 }
 
 /**
@@ -29,6 +35,20 @@ class CommandParser(tvApps: List<TvApp>) {
     fun parse(raw: String): Command? {
         val t = normalize(raw)
         if (t.isEmpty()) return null
+
+        // Timers (before power, so "turn off the tv in 30 minutes" isn't "turn off now")
+        val dur = "(an hour|half an hour|\\d+ (?:hours?|hrs?|minutes?|mins?))"
+        Regex("(?:turn|switch|power|shut) (?:the )?(?:tv |television |it )?(?:off|down) (?:the )?(?:tv |television )?in $dur|(?:set )?(?:a |the )?sleep timer (?:for |to )?$dur|sleep in $dur|tv off in $dur")
+            .matchEntire(t)?.let { m -> return Command.SleepTimer(minutes(m.groupValues.drop(1).first { it.isNotEmpty() })) }
+        Regex("(?:set|start)? ?(?:a |the )?timer (?:for |of )?$dur|(?:set |start )?(?:a |an )?(\\d+) (?:minute|min) timer( on (?:the )?(?:tv|screen))?")
+            .matchEntire(t)?.let { m ->
+                val g = m.groupValues
+                return Command.ScreenTimer(if (g[1].isNotEmpty()) minutes(g[1]) else g[2].toInt())
+            }
+        if (t.matches(Regex("(?:cancel|stop|clear|end) (?:the |my )?(?:sleep )?timer|no timer"))) return Command.CancelTimer
+        Regex("(?:add|give me|extend (?:the )?timer by|plus) (\\d+) (?:more )?(?:minutes?|mins?)|(\\d+) more (?:minutes?|mins?)").matchEntire(t)?.let { m ->
+            return Command.ExtendTimer((m.groupValues[1].ifEmpty { m.groupValues[2] }).toInt())
+        }
 
         // Power
         if (t.matches(Regex("(turn|switch|power) (the )?(tv|television|it) off|(turn|switch|power) off( the)?( tv| television)?|tv off|shut (it )?down|go to sleep|goodnight|good night")))
@@ -156,6 +176,14 @@ class CommandParser(tvApps: List<TvApp>) {
     }
 
     companion object {
+        /** "an hour" → 60, "half an hour" → 30, "2 hours" → 120, "25 minutes" → 25. */
+        fun minutes(d: String): Int = when {
+            d == "an hour" -> 60
+            d == "half an hour" -> 30
+            d.contains("h") -> d.substringBefore(' ').toInt() * 60
+            else -> d.substringBefore(' ').toInt()
+        }.coerceIn(1, 600)
+
         /** Common LG webOS app IDs, used when the TV doesn't share its installed-app list. */
         val KNOWN_APPS = listOf(
             TvApp("netflix", "Netflix"),

@@ -16,6 +16,8 @@ import com.home.tvremote.lg.WakeOnLan
 import com.home.tvremote.voice.Command
 import com.home.tvremote.voice.CommandParser
 import com.home.tvremote.voice.TvApp
+import com.home.tvremote.timer.TimerEngine
+import com.home.tvremote.timer.TimerKind
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.delay
@@ -66,6 +68,8 @@ class TvController(app: Application) : AndroidViewModel(app) {
 
     init {
         viewModelScope.launch { for (job in queue) runCatching { job() }.onFailure { showError(it) } }
+        // When a timer turns the TV off, show the "Turn on" screen instead of a dead remote.
+        TimerEngine.onTvTurnedOff = { tvOff = true; foregroundApp = null; mediaState = null; tv?.close() }
         if (screen == Screen.Remote) refresh()
     }
 
@@ -188,6 +192,15 @@ class TvController(app: Application) : AndroidViewModel(app) {
         }
         runCatching { onForeground(t.request("ssap://com.webos.applicationManager/getForegroundAppInfo").optString("appId")) }
         runCatching {
+            // Play state of the app on screen, where the TV shares it (sharpens tap-to-pause).
+            t.subscribe("ssap://com.webos.media/getForegroundAppInfo") { p ->
+                val list = p.optJSONArray("foregroundAppInfo")
+                val items = (0 until (list?.length() ?: 0)).map { list!!.getJSONObject(it) }
+                val item = items.firstOrNull { it.optString("appId") == foregroundApp } ?: items.firstOrNull()
+                mediaState = item?.optString("playState")?.takeIf { it == "playing" || it == "paused" }
+            }
+        }
+        runCatching {
             // Tell us when a text box is focused on the TV, so typing/voice goes straight into it.
             t.subscribe("ssap://com.webos.service.ime/registerRemoteKeyboard") { p ->
                 p.optJSONObject("currentWidget")?.let { tvKeyboardOpen = it.optBoolean("focus", false) }
@@ -207,6 +220,7 @@ class TvController(app: Application) : AndroidViewModel(app) {
     private fun onForeground(appId: String) {
         if (appId.isEmpty() || appId == foregroundApp) return
         foregroundApp = appId
+        assumePlaying = true
         if (appId in SYSTEM_APPS) return
         usage[appId] = (usage[appId] ?: 0) + 1
         prefs.edit().putString("usage", JSONObject(usage.toMap() as Map<*, *>).toString()).apply()
@@ -263,14 +277,39 @@ class TvController(app: Application) : AndroidViewModel(app) {
     fun button(name: String) = enqueue { tv().button(name) }
     fun ssap(uri: String, payload: JSONObject? = null) = enqueue { tv().request(uri, payload) }
     fun volume(up: Boolean) = ssap(if (up) "ssap://audio/volumeUp" else "ssap://audio/volumeDown")
-    fun move(dx: Float, dy: Float) = enqueue { tv().move(dx, dy) }
+    fun move(dx: Float, dy: Float) { lastPointAt = System.currentTimeMillis(); enqueue { tv().move(dx, dy) } }
+
+    /** "playing" / "paused" when the TV reports it for the app on screen; null when it doesn't say. */
+    var mediaState by mutableStateOf<String?>(null)
+    private var lastPointAt = 0L
+    private var assumePlaying = true
+
+    /** Watching something (vs. browsing menus): taps pause/play instead of selecting. */
+    val inPlayback: Boolean
+        get() = mediaState != null || foregroundApp?.let { it !in SYSTEM_APPS } == true
+
+    /**
+     * Touchpad tap. While watching, a tap WITHOUT dragging first pauses/plays (the same command for
+     * every app, unlike OK). Drag-then-tap still selects, so "Skip intro" and menus keep working.
+     */
+    fun tap() {
+        val pointedRecently = System.currentTimeMillis() - lastPointAt < 3000
+        if (!pointedRecently && inPlayback) togglePlayback() else sendTap(tapMethod)
+    }
+
+    private fun togglePlayback() {
+        val pause = when (mediaState) { "playing" -> true; "paused" -> false; else -> assumePlaying }
+        assumePlaying = !pause
+        mediaState = mediaState?.let { if (pause) "paused" else "playing" }
+        say(if (pause) "Paused" else "Playing")
+        ssap(if (pause) "ssap://media.controls/pause" else "ssap://media.controls/play")
+    }
     /**
      * What a touchpad tap sends. Some LG firmware ignores the pointer "click" message, so this is
      * selectable: "click" (pointer click), "ok" (the remote's OK button), "enter" (keyboard Enter).
      */
     var tapMethod by mutableStateOf(prefs.getString("tapMethod", "ok")!!)
     fun setTap(method: String) { tapMethod = method; prefs.edit().putString("tapMethod", method).apply() }
-    fun click() = sendTap(tapMethod)
     fun sendTap(method: String) = enqueue {
         when (method) {
             "ok" -> tv().button("ENTER")
@@ -318,17 +357,13 @@ class TvController(app: Application) : AndroidViewModel(app) {
     fun diagnostics(): String = buildString {
         appendLine("App ${com.home.tvremote.BuildConfig.VERSION_NAME} · TV ${prefs.getString("ip", "?")} · connected=$connected")
         appendLine("MACs saved: ${prefs.getString("mac", null)?.split(',')?.size ?: 0}")
-        appendLine("Apps listed by TV: ${apps.size}")
+        appendLine("Apps listed by TV: ${apps.size} · on screen: $foregroundApp · play state: ${mediaState ?: "unknown"}")
+        TimerEngine.state?.let { appendLine("Timer: ${it.kind} ends in ${TimerEngine.format(it.endsAt - System.currentTimeMillis())}") }
         apps.firstOrNull { it.title.contains("netflix", true) }?.let { appendLine("Netflix id: ${it.id}") }
         appendLine()
         tv?.history?.forEach { appendLine(it) }
     }
 
-    fun togglePlayPause() = enqueue {
-        playing = !playing
-        tv().request("ssap://media.controls/${if (playing) "play" else "pause"}")
-    }
-    private var playing = true
 
     fun toggleMute() = enqueue {
         val muted = tv().request("ssap://audio/getStatus").optBoolean("mute")
@@ -438,6 +473,11 @@ class TvController(app: Application) : AndroidViewModel(app) {
         }
     }
 
+    fun startTimer(kind: TimerKind, minutes: Int) {
+        TimerEngine.start(getApplication(), kind, minutes)
+        say(if (kind == TimerKind.TurnOff) "TV turns off in $minutes min" else "$minutes-minute timer on the TV")
+    }
+
     /** Live typing into a focused TV text box. */
     fun typeOnTv(text: String) = ssap("ssap://com.webos.service.ime/insertText", JSONObject().put("text", text).put("replace", true))
     fun enterOnTv() = ssap("ssap://com.webos.service.ime/sendEnterKey")
@@ -486,7 +526,7 @@ class TvController(app: Application) : AndroidViewModel(app) {
             }
             is Command.VolumeSet -> { say("Volume ${cmd.level}"); ssap("ssap://audio/setVolume", JSONObject().put("volume", cmd.level)) }
             is Command.Mute -> { say(if (cmd.mute) "Muted" else "Sound on"); ssap("ssap://audio/setMute", JSONObject().put("mute", cmd.mute)) }
-            is Command.Media -> { say(cmd.action.replaceFirstChar { it.uppercase() }.replace("Forward", " forward")); ssap("ssap://media.controls/${cmd.action}") }
+            is Command.Media -> { if (cmd.action == "pause") assumePlaying = false else if (cmd.action == "play") assumePlaying = true; say(cmd.action.replaceFirstChar { it.uppercase() }.replace("Forward", " forward")); ssap("ssap://media.controls/${cmd.action}") }
             is Command.Button -> button(cmd.name)
             is Command.ChannelStep -> { say(if (cmd.up) "Channel up" else "Channel down"); ssap(if (cmd.up) "ssap://tv/channelUp" else "ssap://tv/channelDown") }
             is Command.ChannelNumber -> { say("Channel ${cmd.number}"); ssap("ssap://tv/openChannel", JSONObject().put("channelNumber", cmd.number)) }
@@ -494,6 +534,10 @@ class TvController(app: Application) : AndroidViewModel(app) {
             is Command.OpenApp -> launch(cmd.app)
             is Command.Search -> search(cmd.query, cmd.app)
             is Command.NoSuchApp -> say("There's no app called \"${cmd.name}\" on the TV", error = true)
+            is Command.SleepTimer -> startTimer(TimerKind.TurnOff, cmd.minutes)
+            is Command.ScreenTimer -> startTimer(TimerKind.OnScreen, cmd.minutes)
+            Command.CancelTimer -> if (TimerEngine.state != null) { TimerEngine.cancel(getApplication()); say("Timer cancelled") } else say("No timer is running")
+            is Command.ExtendTimer -> if (TimerEngine.state != null) { TimerEngine.extend(getApplication(), cmd.minutes); say("Added ${cmd.minutes} minutes") } else say("No timer is running")
         }
     }
 

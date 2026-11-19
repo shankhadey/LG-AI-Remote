@@ -71,6 +71,14 @@ object Discovery {
         }
     }
 
+    /** This phone's IPv4 address on Wi-Fi (for the TV to load the timer page from). */
+    fun phoneWifiIp(context: Context): String? {
+        val net = wifiNetwork(context) ?: return null
+        val cm = context.getSystemService(Context.CONNECTIVITY_SERVICE) as ConnectivityManager
+        return cm.getLinkProperties(net)?.linkAddresses?.map { it.address }
+            ?.firstOrNull { it is Inet4Address && !it.isLoopbackAddress }?.hostAddress
+    }
+
     private fun wifiNetwork(context: Context): Network? {
         val cm = context.getSystemService(Context.CONNECTIVITY_SERVICE) as ConnectivityManager
         @Suppress("DEPRECATION")

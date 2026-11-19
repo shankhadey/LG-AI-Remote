@@ -27,6 +27,7 @@ fun Touchpad(
     onClick: () -> Unit,
     onScroll: (Float) -> Unit,
     modifier: Modifier = Modifier,
+    hint: String = "Drag to point · tap to select",
 ) {
     val haptic = LocalHapticFeedback.current
     val dotColor = Palette.dots
@@ -68,7 +69,7 @@ fun Touchpad(
             },
     ) {
         Text(
-            "Drag to point · tap to select",
+            hint,
             color = Palette.faint, fontSize = 13.sp, textAlign = TextAlign.Center,
             modifier = Modifier.align(Alignment.BottomCenter).padding(bottom = 16.dp),
         )

@@ -22,6 +22,10 @@ import com.home.tvremote.ui.Palette
 import com.home.tvremote.ui.PairingScreen
 import com.home.tvremote.ui.RemoteScreen
 import com.home.tvremote.ui.ListeningPanel
+import com.home.tvremote.ui.TimerSheet
+import com.home.tvremote.timer.TimerEngine
+import com.home.tvremote.timer.TimerKind
+import com.home.tvremote.timer.TimerState
 import com.home.tvremote.ui.SetupScreen
 import com.home.tvremote.voice.TvApp
 import kotlinx.coroutines.Dispatchers
@@ -100,6 +104,14 @@ class ScreenshotTest {
                     colorFilter = androidx.compose.ui.graphics.ColorFilter.tint(androidx.compose.ui.graphics.Color(0xFF3B4630)))
             }
         }
+    }
+
+    @Test fun timerSheetDark() { Palette.dark = true; shot { TimerSheet({ _, _ -> }, {}) } }
+    @Test fun timerSheetLight() { Palette.dark = false; shot { TimerSheet({ _, _ -> }, {}) } }
+    @Test fun timerRunningDark() {
+        Palette.dark = true
+        TimerEngine.state = TimerState(TimerKind.TurnOff, System.currentTimeMillis() + 23 * 60_000L + 14_000L, 30 * 60_000L)
+        try { val tv = remoteTv(); shot { RemoteScreen(tv) { true } } } finally { TimerEngine.state = null }
     }
 
     @Test fun checkingDark() { Palette.dark = true; val tv = remoteTv().apply { connected = false; checking = true }; shot { RemoteScreen(tv) { true } } }

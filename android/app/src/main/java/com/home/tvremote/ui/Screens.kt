@@ -1,6 +1,16 @@
 package com.home.tvremote.ui
 
 import android.Manifest
+import android.content.pm.PackageManager
+import android.os.Build
+import androidx.core.content.ContextCompat
+import androidx.compose.material.icons.rounded.Close
+import androidx.compose.material.icons.rounded.Timer
+import androidx.compose.runtime.mutableLongStateOf
+import com.home.tvremote.timer.TimerEngine
+import com.home.tvremote.timer.TimerKind
+import com.home.tvremote.timer.TimerState
+import kotlinx.coroutines.delay
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.animation.AnimatedVisibility
@@ -121,6 +131,16 @@ fun RemoteScreen(tv: TvController, hasMicPermission: () -> Boolean) {
     var listening by remember { mutableStateOf(false) }
     var heard by remember { mutableStateOf("") }
     var level by remember { mutableFloatStateOf(0f) }
+    var showTimers by remember { mutableStateOf(false) }
+    // Android 13+: the timer's countdown notification needs permission (the timer runs either way).
+    val notifyPermission = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) { }
+    fun startTimer(kind: TimerKind, minutes: Int) {
+        if (Build.VERSION.SDK_INT >= 33 && ContextCompat.checkSelfPermission(context, Manifest.permission.POST_NOTIFICATIONS) != PackageManager.PERMISSION_GRANTED)
+            notifyPermission.launch(Manifest.permission.POST_NOTIFICATIONS)
+        tv.startTimer(kind, minutes)
+        showTimers = false
+    }
+    LaunchedEffect(TimerEngine.notice) { TimerEngine.notice?.let { tv.say(it, error = true); TimerEngine.notice = null } }
 
     val voice = remember {
         VoiceInput(context,
@@ -150,14 +170,16 @@ fun RemoteScreen(tv: TvController, hasMicPermission: () -> Boolean) {
             for (app in tv.mostUsed()) AppTile(app) { haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove); tv.launch(app) }
         }
         if (tv.tvKeyboardOpen) KeyboardBar(tv)
+        TimerEngine.state?.let { TimerPill(it) }
         Box(Modifier.fillMaxWidth().weight(1f).padding(top = 18.dp)) {
-            Touchpad(onMove = tv::move, onClick = tv::click, onScroll = tv::scroll, modifier = Modifier.fillMaxSize())
+            Touchpad(onMove = tv::move, onClick = tv::tap, onScroll = tv::scroll, modifier = Modifier.fillMaxSize(),
+                hint = if (tv.inPlayback) "Tap to pause/play · drag to point" else "Drag to point · tap to select")
             Feedback(tv, Modifier.align(Alignment.TopCenter).padding(top = 12.dp))
         }
         Row(Modifier.fillMaxWidth().padding(top = 16.dp), horizontalArrangement = Arrangement.SpaceBetween) {
             RoundButton(Icons.AutoMirrored.Rounded.ArrowBack, "Back") { tv.button("BACK") }
             RoundButton(Icons.Rounded.Home, "Home") { tv.button("HOME") }
-            RoundButton(Icons.Rounded.PlayArrow, "Play / pause") { tv.togglePlayPause() }
+            RoundButton(Icons.Rounded.Timer, "Timer") { showTimers = true }
             RoundButton(Icons.AutoMirrored.Rounded.VolumeOff, "Mute") { tv.toggleMute() }
         }
         Row(Modifier.fillMaxWidth().padding(top = 14.dp, bottom = 14.dp), verticalAlignment = Alignment.CenterVertically,
@@ -173,6 +195,7 @@ fun RemoteScreen(tv: TvController, hasMicPermission: () -> Boolean) {
                 { tv.ssap("ssap://tv/channelDown") }, { tv.ssap("ssap://tv/channelUp") }, Modifier.weight(1f))
         }
     }
+    if (showTimers) TimerSheet(onPick = ::startTimer, onClose = { showTimers = false })
     if (listening) ListeningPanel(heard, level, onDone = { voice.finish() }, onCancel = { voice.stop(); listening = false })
 }
 
@@ -335,6 +358,61 @@ private fun MicButton(onClick: () -> Unit) {
     }
 }
 
+/** Shown while a timer runs: what it'll do, the countdown, +10 min and cancel. */
+@Composable
+private fun TimerPill(state: TimerState) {
+    val context = LocalContext.current
+    var now by remember { mutableLongStateOf(System.currentTimeMillis()) }
+    LaunchedEffect(state.endsAt) { while (true) { now = System.currentTimeMillis(); delay(500) } }
+    val label = if (state.kind == TimerKind.TurnOff) "TV off in" else "Timer on TV"
+    Row(Modifier.fillMaxWidth().padding(top = 16.dp).card(RoundedCornerShape(16.dp)).padding(start = 14.dp, end = 6.dp, top = 6.dp, bottom = 6.dp),
+        verticalAlignment = Alignment.CenterVertically) {
+        Icon(Icons.Rounded.Timer, null, tint = Palette.text, modifier = Modifier.size(20.dp))
+        Spacer(Modifier.width(10.dp))
+        Text(label, color = Palette.muted, fontSize = 14.sp)
+        Spacer(Modifier.width(6.dp))
+        Text(TimerEngine.format(state.endsAt - now), color = Palette.text, fontSize = 15.sp, fontWeight = FontWeight.SemiBold, modifier = Modifier.weight(1f))
+        Text("+10 min", color = Palette.text, fontSize = 14.sp, fontWeight = FontWeight.SemiBold,
+            modifier = Modifier.clip(RoundedCornerShape(10.dp)).clickable { TimerEngine.extend(context, 10) }.padding(horizontal = 10.dp, vertical = 10.dp))
+        Box(Modifier.size(40.dp).clip(CircleShape).clickable { TimerEngine.cancel(context) }, contentAlignment = Alignment.Center) {
+            Icon(Icons.Rounded.Close, "Cancel timer", tint = Palette.muted, modifier = Modifier.size(20.dp))
+        }
+    }
+}
+
+/** One-tap timers: turn the TV off later (with pop-up reminders), or show a countdown on the TV. */
+@OptIn(ExperimentalLayoutApi::class)
+@Composable
+fun TimerSheet(onPick: (TimerKind, Int) -> Unit, onClose: () -> Unit) {
+    Box(Modifier.fillMaxSize().background(Color(0x99000000))
+        .clickable(interactionSource = remember { MutableInteractionSource() }, indication = null, onClick = onClose),
+        contentAlignment = Alignment.BottomCenter) {
+        Column(Modifier.fillMaxWidth().clip(RoundedCornerShape(topStart = 28.dp, topEnd = 28.dp)).background(Palette.bg)
+            .clickable(interactionSource = remember { MutableInteractionSource() }, indication = null) { }
+            .padding(start = 20.dp, end = 20.dp, top = 12.dp, bottom = 28.dp)) {
+            Box(Modifier.align(Alignment.CenterHorizontally).width(40.dp).height(5.dp).clip(RoundedCornerShape(3.dp)).background(Palette.surface2))
+            TimerRow("Turn TV off in…", "Reminders pop up on the TV at 10, 5 and 1 min.", TimerEngine.TURN_OFF_PRESETS) { onPick(TimerKind.TurnOff, it) }
+            TimerRow("Show a timer on TV", "Full-screen countdown. Back on the remote returns to what you were watching.", TimerEngine.ON_SCREEN_PRESETS) { onPick(TimerKind.OnScreen, it) }
+            Text("Or just say it: “turn off in 40 minutes”, “timer 10 minutes”", color = Palette.faint, fontSize = 13.sp, modifier = Modifier.padding(top = 20.dp))
+        }
+    }
+}
+
+@Composable
+private fun TimerRow(title: String, sub: String, presets: List<Int>, onPick: (Int) -> Unit) {
+    Text(title, color = Palette.text, fontSize = 17.sp, fontWeight = FontWeight.SemiBold, modifier = Modifier.padding(top = 22.dp))
+    Text(sub, color = Palette.muted, fontSize = 13.sp, modifier = Modifier.padding(top = 2.dp, bottom = 12.dp))
+    Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+        for (m in presets) {
+            Column(Modifier.weight(1f).height(64.dp).card(RoundedCornerShape(18.dp)).clickable { onPick(m) },
+                horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.Center) {
+                Text("$m", color = Palette.text, fontSize = 20.sp, fontWeight = FontWeight.SemiBold)
+                Text("min", color = Palette.muted, fontSize = 12.sp)
+            }
+        }
+    }
+}
+
 /** Tap-to-talk: words appear as you speak; sends when you pause or tap Done; tap elsewhere to cancel. */
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
@@ -357,7 +435,7 @@ fun ListeningPanel(heard: String, level: Float, onDone: () -> Unit, onCancel: ()
         Text("Long requests are fine — take your time.", color = Palette.muted, fontSize = 14.sp, modifier = Modifier.padding(top = 16.dp))
         Spacer(Modifier.weight(1f))
         FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-            for (c in listOf("“Open Netflix”", "“Volume 20”", "“Switch to HDMI 2”", "“Pause”")) {
+            for (c in listOf("“Open Netflix”", "“Volume 20”", "“Turn off in 30 minutes”", "“Pause”")) {
                 Text(c, color = Palette.muted, fontSize = 13.sp, modifier = Modifier.card(RoundedCornerShape(50)).padding(horizontal = 12.dp, vertical = 8.dp))
             }
         }

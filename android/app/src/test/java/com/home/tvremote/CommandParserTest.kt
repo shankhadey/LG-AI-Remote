@@ -92,6 +92,22 @@ class CommandParserTest {
         check("play louder than words on youtube", Command.Search("louder than words", youtube))
     }
 
+    @Test fun timers() {
+        check("turn off the tv in 30 minutes", Command.SleepTimer(30))
+        check("Turn the TV off in 45 min", Command.SleepTimer(45))
+        check("sleep timer 60 minutes", Command.SleepTimer(60))
+        check("set a sleep timer for an hour", Command.SleepTimer(60))
+        check("turn off in half an hour", Command.SleepTimer(30))
+        check("timer 10 minutes", Command.ScreenTimer(10))
+        check("set a timer for 5 minutes", Command.ScreenTimer(5))
+        check("start a 15 minute timer", Command.ScreenTimer(15))
+        check("cancel the timer", Command.CancelTimer)
+        check("add 10 minutes", Command.ExtendTimer(10))
+        check("10 more minutes", Command.ExtendTimer(10))
+        check("turn off the tv", Command.Power(false))          // still "now"
+        check("stop", Command.Media("stop"))                    // still media stop
+    }
+
     @Test fun misheardAppNames() {
         check("open netflex", Command.OpenApp(netflix))      // what the phone actually heard
         check("open nerfkex", Command.OpenApp(netflix))      // what was typed in the bug report
