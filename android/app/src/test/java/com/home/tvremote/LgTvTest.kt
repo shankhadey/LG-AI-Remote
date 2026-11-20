@@ -53,6 +53,11 @@ class LgTvTest {
                         reply("response", JSONObject().put("returnValue", true).put("socketPath", pointerServer.url("/").toString().replace("http", "ws")))
                     m.optString("uri") == "ssap://audio/getVolume" -> reply("response", JSONObject().put("returnValue", true).put("volume", 12))
                     m.optString("uri") == "ssap://bad" -> reply("response", JSONObject().put("returnValue", false).put("errorText", "nope"))
+                    m.getString("type") == "subscribe" && m.optString("uri") == "ssap://flaky" -> {
+                        if (requests.count { it.optString("uri") == "ssap://flaky" } == 1)
+                            webSocket.send(JSONObject().put("id", id).put("type", "error").put("error", "500 Application error").toString())
+                        else reply("response", JSONObject().put("returnValue", true).put("appId", "netflix"))
+                    }
                     else -> reply("response", JSONObject().put("returnValue", true))
                 }
             }
@@ -112,6 +117,17 @@ class LgTvTest {
         jobs.forEach { it.await() }
         assertEquals(1, requests.count { it.getString("type") == "register" })
         assertEquals(12, tv.request("ssap://audio/getVolume").getInt("volume"))
+        tv.close()
+    }
+
+    @Test fun resubscribesWhenTheTvEndsASubscription() = runBlocking {
+        startTv()
+        val tv = LgTv("127.0.0.1", "K", onClientKey = {}, urls = listOf(url()), resubscribeDelayMs = 50)
+        val got = LinkedBlockingQueue<String>()
+        tv.subscribe("ssap://flaky") { got.add(it.optString("appId")) }
+        assertEquals("netflix", got.poll(3, TimeUnit.SECONDS))
+        assertEquals(2, requests.count { it.optString("uri") == "ssap://flaky" })
+        assertTrue(tv.history.any { it.contains("re-subscribed") })
         tv.close()
     }
 

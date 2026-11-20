@@ -65,6 +65,10 @@ class TvController(app: Application) : AndroidViewModel(app) {
     var checking by mutableStateOf(false)
     /** True while the wake-up signal is being sent and we wait for the TV. (Declared before init: refresh() reads it.) */
     var waking by mutableStateOf(false)
+    /** After the app wakes the TV, open Home if it starts on Live TV. A setting, for people who watch Live TV. */
+    var homeOnWake by mutableStateOf(prefs.getBoolean("homeOnWake", true))
+    fun changeHomeOnWake(on: Boolean) { homeOnWake = on; prefs.edit().putBoolean("homeOnWake", on).apply() }
+    @Volatile private var homeAfterWakeUntil = 0L
 
     init {
         viewModelScope.launch { for (job in queue) runCatching { job() }.onFailure { showError(it) } }
@@ -221,6 +225,12 @@ class TvController(app: Application) : AndroidViewModel(app) {
         if (appId.isEmpty() || appId == foregroundApp) return
         foregroundApp = appId
         assumePlaying = true
+        // Just woken by the app and the TV came up on Live TV ("No signal" without an antenna): go Home.
+        if (appId == "com.webos.app.livetv" && System.currentTimeMillis() < homeAfterWakeUntil) {
+            homeAfterWakeUntil = 0
+            button("HOME")
+            say("Opened Home instead of Live TV")
+        }
         if (appId in SYSTEM_APPS) return
         usage[appId] = (usage[appId] ?: 0) + 1
         prefs.edit().putString("usage", JSONObject(usage.toMap() as Map<*, *>).toString()).apply()
@@ -435,6 +445,7 @@ class TvController(app: Application) : AndroidViewModel(app) {
         if (waking) return
         val ip = prefs.getString("ip", null)
         waking = true
+        if (homeOnWake) homeAfterWakeUntil = System.currentTimeMillis() + 90_000
         viewModelScope.launch {
             try {
                 // Keep sending the wake signal for ~40 s: a TV that was just switched off ignores it

@@ -3,6 +3,8 @@ package com.home.tvremote.lg
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.TimeoutCancellationException
 import kotlinx.coroutines.withTimeout
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.delay
 import okhttp3.OkHttpClient
 import okhttp3.Request
 import okhttp3.Response
@@ -29,7 +31,13 @@ class LgTv(
     private val onClientKey: (String) -> Unit,
     private val onDisconnect: () -> Unit = {},
     private val urls: List<String> = listOf("wss://$ip:3001", "ws://$ip:3000"),
+    /** Wait before re-subscribing after the TV ends a subscription with an error (grows per retry). */
+    private val resubscribeDelayMs: Long = 2000,
 ) {
+    private val scope = kotlinx.coroutines.CoroutineScope(kotlinx.coroutines.SupervisorJob() + kotlinx.coroutines.Dispatchers.IO)
+    /** subscription id → (uri, callback), so a failed subscription can be re-made. */
+    private val subUris = ConcurrentHashMap<String, Pair<String, (JSONObject) -> Unit>>()
+    private val resubAttempts = ConcurrentHashMap<String, Int>()
     private val client: OkHttpClient = run {
         val trustAll = object : X509TrustManager {
             override fun checkClientTrusted(c: Array<X509Certificate>, a: String) {}
@@ -100,7 +108,7 @@ class LgTv(
         val wasUp = ws != null
         ws = null; pointer?.cancel(); pointer = null
         pending.values.forEach { it.completeExceptionally(TvException("Lost connection to the TV ($why)")) }
-        pending.clear(); subscriptions.clear()
+        pending.clear(); subscriptions.clear(); subUris.clear()
         if (!registered.isCompleted) registered.completeExceptionally(TvException("Lost connection ($why)"))
         if (wasUp) onDisconnect()
     }
@@ -128,6 +136,14 @@ class LgTv(
         subscriptions[id]?.let {
             // Recorded for Diagnostics, e.g. which app is on screen / play state.
             log("SUB ${if (type == "error") "ERR " + msg.optString("error") else payload.toString().take(200)}", System.currentTimeMillis())
+            if (type == "error") {
+                // The TV ended this live update (seen: "500 Application error"). Without re-subscribing,
+                // the on-screen app / play state would go stale until the next reconnect.
+                subscriptions.remove(id)
+                subUris.remove(id)?.let { (uri, cb) -> resubscribe(uri, cb) }
+                return
+            }
+            subUris[id]?.first?.let { uri -> resubAttempts.remove(uri) }
             it(payload); return
         }
         val d = pending.remove(id) ?: return
@@ -195,7 +211,20 @@ class LgTv(
         connect()
         val id = "sub_${seq.incrementAndGet()}"
         subscriptions[id] = onEvent
+        subUris[id] = uri to onEvent
         send(JSONObject().put("id", id).put("type", "subscribe").put("uri", uri))
+    }
+
+    private fun resubscribe(uri: String, onEvent: (JSONObject) -> Unit) {
+        val attempt = resubAttempts.merge(uri, 1, Int::plus) ?: 1
+        if (attempt > 5) { log("SUB gave up re-subscribing ${uri.removePrefix("ssap://")}", System.currentTimeMillis()); return }
+        scope.launch {
+            delay(resubscribeDelayMs * attempt)
+            if (ws == null) return@launch // disconnected: the next connect subscribes afresh
+            runCatching { subscribe(uri, onEvent) }
+                .onSuccess { log("SUB re-subscribed ${uri.removePrefix("ssap://")} (try $attempt)", System.currentTimeMillis()) }
+                .onFailure { log("SUB re-subscribe failed: ${it.message}", System.currentTimeMillis()) }
+        }
     }
 
     // ---- pointer / buttons (the "magic remote" socket) ----

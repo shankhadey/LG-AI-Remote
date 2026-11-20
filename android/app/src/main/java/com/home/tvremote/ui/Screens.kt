@@ -231,6 +231,8 @@ private fun Header(tv: TvController, showPower: Boolean = true) {
                 DropdownMenuItem(text = { Text("Reconnect") }, onClick = { menu = false; tv.connect() })
                 DropdownMenuItem(text = { Text(if (tv.macKnown) "Power-on settings" else "Set up power on") }, onClick = { menu = false; macDialog = true })
                 DropdownMenuItem(text = { Text("Fix touchpad tap") }, onClick = { menu = false; tapDialog = true })
+                DropdownMenuItem(text = { Text(if (tv.homeOnWake) "After turning on: open Home ✓" else "After turning on: open Home") },
+                    onClick = { menu = false; tv.changeHomeOnWake(!tv.homeOnWake); tv.say(if (tv.homeOnWake) "Will open Home after turning the TV on" else "Will leave the TV on its start-up screen") })
                 DropdownMenuItem(text = { Text("Diagnostics") }, onClick = { menu = false; diag = true })
                 DropdownMenuItem(text = { Text("Choose a different TV") }, onClick = { menu = false; tv.forget() })
             }
