@@ -164,6 +164,7 @@ fun RemoteScreen(tv: TvController, hasMicPermission: () -> Boolean) {
 
     Column(Modifier.fillMaxSize().padding(horizontal = 20.dp)) {
         Header(tv)
+        WhatToWatchCard(tv.picks)
         Text("MOST USED", color = Palette.faint, fontSize = 11.sp, fontWeight = FontWeight.SemiBold, letterSpacing = 1.sp,
             modifier = Modifier.padding(top = 18.dp, bottom = 10.dp))
         Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
@@ -195,6 +196,7 @@ fun RemoteScreen(tv: TvController, hasMicPermission: () -> Boolean) {
                 { tv.ssap("ssap://tv/channelDown") }, { tv.ssap("ssap://tv/channelUp") }, Modifier.weight(1f))
         }
     }
+    if (tv.picks.open) { PicksScreen(tv.picks); return }
     if (showTimers) TimerSheet(onPick = ::startTimer, onClose = { showTimers = false })
     if (listening) ListeningPanel(heard, level, onDone = { voice.finish() }, onCancel = { voice.stop(); listening = false })
 }
@@ -230,6 +232,7 @@ private fun Header(tv: TvController, showPower: Boolean = true) {
                 DropdownMenuItem(text = { Text("Rename") }, onClick = { menu = false; renameDialog = true })
                 DropdownMenuItem(text = { Text("Reconnect") }, onClick = { menu = false; tv.connect() })
                 DropdownMenuItem(text = { Text(if (tv.macKnown) "Power-on settings" else "Set up power on") }, onClick = { menu = false; macDialog = true })
+                DropdownMenuItem(text = { Text("Picks settings") }, onClick = { menu = false; tv.picks.open = true; tv.picks.step = com.home.tvremote.picks.Step.Setup })
                 DropdownMenuItem(text = { Text("Fix touchpad tap") }, onClick = { menu = false; tapDialog = true })
                 DropdownMenuItem(text = { Text(if (tv.homeOnWake) "After turning on: open Home ✓" else "After turning on: open Home") },
                     onClick = { menu = false; tv.changeHomeOnWake(!tv.homeOnWake); tv.say(if (tv.homeOnWake) "Will open Home after turning the TV on" else "Will leave the TV on its start-up screen") })
@@ -507,6 +510,7 @@ private fun RenameDialog(tv: TvController, onClose: () -> Unit) {
 private fun DiagnosticsDialog(tv: TvController, onClose: () -> Unit) {
     val text = remember { tv.diagnostics() }
     val clipboard = LocalClipboardManager.current
+    val context = LocalContext.current
     AlertDialog(
         onDismissRequest = onClose,
         title = { Text("Diagnostics") },
@@ -517,7 +521,16 @@ private fun DiagnosticsDialog(tv: TvController, onClose: () -> Unit) {
                 Text(text, fontSize = 11.sp, fontFamily = FontFamily.Monospace, color = Palette.text)
             }
         },
-        confirmButton = { TextButton(onClick = { clipboard.setText(AnnotatedString(text)); tv.say("Copied") }) { Text("Copy") } },
+        confirmButton = {
+            Row {
+                TextButton(onClick = { clipboard.setText(AnnotatedString(text)); tv.say("Copied") }) { Text("Copy") }
+                TextButton(onClick = {
+                    val send = android.content.Intent(android.content.Intent.ACTION_SEND).setType("text/plain")
+                        .putExtra(android.content.Intent.EXTRA_SUBJECT, "TV Remote diagnostics").putExtra(android.content.Intent.EXTRA_TEXT, text)
+                    context.startActivity(android.content.Intent.createChooser(send, "Share diagnostics"))
+                }) { Text("Share") }
+            }
+        },
         dismissButton = { TextButton(onClick = onClose) { Text("Close") } },
         containerColor = Palette.surface, titleContentColor = Palette.text, textContentColor = Palette.muted,
     )

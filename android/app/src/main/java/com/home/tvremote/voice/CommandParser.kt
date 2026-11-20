@@ -21,6 +21,8 @@ sealed interface Command {
     /** Show a full-screen countdown on the TV. */
     data class ScreenTimer(val minutes: Int) : Command
     data object CancelTimer : Command
+    /** Open "What should we watch?", optionally with what was asked for ("something funny"). */
+    data class WhatToWatch(val text: String?) : Command
     data class ExtendTimer(val minutes: Int) : Command
 }
 
@@ -124,6 +126,12 @@ class CommandParser(tvApps: List<TvApp>) {
         Regex("(?:switch to |change to |go to |use |input )?(?:the )?(?:hdmi|h d m i|input) ?(\\d)").matchEntire(t)?.let {
             return Command.Input(it.groupValues[1].toInt())
         }
+
+        // "What should we watch?" / "find us something funny"
+        if (t.matches(Regex("what (?:should|can|shall|do) (?:we|i) watch(?: (?:tonight|now|today))?|what to watch|decide for (?:us|me)|pick something(?: for (?:us|me))?")))
+            return Command.WhatToWatch(null)
+        if (t.matches(Regex("(?:find|recommend|suggest|pick|give) (?:us |me )?(?:something|a show|a movie|a film|a series|anything)(?: .+)?")))
+            return Command.WhatToWatch(t)
 
         // Search: "search for X on Y", "find X", "play X on Y", "watch X", "look up X"
         Regex("(?:search(?: for)?|find|look up|look for|play|watch|show me|put on) (.+?)(?: (?:on|in|using) (.+))?").matchEntire(t)?.let { m ->

@@ -18,6 +18,9 @@ import com.home.tvremote.voice.CommandParser
 import com.home.tvremote.voice.TvApp
 import com.home.tvremote.timer.TimerEngine
 import com.home.tvremote.timer.TimerKind
+import com.home.tvremote.picks.PicksController
+import com.home.tvremote.picks.PicksStore
+import com.home.tvremote.picks.TvActions
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.delay
@@ -31,8 +34,10 @@ import java.net.URLEncoder
 
 enum class Screen { Setup, Pairing, Remote }
 
-class TvController(app: Application) : AndroidViewModel(app) {
+class TvController(app: Application) : AndroidViewModel(app), TvActions {
     private val prefs = app.getSharedPreferences("tv", Context.MODE_PRIVATE)
+    /** "What should we watch?" (declared early: onForeground() forwards to it). */
+    val picks = PicksController(PicksStore(app.getSharedPreferences("picks", Context.MODE_PRIVATE)), this, viewModelScope)
 
     var screen by mutableStateOf(if (prefs.getString("ip", null) != null) Screen.Remote else Screen.Setup)
     var tvName by mutableStateOf(prefs.getString("name", "LG TV")!!)
@@ -225,6 +230,7 @@ class TvController(app: Application) : AndroidViewModel(app) {
         if (appId.isEmpty() || appId == foregroundApp) return
         foregroundApp = appId
         assumePlaying = true
+        picks.onForeground(appId)
         // Just woken by the app and the TV came up on Live TV ("No signal" without an antenna): go Home.
         if (appId == "com.webos.app.livetv" && System.currentTimeMillis() < homeAfterWakeUntil) {
             homeAfterWakeUntil = 0
@@ -364,6 +370,22 @@ class TvController(app: Application) : AndroidViewModel(app) {
         return false
     }
 
+    // ---- TvActions (for the picker) -------------------------------------------
+    override fun openApp(appId: String, title: String) = launch(TvApp(appId, title))
+    override fun knownAppIds(): Set<String> = (apps.map { it.id } + usage.keys).toSet()
+    override fun openOnTvBrowser(url: String) = enqueue {
+        val t = tv()
+        val ok = runCatching { t.request("ssap://system.launcher/open", JSONObject().put("target", url)) }.isSuccess ||
+            runCatching { t.request("ssap://system.launcher/launch", JSONObject().put("id", "com.webos.app.browser").put("params", JSONObject().put("target", url))) }.isSuccess
+        if (!ok) say("The TV didn't open the picks page (details in Diagnostics)", error = true)
+    }
+    override fun toastOnTv(message: String) = ssap("ssap://system.notifications/createToast", JSONObject().put("message", message))
+    override fun goHome() = button("HOME")
+    override val foreground: String? get() = foregroundApp
+    override fun phoneIp(): String? = Discovery.phoneWifiIp(getApplication())
+    override val tvIp: String? get() = prefs.getString("ip", null)
+    override fun note(message: String, error: Boolean) = say(message, error)
+
     fun diagnostics(): String = buildString {
         appendLine("App ${com.home.tvremote.BuildConfig.VERSION_NAME} · TV ${prefs.getString("ip", "?")} · connected=$connected")
         appendLine("MACs saved: ${prefs.getString("mac", null)?.split(',')?.size ?: 0}")
@@ -372,6 +394,8 @@ class TvController(app: Application) : AndroidViewModel(app) {
         apps.firstOrNull { it.title.contains("netflix", true) }?.let { appendLine("Netflix id: ${it.id}") }
         appendLine()
         tv?.history?.forEach { appendLine(it) }
+        appendLine()
+        append(picks.diagnostics())
     }
 
 
@@ -548,6 +572,7 @@ class TvController(app: Application) : AndroidViewModel(app) {
             is Command.SleepTimer -> startTimer(TimerKind.TurnOff, cmd.minutes)
             is Command.ScreenTimer -> startTimer(TimerKind.OnScreen, cmd.minutes)
             Command.CancelTimer -> if (TimerEngine.state != null) { TimerEngine.cancel(getApplication()); say("Timer cancelled") } else say("No timer is running")
+            is Command.WhatToWatch -> { picks.openPicker(); if (cmd.text != null && picks.step == com.home.tvremote.picks.Step.Choose) picks.ask(cmd.text) }
             is Command.ExtendTimer -> if (TimerEngine.state != null) { TimerEngine.extend(getApplication(), cmd.minutes); say("Added ${cmd.minutes} minutes") } else say("No timer is running")
         }
     }
@@ -581,6 +606,7 @@ class TvController(app: Application) : AndroidViewModel(app) {
         val SYSTEM_APPS = setOf(
             "com.webos.app.home", "com.webos.app.livetv", "com.webos.surfacemanager", "com.webos.app.inputpicker",
             "com.webos.app.screensaver", "com.webos.app.settings", "com.palm.app.settings", "com.webos.app.notificationcenter",
+            "com.webos.app.browser", // the timer / picks pages: taps should select there, not pause
         ) + (1..4).map { "com.webos.app.hdmi$it" }
     }
 }

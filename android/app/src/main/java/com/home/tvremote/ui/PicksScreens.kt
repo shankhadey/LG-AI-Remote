@@ -1,0 +1,402 @@
+package com.home.tvremote.ui
+
+import android.Manifest
+import android.content.pm.PackageManager
+import androidx.activity.compose.BackHandler
+import androidx.compose.foundation.background
+import androidx.compose.foundation.border
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.ExperimentalLayoutApi
+import androidx.compose.foundation.layout.FlowRow
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.text.BasicTextField
+import androidx.compose.foundation.text.KeyboardActions
+import androidx.compose.foundation.text.KeyboardOptions
+import androidx.compose.foundation.verticalScroll
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.rounded.ArrowBack
+import androidx.compose.material.icons.rounded.AutoAwesome
+import androidx.compose.material.icons.rounded.Check
+import androidx.compose.material.icons.rounded.ChevronRight
+import androidx.compose.material.icons.rounded.Mic
+import androidx.compose.material.icons.rounded.PlayArrow
+import androidx.compose.material.icons.rounded.ThumbDown
+import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.Icon
+import androidx.compose.material3.Switch
+import androidx.compose.material3.SwitchDefaults
+import androidx.compose.material3.Text
+import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateListOf
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.SolidColor
+import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.text.TextStyle
+import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.input.ImeAction
+import androidx.compose.ui.text.input.PasswordVisualTransformation
+import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
+import androidx.core.content.ContextCompat
+import coil.compose.AsyncImage
+import com.home.tvremote.picks.Catalog
+import com.home.tvremote.picks.Pick
+import com.home.tvremote.picks.PicksController
+import com.home.tvremote.picks.Step
+import com.home.tvremote.voice.VoiceInput
+
+/** Entry point on the remote, above Most used. */
+@Composable
+fun WhatToWatchCard(pc: PicksController) {
+    Row(Modifier.fillMaxWidth().padding(top = 14.dp).card(RoundedCornerShape(20.dp)).clickable { pc.openPicker() }.padding(14.dp),
+        verticalAlignment = Alignment.CenterVertically) {
+        Box(Modifier.size(40.dp).clip(RoundedCornerShape(12.dp)).background(Palette.primary), contentAlignment = Alignment.Center) {
+            Icon(Icons.Rounded.AutoAwesome, null, tint = Palette.onPrimary, modifier = Modifier.size(20.dp))
+        }
+        Spacer(Modifier.width(12.dp))
+        Column(Modifier.weight(1f)) {
+            Text("What should we watch?", color = Palette.text, fontSize = 16.sp, fontWeight = FontWeight.SemiBold)
+            Text("3 picks in under a minute", color = Palette.muted, fontSize = 13.sp)
+        }
+        Icon(Icons.Rounded.ChevronRight, null, tint = Palette.faint)
+    }
+}
+
+/** Full-screen picker on the phone. */
+@Composable
+fun PicksScreen(pc: PicksController) {
+    BackHandler { if (pc.step == Step.Results || pc.step == Step.Error) pc.back() else pc.close() }
+    Box(Modifier.fillMaxSize().background(Palette.bg)) {
+        when (pc.step) {
+            Step.Setup -> SetupPicks(pc)
+            Step.Choose -> ChoosePicks(pc)
+            Step.Loading -> Column(Modifier.fillMaxSize().padding(20.dp)) {
+                PicksTop(pc, pc.summary) { pc.back() }
+                Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                    Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                        CircularProgressIndicator(color = Palette.text, strokeWidth = 2.dp)
+                        Text("Finding three picks…", color = Palette.muted, fontSize = 15.sp, modifier = Modifier.padding(top = 16.dp))
+                    }
+                }
+            }
+            Step.Results -> ResultsPicks(pc)
+            Step.Error -> Column(Modifier.fillMaxSize().padding(20.dp)) {
+                PicksTop(pc, pc.summary) { pc.back() }
+                Spacer(Modifier.height(80.dp))
+                Text(pc.message, color = Palette.text, fontSize = 18.sp, fontWeight = FontWeight.SemiBold)
+                Spacer(Modifier.height(20.dp))
+                PrimaryPill("Try something else") { pc.back() }
+            }
+        }
+    }
+}
+
+@Composable
+private fun PicksTop(pc: PicksController, label: String, onBack: () -> Unit) {
+    Row(Modifier.fillMaxWidth().padding(top = 4.dp), verticalAlignment = Alignment.CenterVertically) {
+        Box(Modifier.size(40.dp).clip(CircleShape).clickable(onClick = onBack), contentAlignment = Alignment.Center) {
+            Icon(Icons.AutoMirrored.Rounded.ArrowBack, "Back", tint = Palette.text)
+        }
+        Text(label, color = Palette.muted, fontSize = 14.sp, maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.weight(1f).padding(start = 4.dp))
+        ShowOnTv(pc, short = true)
+    }
+}
+
+@Composable
+private fun ShowOnTv(pc: PicksController, short: Boolean = false) {
+    Row(Modifier.clip(RoundedCornerShape(10.dp)).clickable { pc.changeShowOnTv(!pc.showOnTv) }.padding(6.dp), verticalAlignment = Alignment.CenterVertically) {
+        Box(Modifier.size(20.dp).clip(RoundedCornerShape(6.dp)).then(
+            if (pc.showOnTv) Modifier.background(Palette.primary) else Modifier.border(2.dp, Palette.faint, RoundedCornerShape(6.dp))),
+            contentAlignment = Alignment.Center) {
+            if (pc.showOnTv) Icon(Icons.Rounded.Check, null, tint = Palette.onPrimary, modifier = Modifier.size(16.dp))
+        }
+        Spacer(Modifier.width(8.dp))
+        Text(if (short) "On TV" else "Show on TV", color = Palette.text, fontSize = 14.sp)
+    }
+}
+
+@OptIn(ExperimentalLayoutApi::class)
+@Composable
+private fun ChoosePicks(pc: PicksController) {
+    val context = LocalContext.current
+    var text by remember { mutableStateOf("") }
+    var listening by remember { mutableStateOf(false) }
+    val voice = remember {
+        VoiceInput(context, onPartial = { text = it }, onResult = { g -> text = g.first(); pc.ask(g.first()) },
+            onError = { listening = false }, onEnd = { listening = false })
+    }
+    DisposableEffect(Unit) { onDispose { voice.release() } }
+
+    Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(horizontal = 20.dp, vertical = 8.dp)) {
+        Box(Modifier.size(40.dp).clip(CircleShape).clickable { pc.close() }, contentAlignment = Alignment.Center) {
+            Icon(Icons.AutoMirrored.Rounded.ArrowBack, "Back", tint = Palette.text)
+        }
+        Text(pc.title, color = Palette.text, fontSize = 26.sp, fontWeight = FontWeight.Bold, modifier = Modifier.padding(top = 6.dp))
+        Text(pc.contextLine, color = Palette.muted, fontSize = 14.sp, modifier = Modifier.padding(top = 4.dp))
+
+        Label("Who's watching")
+        FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+            for (p in pc.profiles()) Chip(p, p == pc.who) { pc.selectWho(p) }
+        }
+        if (pc.store.languages.size > 1) {
+            Label("Language")
+            FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                Chip("Any", pc.language == null) { pc.selectLanguage(null) }
+                for (c in pc.store.languages) Chip(Catalog.languageLabel(c), pc.language == c) { pc.selectLanguage(c) }
+            }
+        }
+        pc.keep?.let { k ->
+            Label("Keep watching")
+            Row(Modifier.fillMaxWidth().card(RoundedCornerShape(18.dp)).padding(12.dp), verticalAlignment = Alignment.CenterVertically) {
+                Column(Modifier.weight(1f)) {
+                    Text(k.playedName ?: "", color = Palette.text, fontSize = 15.sp, fontWeight = FontWeight.SemiBold)
+                    Text(k.service ?: "", color = Palette.muted, fontSize = 12.sp)
+                }
+                SmallPrimary("Play", Icons.Rounded.PlayArrow) { pc.playKeepWatching() }
+            }
+        }
+        Label("Pick a mood")
+        val moods = pc.moods()
+        for (row in moods.chunked(2)) {
+            Row(Modifier.fillMaxWidth().padding(bottom = 10.dp), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                for (m in row) Column(Modifier.weight(1f).height(64.dp).card(RoundedCornerShape(18.dp)).clickable { pc.chooseMood(m) }.padding(horizontal = 14.dp),
+                    verticalArrangement = Arrangement.Center) {
+                    Text(m.label, color = Palette.text, fontSize = 15.sp, fontWeight = FontWeight.SemiBold)
+                    Text(m.hint, color = Palette.muted, fontSize = 12.sp)
+                }
+            }
+        }
+        Row(Modifier.fillMaxWidth().padding(top = 4.dp).card(RoundedCornerShape(28.dp)).padding(start = 18.dp, end = 7.dp, top = 7.dp, bottom = 7.dp),
+            verticalAlignment = Alignment.CenterVertically) {
+            Box(Modifier.weight(1f)) {
+                if (text.isEmpty()) Text(if (listening) "Listening…" else "Or just say it…", color = Palette.faint, fontSize = 15.sp)
+                BasicTextField(text, { text = it }, singleLine = true, textStyle = TextStyle(color = Palette.text, fontSize = 15.sp),
+                    cursorBrush = SolidColor(Palette.accent), keyboardOptions = KeyboardOptions(imeAction = ImeAction.Go),
+                    keyboardActions = KeyboardActions(onGo = { pc.ask(text) }), modifier = Modifier.fillMaxWidth())
+            }
+            Box(Modifier.size(42.dp).clip(CircleShape).background(if (listening) Palette.danger else Palette.primary).clickable {
+                if (ContextCompat.checkSelfPermission(context, Manifest.permission.RECORD_AUDIO) == PackageManager.PERMISSION_GRANTED && voice.available) {
+                    if (listening) voice.finish() else { listening = true; text = ""; voice.start() }
+                } else text = "Allow the microphone first (tap the remote's mic once)"
+            }, contentAlignment = Alignment.Center) { Icon(Icons.Rounded.Mic, "Say it", tint = Palette.onPrimary, modifier = Modifier.size(20.dp)) }
+        }
+        Row(Modifier.fillMaxWidth().padding(top = 14.dp, bottom = 20.dp), verticalAlignment = Alignment.CenterVertically) {
+            Box(Modifier.weight(1f)) { ShowOnTv(pc) }
+            PrimaryPill("Surprise ${if (pc.who == Catalog.TOGETHER) "us" else "me"}") { pc.surprise() }
+        }
+    }
+}
+
+@Composable
+private fun ResultsPicks(pc: PicksController) {
+    Column(Modifier.fillMaxSize().padding(horizontal = 20.dp, vertical = 8.dp)) {
+        PicksTop(pc, pc.summary) { pc.back() }
+        Column(Modifier.weight(1f).verticalScroll(rememberScrollState())) {
+            pc.picks.forEachIndexed { i, p -> PickCard(pc, p, i) }
+        }
+        Row(Modifier.fillMaxWidth().padding(top = 10.dp, bottom = 6.dp), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+            Box(Modifier.weight(1f).height(50.dp).card(RoundedCornerShape(25.dp)).clickable { pc.more() }, contentAlignment = Alignment.Center) {
+                Text("Show 3 more", color = Palette.text, fontSize = 14.sp, fontWeight = FontWeight.SemiBold)
+            }
+            Box(Modifier.weight(1f).height(50.dp).card(RoundedCornerShape(25.dp)).clickable { pc.back() }, contentAlignment = Alignment.Center) {
+                Text("Different mood", color = Palette.text, fontSize = 14.sp, fontWeight = FontWeight.SemiBold)
+            }
+        }
+        Text("Data from TMDB · ratings and availability may vary", color = Palette.faint, fontSize = 11.sp, modifier = Modifier.align(Alignment.CenterHorizontally))
+    }
+}
+
+@Composable
+private fun PickCard(pc: PicksController, p: Pick, i: Int) {
+    Row(Modifier.fillMaxWidth().padding(top = 12.dp).card(RoundedCornerShape(22.dp)).padding(12.dp)) {
+        Box(Modifier.width(76.dp).height(112.dp).clip(RoundedCornerShape(12.dp)).background(Color(android.graphics.Color.parseColor(pc.color(p.title.name))))) {
+            val url = pc.posterUrl(p.title)
+            if (url != null) AsyncImage(model = url, contentDescription = null, contentScale = ContentScale.Crop, modifier = Modifier.fillMaxSize())
+            else Text(p.title.name, color = Color.White, fontSize = 11.sp, lineHeight = 13.sp, fontWeight = FontWeight.Bold, maxLines = 4,
+                overflow = TextOverflow.Ellipsis, modifier = Modifier.align(Alignment.BottomStart).padding(6.dp))
+        }
+        Spacer(Modifier.width(12.dp))
+        Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(5.dp)) {
+            Text(p.title.name, color = Palette.text, fontSize = 16.sp, fontWeight = FontWeight.SemiBold, maxLines = 2, overflow = TextOverflow.Ellipsis)
+            Text(pc.meta(p.title), color = Palette.muted, fontSize = 12.sp)
+            Text(p.why, color = Palette.text, fontSize = 13.sp, lineHeight = 18.sp)
+            Row(horizontalArrangement = Arrangement.spacedBy(6.dp), modifier = Modifier.padding(top = 2.dp)) {
+                SmallPrimary("Play", Icons.Rounded.PlayArrow) { pc.play(i) }
+                Ghost("Not now") { pc.notNow(i) }
+                Ghost("Never", Icons.Rounded.ThumbDown) { pc.never(i) }
+            }
+        }
+    }
+}
+
+// ---- setup -------------------------------------------------------------------
+
+@OptIn(ExperimentalLayoutApi::class)
+@Composable
+private fun SetupPicks(pc: PicksController) {
+    val s = pc.store
+    val people = remember { mutableStateListOf<String>().apply { addAll(s.people) } }
+    val services = remember { mutableStateListOf<String>().apply { addAll(s.services) } }
+    val langs = remember { mutableStateListOf<String>().apply { addAll(s.languages) } }
+    var newPerson by remember { mutableStateOf("") }
+    var weekday by remember { mutableStateOf(s.weekdayBedtime) }
+    var weekend by remember { mutableStateOf(s.weekendBedtime) }
+    var tmdb by remember { mutableStateOf(s.tmdbKey) }
+    var groq by remember { mutableStateOf(s.groqKey) }
+    var leanBack by remember { mutableStateOf(s.leanBack) }
+    var error by remember { mutableStateOf("") }
+
+    Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(horizontal = 20.dp, vertical = 8.dp)) {
+        Box(Modifier.size(40.dp).clip(CircleShape).clickable { pc.close() }, contentAlignment = Alignment.Center) {
+            Icon(Icons.AutoMirrored.Rounded.ArrowBack, "Back", tint = Palette.text)
+        }
+        Text("Set up picks", color = Palette.text, fontSize = 26.sp, fontWeight = FontWeight.Bold)
+        Text("Change any time from the TV name menu.", color = Palette.muted, fontSize = 14.sp, modifier = Modifier.padding(top = 4.dp))
+
+        Label("Who uses this remote?")
+        FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+            for (p in people.toList()) Chip("$p  ✕", false) { people.remove(p) }
+        }
+        Row(Modifier.fillMaxWidth().padding(top = 8.dp).card(RoundedCornerShape(14.dp)).padding(horizontal = 14.dp, vertical = 12.dp), verticalAlignment = Alignment.CenterVertically) {
+            Box(Modifier.weight(1f)) {
+                if (newPerson.isEmpty()) Text("Add a person (e.g. a first name)", color = Palette.faint, fontSize = 15.sp)
+                BasicTextField(newPerson, { newPerson = it }, singleLine = true, textStyle = TextStyle(color = Palette.text, fontSize = 15.sp),
+                    cursorBrush = SolidColor(Palette.accent), keyboardOptions = KeyboardOptions(imeAction = ImeAction.Done),
+                    keyboardActions = KeyboardActions(onDone = { if (newPerson.isNotBlank()) { people += newPerson.trim(); newPerson = "" } }), modifier = Modifier.fillMaxWidth())
+            }
+            Text("Add", color = Palette.text, fontWeight = FontWeight.SemiBold, modifier = Modifier.clickable { if (newPerson.isNotBlank()) { people += newPerson.trim(); newPerson = "" } })
+        }
+
+        Label("Your services")
+        FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+            for (svc in Catalog.SERVICES) Chip(svc.name, svc.name in services) { if (svc.name in services) services.remove(svc.name) else services += svc.name }
+        }
+        Label("Languages you watch")
+        FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+            for ((label, code) in Catalog.LANGUAGES) Chip(label, code in langs) { if (code in langs) { if (langs.size > 1) langs.remove(code) } else langs += code }
+        }
+        Label("Usually in bed by")
+        BedtimeRow("Sun–Thu", weekday) { weekday = it }
+        BedtimeRow("Fri–Sat", weekend) { weekend = it }
+
+        Label("Lean-back mode")
+        Row(Modifier.fillMaxWidth().card(RoundedCornerShape(14.dp)).padding(horizontal = 14.dp, vertical = 10.dp), verticalAlignment = Alignment.CenterVertically) {
+            Column(Modifier.weight(1f)) {
+                Text("Choose on the TV too", color = Palette.text, fontSize = 15.sp)
+                Text("With Show on TV ticked, pick who, language and mood on the TV with the pointer. Off: only the picks go to the TV.",
+                    color = Palette.muted, fontSize = 12.sp)
+            }
+            Switch(leanBack, { leanBack = it }, colors = SwitchDefaults.colors(checkedTrackColor = Palette.primary, checkedThumbColor = Palette.onPrimary))
+        }
+
+        Label("Keys (stay on this phone)")
+        KeyField("TMDB key — free at themoviedb.org › Settings › API", tmdb) { tmdb = it }
+        KeyField("Groq key (optional, for AI picks) — free at console.groq.com", groq) { groq = it }
+        Text("Without a Groq key, picks use simple rules instead of AI.", color = Palette.faint, fontSize = 12.sp, modifier = Modifier.padding(top = 6.dp))
+
+        if (error.isNotEmpty()) Text(error, color = Palette.danger, fontSize = 14.sp, modifier = Modifier.padding(top = 14.dp))
+        Box(Modifier.padding(top = 16.dp, bottom = 24.dp)) {
+            PrimaryPill("Done", fill = true) {
+                if (newPerson.isNotBlank()) { people += newPerson.trim(); newPerson = "" }
+                error = when {
+                    services.isEmpty() -> "Choose at least one service"
+                    tmdb.isBlank() -> "A TMDB key is needed to find titles"
+                    else -> ""
+                }
+                if (error.isEmpty()) {
+                    s.people = people.toList(); s.services = services.toList(); s.languages = langs.toList()
+                    s.weekdayBedtime = weekday; s.weekendBedtime = weekend; s.tmdbKey = tmdb; s.groqKey = groq; s.leanBack = leanBack
+                    pc.finishSetup()
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun BedtimeRow(label: String, minutes: Int, onChange: (Int) -> Unit) {
+    Row(Modifier.fillMaxWidth().padding(bottom = 8.dp).card(RoundedCornerShape(14.dp)).padding(horizontal = 14.dp, vertical = 6.dp), verticalAlignment = Alignment.CenterVertically) {
+        Text(label, color = Palette.text, fontSize = 15.sp, modifier = Modifier.weight(1f))
+        Text("–", color = Palette.text, fontSize = 22.sp, modifier = Modifier.clip(CircleShape).clickable { onChange(Math.floorMod(minutes - 15, 1440)) }.padding(horizontal = 14.dp, vertical = 6.dp))
+        Text(clock(minutes), color = Palette.text, fontSize = 15.sp, fontWeight = FontWeight.SemiBold, modifier = Modifier.width(76.dp), textAlign = androidx.compose.ui.text.style.TextAlign.Center)
+        Text("+", color = Palette.text, fontSize = 22.sp, modifier = Modifier.clip(CircleShape).clickable { onChange(Math.floorMod(minutes + 15, 1440)) }.padding(horizontal = 14.dp, vertical = 6.dp))
+    }
+}
+
+private fun clock(min: Int): String {
+    val h = min / 60; val m = min % 60
+    return "%d:%02d %s".format(if (h % 12 == 0) 12 else h % 12, m, if (h < 12) "am" else "pm")
+}
+
+@Composable
+private fun KeyField(hint: String, value: String, onChange: (String) -> Unit) {
+    Box(Modifier.fillMaxWidth().padding(top = 8.dp).card(RoundedCornerShape(14.dp)).padding(14.dp)) {
+        if (value.isEmpty()) Text(hint, color = Palette.faint, fontSize = 13.sp)
+        BasicTextField(value, onChange, singleLine = true, textStyle = TextStyle(color = Palette.text, fontSize = 15.sp),
+            cursorBrush = SolidColor(Palette.accent), visualTransformation = PasswordVisualTransformation(), modifier = Modifier.fillMaxWidth())
+    }
+}
+
+// ---- small pieces ----------------------------------------------------------------
+
+@Composable
+private fun Label(text: String) = Text(text.uppercase(), color = Palette.faint, fontSize = 11.sp, fontWeight = FontWeight.SemiBold,
+    letterSpacing = 1.sp, modifier = Modifier.padding(top = 20.dp, bottom = 10.dp))
+
+@Composable
+private fun Chip(text: String, on: Boolean, onClick: () -> Unit) {
+    Text(text, color = if (on) Palette.onPrimary else Palette.text, fontSize = 14.sp, fontWeight = FontWeight.Medium,
+        modifier = Modifier.then(if (on) Modifier.clip(RoundedCornerShape(50)).background(Palette.primary) else Modifier.card(RoundedCornerShape(50)))
+            .clickable(onClick = onClick).padding(horizontal = 14.dp, vertical = 9.dp))
+}
+
+@Composable
+private fun SmallPrimary(text: String, icon: ImageVector, onClick: () -> Unit) {
+    Row(Modifier.height(34.dp).clip(RoundedCornerShape(17.dp)).background(Palette.primary).clickable(onClick = onClick).padding(horizontal = 12.dp),
+        verticalAlignment = Alignment.CenterVertically) {
+        Icon(icon, null, tint = Palette.onPrimary, modifier = Modifier.size(16.dp))
+        Spacer(Modifier.width(4.dp))
+        Text(text, color = Palette.onPrimary, fontSize = 13.sp, fontWeight = FontWeight.SemiBold)
+    }
+}
+
+@Composable
+private fun Ghost(text: String, icon: ImageVector? = null, onClick: () -> Unit) {
+    Row(Modifier.height(34.dp).clip(RoundedCornerShape(17.dp)).background(Palette.surface2).clickable(onClick = onClick).padding(horizontal = 10.dp),
+        verticalAlignment = Alignment.CenterVertically) {
+        if (icon != null) { Icon(icon, null, tint = Palette.muted, modifier = Modifier.size(14.dp)); Spacer(Modifier.width(4.dp)) }
+        Text(text, color = Palette.muted, fontSize = 12.sp, fontWeight = FontWeight.Medium)
+    }
+}
+
+@Composable
+private fun PrimaryPill(text: String, fill: Boolean = false, onClick: () -> Unit) {
+    Box(Modifier.then(if (fill) Modifier.fillMaxWidth() else Modifier).height(48.dp).clip(RoundedCornerShape(24.dp)).background(Palette.primary)
+        .clickable(onClick = onClick).padding(horizontal = 22.dp), contentAlignment = Alignment.Center) {
+        Text(text, color = Palette.onPrimary, fontSize = 15.sp, fontWeight = FontWeight.SemiBold)
+    }
+}

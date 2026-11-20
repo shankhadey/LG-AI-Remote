@@ -2,6 +2,7 @@ package com.home.tvremote
 
 import android.Manifest
 import android.content.pm.PackageManager
+import android.content.Intent
 import android.os.Bundle
 import android.view.KeyEvent
 import androidx.activity.ComponentActivity
@@ -29,6 +30,7 @@ class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         enableEdgeToEdge()
+        handleShortcut(intent)
         setContent {
             Palette.dark = isSystemInDarkTheme()
             val scheme = if (Palette.dark) darkColorScheme(primary = Palette.text, background = Palette.bg, surface = Palette.surface)
@@ -47,6 +49,13 @@ class MainActivity : ComponentActivity() {
         }
     }
 
+    /** The app-icon shortcut "What should we watch?" opens the picker directly. */
+    private fun handleShortcut(intent: Intent?) {
+        if (intent?.action == ACTION_PICKS && tv.screen == Screen.Remote) tv.picks.openPicker()
+    }
+
+    override fun onNewIntent(intent: Intent) { super.onNewIntent(intent); handleShortcut(intent) }
+
     override fun onResume() {
         super.onResume()
         if (tv.screen == Screen.Remote && !tv.connected) tv.refresh()
@@ -60,4 +69,6 @@ class MainActivity : ComponentActivity() {
         }
         return super.dispatchKeyEvent(event)
     }
+
+    companion object { const val ACTION_PICKS = "com.home.tvremote.PICKS" }
 }

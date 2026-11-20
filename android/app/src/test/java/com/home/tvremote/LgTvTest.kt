@@ -127,7 +127,7 @@ class LgTvTest {
         tv.subscribe("ssap://flaky") { got.add(it.optString("appId")) }
         assertEquals("netflix", got.poll(3, TimeUnit.SECONDS))
         assertEquals(2, requests.count { it.optString("uri") == "ssap://flaky" })
-        assertTrue(tv.history.any { it.contains("re-subscribed") })
+        assertTrue(tv.history.any { it.contains("re-subscribing") })
         tv.close()
     }
 

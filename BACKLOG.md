@@ -3,20 +3,24 @@
 Things we decided to remember for later.
 
 ## To test on the TV
+- **v0.5.0 "What should we watch?"** — first run: enter names, services, languages, bedtimes, TMDB key (and Groq
+  key for AI). Check: picks are on your services; hoichoi / ZEE5 coverage; "Not now" / "Never" swap a pick;
+  Play opens the right app + "Look for …" pop-up on the TV; Max / hoichoi / ZEE5 need opening once from the TV so
+  the app learns their IDs. Show on TV: lean-back chooser and clickable picks with the pointer + OK. Diagnostics
+  › Share includes the Picks report.
 - **v0.4.1: after waking the TV from the app, it should open Home instead of "No signal".** Setting under the
   TV name menu ("After turning on: open Home").
 - **Wake after a long time off** with Quick Start+ OFF (e.g. next morning). Worked right after switching off;
   some TVs drop Wi-Fi in deep standby. If it fails, turn Quick Start+ back on.
 
 ## Parked (low impact)
-- **Treat the TV's web browser like Home**, not as "watching" (taps should select there, not pause/play).
 - Diagnostics: also show attempts still in flight when Diagnostics is opened.
 
 ## Power / start-up
 - **Quick Start+:** OFF clears stuck apps on every off/on (the Netflix hang was fixed by a real restart) and
   app power-on still worked. Keep OFF if the long-off wake check passes.
 
-## AI: "what should we watch?" (designed, awaiting go-ahead to build)
+## AI: "what should we watch?" (built in v0.5.0, testing)
 - Decisions: mix of together/separate (profiles + Together); US; services Netflix, Prime Video, Disney+,
   Apple TV+, Max, Hulu, hoichoi, ZEE5; movies + series; "keep watching" first; names entered by the user in
   first-run setup (nothing household-specific built in).
@@ -45,6 +49,13 @@ Things we decided to remember for later.
 - Platform risk: LG's control protocol is unofficial and LG has already changed it once; plan for breakage.
 - Market: Samsung and iPhone versions.
 
+## Known limits of v0.5.0
+- Apps can't be opened at a specific title from outside; the app opens the service and shows "Look for: <title>".
+- The phone must stay nearby with the app open while the TV page is up (no background service for it yet).
+- Groq model name is fixed in settings storage (default llama-3.3-70b-versatile); if Groq retires it, picks fall
+  back to rules and Diagnostics shows the error. Add a model field if that happens.
+- Keys are stored in plain app storage on the phone (fine for personal use; a sold app would use our server).
+
 ## Later
 - **Samsung support.** Step 1: refactor into a per-brand TV driver with LG unchanged (all tests must pass, plus a
   few days of real use). Step 2: Samsung driver (pairing, keys, app launch with Samsung IDs, installed-app list,
@@ -53,6 +64,10 @@ Things we decided to remember for later.
 - **iPhone version** for the other household phone (original ask).
 
 ## Done
+- v0.5.0: "What should we watch?" — phone picker, TMDB + Groq (rules fallback), learning (Not now per time slot,
+  Never per person, plays, quick-backs), time/day context, languages, Show on TV with lean-back mode (setup
+  toggle), voice ("what should we watch?", "find us something funny"), app-icon shortcut, Diagnostics Picks report
+  with Share. The TV browser now counts as Home (taps select there).
 - Re-subscribe automatically when the TV ends a live update (v0.4.1).
 - Open Home after the app wakes the TV onto Live TV / "No signal" (v0.4.1, setting).
 - Turn-off timer and tap-to-pause tested on the TV; tap method reset to OK by the user.

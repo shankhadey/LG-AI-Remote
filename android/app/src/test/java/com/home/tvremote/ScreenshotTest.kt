@@ -114,6 +114,44 @@ class ScreenshotTest {
         try { val tv = remoteTv(); shot { RemoteScreen(tv) { true } } } finally { TimerEngine.state = null }
     }
 
+    private class NoTv : com.home.tvremote.picks.TvActions {
+        override fun openApp(appId: String, title: String) {}
+        override fun knownAppIds() = emptySet<String>()
+        override fun openOnTvBrowser(url: String) {}
+        override fun toastOnTv(message: String) {}
+        override fun goHome() {}
+        override val foreground: String? = null
+        override fun phoneIp() = null
+        override val tvIp: String? = null
+        override fun note(message: String, error: Boolean) {}
+    }
+
+    private fun picks(step: com.home.tvremote.picks.Step) = com.home.tvremote.picks.PicksController(
+        com.home.tvremote.picks.PicksStore(FakePrefs()).apply {
+            people = listOf("Alex", "Sam"); services = listOf("Netflix", "Prime Video", "Hulu", "Apple TV+", "hoichoi", "ZEE5")
+            languages = listOf("en", "bn", "hi"); tmdbKey = "k"
+        },
+        NoTv(), kotlinx.coroutines.CoroutineScope(kotlinx.coroutines.test.StandardTestDispatcher()),
+        clock = { java.util.Calendar.getInstance().apply { set(2026, java.util.Calendar.NOVEMBER, 17, 21, 30) } },
+    ).apply {
+        openPicker()
+        if (step == com.home.tvremote.picks.Step.Results) {
+            summary = "Light & funny · Together"
+            picks += listOf(
+                com.home.tvremote.picks.Pick(com.home.tvremote.picks.Title(com.home.tvremote.picks.Kind.Tv, 1, "Ted Lasso", language = "en", rating = 8.4, runtimeMin = 30, service = "Apple TV+"), "Warm and very funny. Fans of Schitt's Creek also loved it."),
+                com.home.tvremote.picks.Pick(com.home.tvremote.picks.Title(com.home.tvremote.picks.Kind.Tv, 2, "Panchayat", language = "hi", rating = 8.9, runtimeMin = 35, service = "Prime Video"), "Gentle village comedy — short episodes, very easy to watch."),
+                com.home.tvremote.picks.Pick(com.home.tvremote.picks.Title(com.home.tvremote.picks.Kind.Movie, 3, "The Grand Budapest Hotel", language = "en", rating = 8.0, runtimeMin = 100, service = "Hulu"), "Playful and quick, if you have a bit longer."),
+            )
+        }
+        this.step = step
+    }
+
+    @Test fun picksChooseDark() { Palette.dark = true; val pc = picks(com.home.tvremote.picks.Step.Choose); shot { com.home.tvremote.ui.PicksScreen(pc) } }
+    @Test fun picksChooseLight() { Palette.dark = false; val pc = picks(com.home.tvremote.picks.Step.Choose); shot { com.home.tvremote.ui.PicksScreen(pc) } }
+    @Test fun picksResultsDark() { Palette.dark = true; val pc = picks(com.home.tvremote.picks.Step.Results); shot { com.home.tvremote.ui.PicksScreen(pc) } }
+    @Test fun picksResultsLight() { Palette.dark = false; val pc = picks(com.home.tvremote.picks.Step.Results); shot { com.home.tvremote.ui.PicksScreen(pc) } }
+    @Test fun picksSetupDark() { Palette.dark = true; val pc = picks(com.home.tvremote.picks.Step.Setup); shot { com.home.tvremote.ui.PicksScreen(pc) } }
+
     @Test fun checkingDark() { Palette.dark = true; val tv = remoteTv().apply { connected = false; checking = true }; shot { RemoteScreen(tv) { true } } }
     @Test fun listeningDark() { Palette.dark = true; shot { ListeningPanel("Search YouTube for easy weeknight pasta recipes", 0.7f, {}, {}) } }
     @Test fun listeningLight() { Palette.dark = false; shot { ListeningPanel("Search YouTube for easy weeknight pasta recipes", 0.7f, {}, {}) } }

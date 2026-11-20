@@ -221,8 +221,8 @@ class LgTv(
         scope.launch {
             delay(resubscribeDelayMs * attempt)
             if (ws == null) return@launch // disconnected: the next connect subscribes afresh
+            log("SUB re-subscribing ${uri.removePrefix("ssap://")} (try $attempt)", System.currentTimeMillis())
             runCatching { subscribe(uri, onEvent) }
-                .onSuccess { log("SUB re-subscribed ${uri.removePrefix("ssap://")} (try $attempt)", System.currentTimeMillis()) }
                 .onFailure { log("SUB re-subscribe failed: ${it.message}", System.currentTimeMillis()) }
         }
     }
