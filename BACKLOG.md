@@ -16,9 +16,26 @@ Things we decided to remember for later.
 - **Quick Start+:** OFF clears stuck apps on every off/on (the Netflix hang was fixed by a real restart) and
   app power-on still worked. Keep OFF if the long-off wake check passes.
 
-## AI: "what should we watch?" (design stage, next big feature)
-- Open questions to the user: who watches, which services, region (US?), movies/series, "continue watching"
-  priority, OK with TMDB + Anthropic API keys. Then draw the screens before building.
+## AI: "what should we watch?" (designed, awaiting go-ahead to build)
+- Decisions: mix of together/separate (profiles + Together); US; services Netflix, Prime Video, Disney+,
+  Apple TV+, Max, Hulu, hoichoi, ZEE5; movies + series; "keep watching" first; names entered by the user in
+  first-run setup (nothing household-specific built in).
+- Data: TMDB (catalog + US where-to-watch). Model: Groq free tier, key entered in settings; provider must be
+  swappable (Gemini / paid / on-device / our own server later).
+- The model only chooses from TMDB candidate IDs (ranking/classification + a one-line reason), so it can't
+  invent titles or availability. hoichoi / ZEE5 coverage in TMDB US may be thin: check when building.
+- Screens: entry card on the remote · Tonight (who, time left, keep watching, moods, say it, Surprise us) ·
+  3 picks (service, length, ends at, rating, why, Play on TV / Not tonight, hold = Not for us) · first-run setup.
+
+## Before selling (if it goes to the stores)
+- TMDB commercial agreement; JustWatch agreement for where-to-watch data used commercially.
+- Our own small server holding a paid model key (no keys inside a sold app; free tiers aren't for products).
+- Real release signing key (switch before handing the app to others; everyone reinstalls once).
+- Play Store: privacy policy, data-safety form, mic + foreground-service (timer) justifications, local-network
+  permission on newer Android.
+- No LG / Netflix / other trademarks in the app name, icon or listing; keep letter tiles, not real logos.
+- Platform risk: LG's control protocol is unofficial and LG has already changed it once; plan for breakage.
+- Market: Samsung and iPhone versions.
 
 ## Later
 - **Samsung support.** Step 1: refactor into a per-brand TV driver with LG unchanged (all tests must pass, plus a
