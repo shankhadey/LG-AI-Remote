@@ -24,8 +24,16 @@ Things we decided to remember for later.
   swappable (Gemini / paid / on-device / our own server later).
 - The model only chooses from TMDB candidate IDs (ranking/classification + a one-line reason), so it can't
   invent titles or availability. hoichoi / ZEE5 coverage in TMDB US may be thin: check when building.
-- Screens: entry card on the remote · Tonight (who, time left, keep watching, moods, say it, Surprise us) ·
-  3 picks (service, length, ends at, rating, why, Play on TV / Not tonight, hold = Not for us) · first-run setup.
+- Screens (v2 design): entry card · Tonight (day-aware time left, who, language Any/English/Bengali/Hindi,
+  keep watching, moods ordered by time/day, say it, Surprise us, "Show on TV" checkbox) · 3 picks (service,
+  language, length, ends at, rating, why incl. "fans of X also loved it" from TMDB; Play / Not now / Never) ·
+  setup (names, services, languages, Sun–Thu and Fri–Sat bedtimes) · TV view of the picks via the TV browser.
+- Not now = skip this session (logged with time/day). Never = never for whoever is watching (Together is its
+  own profile). No "shows you loved" step in setup; maybe an optional "tell me a few shows you loved" card later.
+- Context: learn per time slot (who usually watches, which moods/languages), store picks with time/day.
+- Measure: seconds from opening to Play; quick-back if the app is left within 30 min (<15 strong, 15–30 weak),
+  also used as a soft negative signal. Picks summary + last 20 sessions in Diagnostics with Copy / Share.
+  Limitation: can't see title changes inside an app, only which app is in front.
 
 ## Before selling (if it goes to the stores)
 - TMDB commercial agreement; JustWatch agreement for where-to-watch data used commercially.
