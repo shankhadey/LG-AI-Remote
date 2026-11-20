@@ -8,7 +8,7 @@ data class PickSet(val picks: List<Pick>, val pool: List<Title>, val fans: Map<S
 class Recommender(
     private val store: PicksStore,
     private val tmdb: Tmdb,
-    private val groq: Groq?,
+    private val ai: AiPicker?,
 ) {
     private val services get() = Catalog.SERVICES.filter { it.name in store.services }
 
@@ -65,23 +65,23 @@ class Recommender(
     }
 
     private suspend fun chooseThree(top: List<Title>, who: String, ask: Ask, context: String, fans: Map<String, String>): List<Pick> {
-        val ai = groq
-        if (ai != null) {
+        if (ai != null && !ai.isEmpty) {
             val taste = buildString {
                 val liked = store.liked(who).takeLast(8).map { it.second }
                 append(if (liked.isEmpty()) "no history yet" else "enjoyed ${liked.joinToString()}")
                 if (ask.likeTitles.isNotEmpty()) append("; asked for something like ${ask.likeTitles.joinToString()}")
             }
             val annotated = top.map { t -> fans[t.key]?.let { t.copy(overview = "(fans of $it also liked this) " + t.overview) } ?: t }
-            val got = runCatching { ai.choose(context, taste, annotated) }
-                .onFailure { lastAiError = it.message }.getOrNull()
+            val got = ai.choose(context, taste, annotated)
+            lastEngine = if (got.isNullOrEmpty()) "Rules" else ai.lastEngine
+            lastAiError = ai.lastError
             if (!got.isNullOrEmpty()) {
                 val byKey = top.associateBy { it.key }
                 val picks = got.mapNotNull { (k, why) -> byKey[k]?.let { Pick(it, why.ifBlank { ruleReason(it, fans) }) } }
                 if (picks.size == 3) return picks
                 return (picks + ruleThree(top.filter { t -> picks.none { it.title.key == t.key } }, fans)).take(3)
             }
-        }
+        } else lastEngine = "Rules"
         return ruleThree(top, fans)
     }
 
@@ -125,6 +125,8 @@ class Recommender(
     companion object {
         /** Last AI failure (shown in Diagnostics); picks fall back to rules when the AI fails. */
         @Volatile var lastAiError: String? = null
+        /** Which engine made the last set of picks: "Groq", "On-phone" or "Rules". */
+        @Volatile var lastEngine: String? = null
 
         private val GENRES = mapOf(35 to "Comedy", 18 to "Drama", 80 to "Crime", 9648 to "Mystery", 53 to "Thriller",
             878 to "Sci-fi", 10765 to "Sci-fi & fantasy", 14 to "Fantasy", 10749 to "Romance", 10751 to "Family",

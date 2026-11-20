@@ -42,6 +42,7 @@ Things we decided to remember for later.
 ## Before selling (if it goes to the stores)
 - TMDB commercial agreement; JustWatch agreement for where-to-watch data used commercially.
 - Our own small server holding a paid model key (no keys inside a sold app; free tiers aren't for products).
+  Option: on-phone AI first on supported phones (no server cost, private), server only for other phones.
 - Real release signing key (switch before handing the app to others; everyone reinstalls once).
 - Play Store: privacy policy, data-safety form, mic + foreground-service (timer) justifications, local-network
   permission on newer Android.
@@ -49,7 +50,9 @@ Things we decided to remember for later.
 - Platform risk: LG's control protocol is unofficial and LG has already changed it once; plan for breakage.
 - Market: Samsung and iPhone versions.
 
-## Known limits of v0.5.0
+## Known limits of v0.5.x
+- On-phone AI uses a beta Google API; Android downloads the model in the background the first time (the first
+  evening may use Groq/rules). It's smaller than Groq's model: reasons may be plainer.
 - Apps can't be opened at a specific title from outside; the app opens the service and shows "Look for: <title>".
 - The phone must stay nearby with the app open while the TV page is up (no background service for it yet).
 - Groq model name is fixed in settings storage (default llama-3.3-70b-versatile); if Groq retires it, picks fall
@@ -64,6 +67,10 @@ Things we decided to remember for later.
 - **iPhone version** for the other household phone (original ask).
 
 ## Done
+- v0.5.1: on-phone AI (Gemini Nano via Android's on-device AI, ML Kit GenAI Prompt API beta4) as a fallback:
+  Groq → on-phone → rules, or on-phone first with "Prefer on-phone AI". Shared prompts + "only candidate IDs"
+  check for every engine. Diagnostics shows the AI order, on-phone status and which engine made each set of picks.
+  Toolchain: Kotlin 2.0.21 → 2.3.21 (needed by the library).
 - v0.5.0: "What should we watch?" — phone picker, TMDB + Groq (rules fallback), learning (Not now per time slot,
   Never per person, plays, quick-backs), time/day context, languages, Show on TV with lean-back mode (setup
   toggle), voice ("what should we watch?", "find us something funny"), app-icon shortcut, Diagnostics Picks report

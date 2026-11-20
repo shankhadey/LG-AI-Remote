@@ -37,10 +37,20 @@ class PicksController(
     private val tv: TvActions,
     private val scope: CoroutineScope,
     private val clock: () -> Calendar = { Calendar.getInstance() },
-    private val makeRecommender: (PicksStore) -> Recommender = { s ->
-        Recommender(s, Tmdb(s.tmdbKey), s.groqKey.takeIf { it.isNotBlank() }?.let { Groq(it, s.groqModel) })
-    },
+    /** On-phone model engine; injectable so tests don't need Android's AI service. */
+    private val onDevice: AiEngine? = OnDeviceAi,
+    private val makeRecommender: ((PicksStore, AiPicker) -> Recommender)? = null,
 ) {
+    /** Engines in the user's order: Groq and/or the on-phone model. Rules are the final fallback in the recommender. */
+    fun aiChain(s: PicksStore = store): AiPicker {
+        val groq = s.groqKey.takeIf { it.isNotBlank() }?.let { Groq(it, s.groqModel) }
+        val phone = onDevice?.takeIf { s.useOnDevice }
+        return AiPicker(listOfNotNull(*(if (s.preferOnDevice) arrayOf(phone, groq) else arrayOf(groq, phone))))
+    }
+
+    private fun recommender(): Recommender =
+        makeRecommender?.invoke(store, aiChain()) ?: Recommender(store, Tmdb(store.tmdbKey), aiChain())
+
     var open by mutableStateOf(false)
     var step by mutableStateOf(Step.Choose)
     var firstRun by mutableStateOf(false)
@@ -69,9 +79,18 @@ class PicksController(
     fun profiles() = store.profiles()
 
     // ---- open / close -----------------------------------------------------
+    /** Status line for the on-phone model (refreshed when the picker or setup opens). */
+    var onDeviceStatus by mutableStateOf("")
+
+    fun refreshOnDevice() {
+        if (onDevice !== OnDeviceAi || !store.useOnDevice) { onDeviceStatus = if (store.useOnDevice) "" else "Off"; return }
+        scope.launch { OnDeviceAi.refresh(); onDeviceStatus = OnDeviceAi.describe() }
+    }
+
     fun openPicker() {
         settleOldPlay()
         open = true
+        refreshOnDevice()
         if (!store.isSetUp) { firstRun = true; step = Step.Setup; return }
         firstRun = false
         val profiles = store.profiles()
@@ -112,9 +131,7 @@ class PicksController(
         job?.cancel()
         step = Step.Loading; summary = "“$t”"; bump()
         job = scope.launch {
-            val parsed = if (s.groqKey.isNotBlank())
-                runCatching { Groq(s.groqKey, s.groqModel).parseRequest(t, Catalog.LANGUAGES.filterValues { it in s.languages }) }.getOrNull()
-            else null
+            val parsed = aiChain(s).parseRequest(t, Catalog.LANGUAGES.filterValues { it in s.languages })
             run(parsed ?: RulesAsk.parse(t), "voice: $t", "“$t”")
         }
     }
@@ -130,9 +147,9 @@ class PicksController(
         job?.cancel()
         job = scope.launch {
             try {
-                val r = makeRecommender(store).pick(who, slot, ask, ask.language ?: language, minutesLeft, contextLine + " · " + summary)
+                val r = recommender().pick(who, slot, ask, ask.language ?: language, minutesLeft, contextLine + " · " + summary)
                 set = r; picks.clear(); picks.addAll(r.picks); shown += r.picks.map { it.title.key }
-                sess.shown += r.picks.size; store.saveSession(sess)
+                sess.shown += r.picks.size; sess.engine = Recommender.lastEngine ?: ""; store.saveSession(sess)
                 step = Step.Results
             } catch (e: Exception) {
                 message = (e as? PicksException)?.message ?: "Couldn't get picks (${e.message}). Check your internet and keys."
@@ -147,7 +164,7 @@ class PicksController(
         step = Step.Loading; bump()
         job = scope.launch {
             try {
-                val r = makeRecommender(store).more(prev, shown, who, contextLine, minutesLeft)
+                val r = recommender().more(prev, shown, who, contextLine, minutesLeft)
                 set = r.copy(pool = prev.pool); picks.clear(); picks.addAll(r.picks); shown += r.picks.map { it.title.key }
                 session?.let { it.shown += r.picks.size; store.saveSession(it) }
                 step = Step.Results
@@ -169,7 +186,7 @@ class PicksController(
         session?.let { store.saveSession(it) }
         val prev = set ?: return
         scope.launch {
-            val r = runCatching { makeRecommender(store).replacement(prev, shown, minutesLeft) }.getOrNull()
+            val r = runCatching { recommender().replacement(prev, shown, minutesLeft) }.getOrNull()
             val idx = picks.indexOfFirst { it.title.key == p.title.key }
             if (idx < 0) return@launch
             if (r != null) { picks[idx] = r; shown += r.title.key; session?.let { it.shown++ } } else picks.removeAt(idx)
@@ -317,10 +334,14 @@ class PicksController(
             appendLine("Quick-backs: <15 min ${strong * 100 / played.size}% · 15–30 min ${weak * 100 / played.size}%")
         }
         Recommender.lastAiError?.let { appendLine("Last AI error (fell back to rules): $it") }
-        appendLine("Settings: ${store.people.size} people · ${store.services.size} services · languages ${store.languages.joinToString()} · lean-back ${if (store.leanBack) "on" else "off"} · AI ${if (store.groqKey.isNotBlank()) store.groqModel else "off (rules)"}")
+        val order = listOfNotNull(
+            if (store.preferOnDevice && store.useOnDevice) "On-phone" else null, if (store.groqKey.isNotBlank()) "Groq (${store.groqModel})" else null,
+            if (!store.preferOnDevice && store.useOnDevice) "On-phone" else null, "Rules")
+        appendLine("Settings: ${store.people.size} people · ${store.services.size} services · languages ${store.languages.joinToString()} · lean-back ${if (store.leanBack) "on" else "off"}")
+        appendLine("AI order: ${order.joinToString(" → ")} · on-phone: ${if (onDevice == OnDeviceAi) OnDeviceAi.describe() else "n/a"} · last picks by ${Recommender.lastEngine ?: "—"}")
         val fmt = java.text.SimpleDateFormat("EEE d MMM h:mm a", java.util.Locale.US)
         for (s in all.takeLast(20).reversed()) {
-            append("${fmt.format(java.util.Date(s.openedAt))} · ${s.who} · ${s.slot} · ${s.how} · ${s.language} · ${s.shown} shown")
+            append("${fmt.format(java.util.Date(s.openedAt))} · ${s.who} · ${s.slot} · ${s.how} · ${s.language} · ${s.shown} shown" + if (s.engine.isNotEmpty()) " by ${s.engine}" else "")
             if (s.notNow > 0) append(" · ${s.notNow} not now"); if (s.never > 0) append(" · ${s.never} never")
             if (s.playedAt != null) append(" → ${s.playedName} (${s.service}) after ${s.secondsToPlay} s")
             when (s.outcome) {

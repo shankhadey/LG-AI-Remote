@@ -268,6 +268,9 @@ private fun SetupPicks(pc: PicksController) {
     var tmdb by remember { mutableStateOf(s.tmdbKey) }
     var groq by remember { mutableStateOf(s.groqKey) }
     var leanBack by remember { mutableStateOf(s.leanBack) }
+    var useOnDevice by remember { mutableStateOf(s.useOnDevice) }
+    var preferOnDevice by remember { mutableStateOf(s.preferOnDevice) }
+    androidx.compose.runtime.LaunchedEffect(Unit) { pc.refreshOnDevice() }
     var error by remember { mutableStateOf("") }
 
     Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(horizontal = 20.dp, vertical = 8.dp)) {
@@ -316,7 +319,12 @@ private fun SetupPicks(pc: PicksController) {
         Label("Keys (stay on this phone)")
         KeyField("TMDB key — free at themoviedb.org › Settings › API", tmdb) { tmdb = it }
         KeyField("Groq key (optional, for AI picks) — free at console.groq.com", groq) { groq = it }
-        Text("Without a Groq key, picks use simple rules instead of AI.", color = Palette.faint, fontSize = 12.sp, modifier = Modifier.padding(top = 6.dp))
+        Label("On-phone AI")
+        SwitchRow("Use this phone's own AI", "Free, offline, private. ${pc.onDeviceStatus.ifEmpty { "Checking…" }}", useOnDevice) { useOnDevice = it }
+        if (useOnDevice) SwitchRow("Prefer on-phone AI", "Try it before Groq: nothing leaves the phone, a little less clever.", preferOnDevice) { preferOnDevice = it }
+        Text("Order: ${listOfNotNull(if (useOnDevice && preferOnDevice) "On-phone" else null, if (groq.isNotBlank()) "Groq" else null,
+            if (useOnDevice && !preferOnDevice) "On-phone" else null, "simple rules").joinToString(" → ")}",
+            color = Palette.faint, fontSize = 12.sp, modifier = Modifier.padding(top = 6.dp))
 
         if (error.isNotEmpty()) Text(error, color = Palette.danger, fontSize = 14.sp, modifier = Modifier.padding(top = 14.dp))
         Box(Modifier.padding(top = 16.dp, bottom = 24.dp)) {
@@ -330,10 +338,22 @@ private fun SetupPicks(pc: PicksController) {
                 if (error.isEmpty()) {
                     s.people = people.toList(); s.services = services.toList(); s.languages = langs.toList()
                     s.weekdayBedtime = weekday; s.weekendBedtime = weekend; s.tmdbKey = tmdb; s.groqKey = groq; s.leanBack = leanBack
+                    s.useOnDevice = useOnDevice; s.preferOnDevice = preferOnDevice
                     pc.finishSetup()
                 }
             }
         }
+    }
+}
+
+@Composable
+private fun SwitchRow(title: String, sub: String, on: Boolean, onChange: (Boolean) -> Unit) {
+    Row(Modifier.fillMaxWidth().padding(bottom = 8.dp).card(RoundedCornerShape(14.dp)).padding(horizontal = 14.dp, vertical = 10.dp), verticalAlignment = Alignment.CenterVertically) {
+        Column(Modifier.weight(1f)) {
+            Text(title, color = Palette.text, fontSize = 15.sp)
+            Text(sub, color = Palette.muted, fontSize = 12.sp)
+        }
+        Switch(on, onChange, colors = SwitchDefaults.colors(checkedTrackColor = Palette.primary, checkedThumbColor = Palette.onPrimary))
     }
 }
 

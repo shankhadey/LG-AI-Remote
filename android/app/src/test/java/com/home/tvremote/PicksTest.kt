@@ -1,6 +1,9 @@
 package com.home.tvremote
 
+import com.home.tvremote.picks.AiEngine
+import com.home.tvremote.picks.AiPicker
 import com.home.tvremote.picks.Ask
+import com.home.tvremote.picks.extractJson
 import com.home.tvremote.picks.Catalog
 import com.home.tvremote.picks.Groq
 import com.home.tvremote.picks.Kind
@@ -142,7 +145,7 @@ class PicksTest {
         tmdbAndGroq("""{"picks":[{"id":"tv:999","why":"invented"},{"id":"tv:6","why":"Very funny."},{"id":"movie:101","why":"Light film."},{"id":"tv:5","why":"Easy watch."}]}""")
         val s = store()
         s.addNever("Together", "tv:4")
-        val r = Recommender(s, Tmdb("k", server.url("/3").toString().trimEnd('/')), Groq("g", "m", server.url("/openai/v1").toString().trimEnd('/')))
+        val r = Recommender(s, Tmdb("k", server.url("/3").toString().trimEnd('/')), AiPicker(listOf(Groq("g", "m", server.url("/openai/v1").toString().trimEnd('/')))))
             .pick("Together", "weekday-late", Ask(Mood.Light), null, 90, "Tuesday night")
         assertEquals(listOf("tv:6", "movie:101", "tv:5"), r.picks.map { it.title.key })   // "tv:999" (not a candidate) dropped
         assertTrue(r.pool.none { it.key == "tv:4" })                                       // Never excluded
@@ -155,7 +158,7 @@ class PicksTest {
         tmdbAndGroq(null, groqStatus = 500)
         val s = store()
         s.addLiked("Together", "tv:1", "Schitt's Creek")      // recommendations of tv:1 include tv:3 → "Fans of…"
-        val r = Recommender(s, Tmdb("k", server.url("/3").toString().trimEnd('/')), Groq("g", "m", server.url("/openai/v1").toString().trimEnd('/')))
+        val r = Recommender(s, Tmdb("k", server.url("/3").toString().trimEnd('/')), AiPicker(listOf(Groq("g", "m", server.url("/openai/v1").toString().trimEnd('/')))))
             .pick("Together", "weekday-late", Ask(Mood.Light), null, 90, "Tuesday night")
         assertEquals(3, r.picks.size)
         assertTrue(r.picks.any { it.title.kind == Kind.Tv } && r.picks.any { it.title.kind == Kind.Movie })
@@ -173,6 +176,34 @@ class PicksTest {
 
     private fun MockWebServer.takeRequestsPaths(): List<String> = (0 until requestCount).mapNotNull { takeRequest().path }
 
+    // ---------------- AI fallback chain ----------------
+    private class FakeEngine(override val name: String, val reply: String?) : AiEngine {
+        var calls = 0
+        override suspend fun json(system: String, user: String): JSONObject { calls++; return extractJson(reply ?: throw IllegalStateException("$name down")) }
+    }
+
+    @Test fun firstEngineDownSecondAnswers() = runBlocking {
+        val cands = listOf(Title(Kind.Tv, 1, "A"), Title(Kind.Tv, 2, "B"), Title(Kind.Movie, 3, "C"))
+        val groq = FakeEngine("Groq", null)
+        // Small on-phone models often wrap JSON in text / code fences.
+        val phone = FakeEngine("On-phone", "Sure!\n```json\n{\"picks\":[{\"id\":\"tv:2\",\"why\":\"Short and sweet.\"},{\"id\":\"x:9\",\"why\":\"bad\"}]}\n```")
+        val ai = AiPicker(listOf(groq, phone))
+        assertEquals(listOf("tv:2" to "Short and sweet."), ai.choose("now", "none", cands))
+        assertEquals("On-phone", ai.lastEngine)
+        assertTrue(ai.lastError!!.startsWith("Groq"))
+        assertNull(AiPicker(listOf(FakeEngine("Groq", null), FakeEngine("On-phone", """{"picks":[{"id":"x:1","why":"invented"}]}"""))).choose("now", "none", cands))
+    }
+
+    @Test fun chainOrderFollowsSettings() {
+        val phone = FakeEngine("On-phone", "{}")
+        val s = store().apply { groqKey = "g" }
+        val pc = PicksController(s, FakeTv(), CoroutineScope(StandardTestDispatcher()), onDevice = phone)
+        val order = { pc.aiChain().let { c -> c.javaClass.getDeclaredField("engines").apply { isAccessible = true }.get(c) as List<*> }.map { (it as AiEngine).name } }
+        assertEquals(listOf("Groq", "On-phone"), order())
+        s.preferOnDevice = true; assertEquals(listOf("On-phone", "Groq"), order())
+        s.useOnDevice = false; assertEquals(listOf("Groq"), order())
+    }
+
     // ---------------- quick-backs ----------------
     private class FakeTv : TvActions {
         val opened = mutableListOf<String>()
@@ -188,7 +219,7 @@ class PicksTest {
     }
 
     private fun controller(tv: FakeTv = FakeTv()) =
-        PicksController(store(), tv, CoroutineScope(StandardTestDispatcher()), clock = { at(Calendar.TUESDAY, 21, 30) })
+        PicksController(store(), tv, CoroutineScope(StandardTestDispatcher()), clock = { at(Calendar.TUESDAY, 21, 30) }, onDevice = null)
 
     @Test fun quickBackIsRecordedAndLongWatchIsLiked() {
         val tv = FakeTv()

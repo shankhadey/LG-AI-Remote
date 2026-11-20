@@ -133,6 +133,7 @@ class ScreenshotTest {
         },
         NoTv(), kotlinx.coroutines.CoroutineScope(kotlinx.coroutines.test.StandardTestDispatcher()),
         clock = { java.util.Calendar.getInstance().apply { set(2026, java.util.Calendar.NOVEMBER, 17, 21, 30) } },
+        onDevice = null,
     ).apply {
         openPicker()
         if (step == com.home.tvremote.picks.Step.Results) {

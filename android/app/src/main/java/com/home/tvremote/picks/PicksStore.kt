@@ -22,13 +22,14 @@ data class Session(
     /** Minutes until the user left the app, if within 30 min (a "quick-back"); null = stayed or unknown. */
     var leftAfterMin: Int? = null,
     var outcome: String = "open",  // open · played · watched · quick-back · abandoned
+    var engine: String = "",       // Groq · On-phone · Rules
 ) {
     val secondsToPlay: Long? get() = playedAt?.let { (it - openedAt) / 1000 }
 
     fun toJson(): JSONObject = JSONObject().put("openedAt", openedAt).put("who", who).put("slot", slot).put("how", how)
         .put("language", language).put("shown", shown).put("notNow", notNow).put("never", never)
         .put("playedKey", playedKey).put("playedName", playedName).put("service", service).put("appId", appId)
-        .put("playedAt", playedAt).put("leftAfterMin", leftAfterMin).put("outcome", outcome)
+        .put("playedAt", playedAt).put("leftAfterMin", leftAfterMin).put("outcome", outcome).put("engine", engine)
 
     companion object {
         fun from(j: JSONObject) = Session(
@@ -41,6 +42,7 @@ data class Session(
             playedAt = if (j.isNull("playedAt") || !j.has("playedAt")) null else j.getLong("playedAt"),
             leftAfterMin = if (j.isNull("leftAfterMin") || !j.has("leftAfterMin")) null else j.getInt("leftAfterMin"),
             outcome = j.optString("outcome", "open"),
+            engine = j.optString("engine"),
         )
     }
 }
@@ -81,6 +83,14 @@ class PicksStore(private val prefs: SharedPreferences) {
     var leanBack: Boolean
         get() = prefs.getBoolean("leanBack", true)
         set(v) = prefs.edit().putBoolean("leanBack", v).apply()
+    /** Use the phone's own AI model when available (as a fallback, or first if [preferOnDevice]). */
+    var useOnDevice: Boolean
+        get() = prefs.getBoolean("useOnDevice", true)
+        set(v) = prefs.edit().putBoolean("useOnDevice", v).apply()
+    /** Try the on-phone model before Groq: private and offline, a bit less clever. */
+    var preferOnDevice: Boolean
+        get() = prefs.getBoolean("preferOnDevice", false)
+        set(v) = prefs.edit().putBoolean("preferOnDevice", v).apply()
     var showOnTv: Boolean
         get() = prefs.getBoolean("showOnTv", false)
         set(v) = prefs.edit().putBoolean("showOnTv", v).apply()
