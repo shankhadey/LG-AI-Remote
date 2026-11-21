@@ -19,7 +19,10 @@ Measure it: time from opening to Play, quick-backs, "Not now" count per session.
 1. ~~Only series~~ v0.7.0: balanced series/films for the AI, ≥1 film guaranteed, too-long films swapped for films.
 2. 5 picks (decided) — design first.
 3. ~~All old~~ v0.7.0: recent titles fetched and boosted; "New" mood (last 12 months).
-4. Play opens the app, not the title — next: test deep links on the TV, Netflix first.
+4. Play opens the app, not the title — v0.7.1: Netflix opens the title when Wikidata maps the TMDB ID to a Netflix
+   ID (P4947/P4983 → P1874). Three LG launch formats; menu › "Test opening a show" picks the one this TV accepts.
+   Then: Disney+, Prime, Hulu, Max (Wikidata has IDs for some; launch formats unknown — test the same way).
+5. "Shows you loved" card (optional, per person) — after 5 picks.
 - Smaller APK: turn on R8 shrinking before sharing the app (11 MB on 18 Nov → 20 MB now; +3 MB is on-phone AI).
 
 ## Parked (low impact)

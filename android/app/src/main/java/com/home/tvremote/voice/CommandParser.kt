@@ -1,6 +1,6 @@
 package com.home.tvremote.voice
 
-data class TvApp(val id: String, val title: String, val icon: String? = null)
+data class TvApp(val id: String, val title: String, val icon: String? = null, val launchExtras: org.json.JSONObject? = null)
 
 sealed interface Command {
     data class Power(val on: Boolean) : Command

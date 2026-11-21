@@ -210,6 +210,52 @@ class PicksTest {
         assertEquals(Mood.Light, a.mood); assertTrue(a.newOnly)
     }
 
+    @Test fun wikidataFindsTheNetflixIdForATmdbTitle() = runBlocking {
+        server.dispatcher = object : Dispatcher() {
+            override fun dispatch(r: RecordedRequest): MockResponse {
+                val q = r.requestUrl?.queryParameter("query").orEmpty()
+                val hit = "wdt:P4983 \"66732\"" in q && "wdt:P1874" in q
+                val body = JSONObject().put("results", JSONObject().put("bindings", org.json.JSONArray().apply {
+                    if (hit) put(JSONObject().put("nf", JSONObject().put("value", "80057281")))
+                }))
+                return MockResponse().setBody(body.toString())
+            }
+        }
+        server.start()
+        val w = com.home.tvremote.picks.Wikidata(server.url("/sparql").toString())
+        assertEquals("80057281", w.netflixId("tv:66732"))
+        assertNull(w.netflixId("movie:1"))
+        assertNull(w.netflixId("bad"))
+    }
+
+    @Test fun playOnNetflixOpensTheTitleWhenItsIdIsKnown() {
+        val opened = mutableListOf<String>()
+        val tv = object : TvActions by FakeTv() {
+            override fun openApp(appId: String, title: String) { opened += "app $appId" }
+            override fun openTitle(appId: String, title: String, extras: JSONObject) { opened += "title $appId $extras" }
+        }
+        val d = StandardTestDispatcher()
+        val pc = PicksController(store(), tv, CoroutineScope(d), clock = { at(Calendar.TUESDAY, 21, 30) }, onDevice = null,
+            netflixIdOf = { if (it == "tv:7") "80057281" else null })
+        pc.openPicker()
+        pc.picks += Pick(Title(Kind.Tv, 7, "Stranger Things", service = "Netflix"), "why")
+        pc.picks += Pick(Title(Kind.Tv, 8, "Unknown", service = "Netflix"), "why")
+        pc.play(0); d.scheduler.advanceTimeBy(100)
+        assertEquals(1, opened.size)
+        assertTrue(opened[0], opened[0].startsWith("title netflix") && "80057281" in opened[0] && "source_type=4" in opened[0])
+        pc.openPicker(); pc.picks += Pick(Title(Kind.Tv, 8, "Unknown", service = "Netflix"), "why")
+        pc.play(0); d.scheduler.advanceTimeBy(100)
+        assertEquals("app netflix", opened[1])
+    }
+
+    @Test fun netflixLinkVariantsDiffer() {
+        val a = com.home.tvremote.picks.DeepLinks.netflix("1", "A").toString()
+        val b = com.home.tvremote.picks.DeepLinks.netflix("1", "B").toString()
+        val c = com.home.tvremote.picks.DeepLinks.netflix("1", "C").toString()
+        assertEquals(3, setOf(a, b, c).size)
+        assertTrue("contentTarget" in b)
+    }
+
     private fun MockWebServer.takeRequestsPaths(): List<String> = (0 until requestCount).mapNotNull { takeRequest().path }
 
     // ---------------- AI fallback chain ----------------
@@ -257,7 +303,7 @@ class PicksTest {
     }
 
     private fun controller(tv: FakeTv = FakeTv()) =
-        PicksController(store(), tv, CoroutineScope(StandardTestDispatcher()), clock = { at(Calendar.TUESDAY, 21, 30) }, onDevice = null)
+        PicksController(store(), tv, CoroutineScope(StandardTestDispatcher()), clock = { at(Calendar.TUESDAY, 21, 30) }, onDevice = null, netflixIdOf = null)
 
     @Test fun quickBackIsRecordedAndLongWatchIsLiked() {
         val tv = FakeTv()
@@ -357,7 +403,7 @@ class PicksTest {
             override fun pointerMove(dx: Float, dy: Float) { moves += "move" }
             override fun pointerTap() { moves += "tap" }
         }
-        val pc = PicksController(store(), tv, CoroutineScope(StandardTestDispatcher()), clock = { at(Calendar.TUESDAY, 21, 30) }, onDevice = null)
+        val pc = PicksController(store(), tv, CoroutineScope(StandardTestDispatcher()), clock = { at(Calendar.TUESDAY, 21, 30) }, onDevice = null, netflixIdOf = null)
         pc.openPicker(); pc.changeShowOnTv(true)
         assertTrue(pc.tvPageOn)
         pc.move(3f, 4f); pc.tap()

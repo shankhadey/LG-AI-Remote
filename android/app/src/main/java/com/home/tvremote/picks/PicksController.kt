@@ -9,6 +9,7 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withTimeoutOrNull
 import org.json.JSONArray
 import org.json.JSONObject
 import java.util.Calendar
@@ -24,6 +25,8 @@ interface TvActions {
     fun phoneIp(): String?
     val tvIp: String?
     fun note(message: String, error: Boolean = false)
+    /** Open an app at a title (extra launch fields); falls back to just the app on TVs that don't support it. */
+    fun openTitle(appId: String, title: String, extras: JSONObject) = openApp(appId, title)
     // The TV pointer, for the touchpad shown while the picker is on the TV.
     fun pointerMove(dx: Float, dy: Float) {}
     fun pointerTap() {}
@@ -46,6 +49,8 @@ class PicksController(
     /** On-phone model engine; injectable so tests don't need Android's AI service. */
     private val onDevice: AiEngine? = OnDeviceAi,
     private val makeRecommender: ((PicksStore, AiPicker) -> Recommender)? = null,
+    /** Netflix title ID for a TMDB key; null turns deep links off (tests). */
+    private val netflixIdOf: (suspend (String) -> String?)? = { Wikidata().netflixId(it) },
 ) {
     /** Engines in the user's order: Groq and/or the on-phone model. Rules are the final fallback in the recommender. */
     fun aiChain(s: PicksStore = store): AiPicker {
@@ -233,7 +238,13 @@ class PicksController(
             playedAt = System.currentTimeMillis(); outcome = "played"; store.saveSession(this)
         }
         pending = session; pendingStartedAt = null
-        tv.openApp(appId, svc.name)
+        val lookup = netflixIdOf
+        if (svc.name == "Netflix" && lookup != null) scope.launch {
+            // Straight to the title when Wikidata knows its Netflix ID; otherwise just the app (and "Look for").
+            val id = withTimeoutOrNull(3000) { runCatching { lookup(key) }.getOrNull() }
+            tv.log("LINK Netflix id for $name: ${id ?: "not found"}")
+            if (id != null) tv.openTitle(appId, svc.name, DeepLinks.netflix(id, store.netflixLink)) else tv.openApp(appId, svc.name)
+        } else tv.openApp(appId, svc.name)
         // There's no reliable way to open a specific title in these apps from outside, so say what to look for.
         scope.launch { delay(4000); tv.toastOnTv("Look for: $name") }
         tv.note("Opening ${svc.name} — look for $name")

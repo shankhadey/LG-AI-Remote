@@ -208,11 +208,13 @@ private fun Header(tv: TvController, showPower: Boolean = true) {
     var macDialog by remember { mutableStateOf(false) }
     var diag by remember { mutableStateOf(false) }
     var tapDialog by remember { mutableStateOf(false) }
+    var linkDialog by remember { mutableStateOf(false) }
     var renameDialog by remember { mutableStateOf(false) }
     if (renameDialog) RenameDialog(tv) { renameDialog = false }
     if (macDialog) MacDialog(tv) { macDialog = false }
     if (diag) DiagnosticsDialog(tv) { diag = false }
     if (tapDialog) TapDialog(tv) { tapDialog = false }
+    if (linkDialog) LinkDialog(tv) { linkDialog = false }
 
     Row(Modifier.fillMaxWidth().padding(top = 2.dp), verticalAlignment = Alignment.CenterVertically) {
         Box(Modifier.weight(1f)) {
@@ -234,6 +236,7 @@ private fun Header(tv: TvController, showPower: Boolean = true) {
                 DropdownMenuItem(text = { Text(if (tv.macKnown) "Power-on settings" else "Set up power on") }, onClick = { menu = false; macDialog = true })
                 DropdownMenuItem(text = { Text("Picks settings") }, onClick = { menu = false; tv.picks.open = true; tv.picks.step = com.home.tvremote.picks.Step.Setup })
                 DropdownMenuItem(text = { Text("Fix touchpad tap") }, onClick = { menu = false; tapDialog = true })
+                DropdownMenuItem(text = { Text("Test opening a show") }, onClick = { menu = false; linkDialog = true })
                 DropdownMenuItem(text = { Text(if (tv.homeOnWake) "After turning on: open Home ✓" else "After turning on: open Home") },
                     onClick = { menu = false; tv.changeHomeOnWake(!tv.homeOnWake); tv.say(if (tv.homeOnWake) "Will open Home after turning the TV on" else "Will leave the TV on its start-up screen") })
                 DropdownMenuItem(text = { Text("Diagnostics") }, onClick = { menu = false; diag = true })
@@ -466,6 +469,36 @@ fun ListeningPanel(heard: String, level: Float, onDone: () -> Unit, onCancel: ()
 // ============================================================ Dialogs (opened from the TV name)
 
 /** Lets the user find which tap method their TV responds to, by trying each on a real tile. */
+/** Finds which way of opening a title this TV's Netflix app accepts. The one tried last is used for Play. */
+@Composable
+private fun LinkDialog(tv: TvController, onClose: () -> Unit) {
+    var current by remember { mutableStateOf(tv.picks.store.netflixLink) }
+    AlertDialog(
+        onDismissRequest = onClose,
+        title = { Text("Open shows directly") },
+        text = {
+            Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                Text("Each button opens Stranger Things on Netflix a different way. Try 1, 2 and 3 (press Back on the TV between tries) and stop at the one that lands on the show itself, not Netflix's home screen. That one is used when you press Play.", fontSize = 14.sp)
+                for ((i, v) in com.home.tvremote.picks.DeepLinks.NETFLIX_VARIANTS.withIndex()) {
+                    val selected = current == v
+                    Row(
+                        Modifier.fillMaxWidth().clip(RoundedCornerShape(12.dp))
+                            .background(if (selected) Palette.accent else Palette.surface2)
+                            .clickable { current = v; tv.testNetflixLink(v) }
+                            .padding(14.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                    ) {
+                        Text("Try ${i + 1}", color = if (selected) Color.White else Palette.text, fontWeight = FontWeight.SemiBold, modifier = Modifier.weight(1f))
+                        if (selected) Text("in use", color = Color.White, fontSize = 12.sp)
+                    }
+                }
+            }
+        },
+        confirmButton = { TextButton(onClick = onClose) { Text("Done") } },
+        containerColor = Palette.surface, titleContentColor = Palette.text, textContentColor = Palette.muted,
+    )
+}
+
 @Composable
 private fun TapDialog(tv: TvController, onClose: () -> Unit) {
     val options = listOf(

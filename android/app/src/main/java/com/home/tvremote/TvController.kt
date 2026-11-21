@@ -348,6 +348,7 @@ class TvController(app: Application) : AndroidViewModel(app), TvActions {
         viewModelScope.launch {
             val t = runCatching { tv() }.getOrElse { showError(it); return@launch }
             val payload = JSONObject().put("id", app.id)
+            app.launchExtras?.let { x -> x.keys().forEach { k -> payload.put(k, x.get(k)) }; event("LINK opening ${app.title} with $x") }
             val first = runCatching { t.request("ssap://system.launcher/launch", payload) }
             if (first.isSuccess && waitForForeground(t, app.id)) return@launch
             val second = runCatching { t.request("ssap://com.webos.applicationManager/launch", JSONObject().put("id", app.id)) }
@@ -376,6 +377,14 @@ class TvController(app: Application) : AndroidViewModel(app), TvActions {
 
     // ---- TvActions (for the picker) -------------------------------------------
     override fun openApp(appId: String, title: String) = launch(TvApp(appId, title))
+    override fun openTitle(appId: String, title: String, extras: JSONObject) = launch(TvApp(appId, title, launchExtras = extras))
+
+    /** "Test opening a show": opens Stranger Things on Netflix with one link variant, and keeps it for Play. */
+    fun testNetflixLink(variant: String) {
+        picks.store.netflixLink = variant
+        event("LINK test $variant")
+        launch(TvApp("netflix", "Netflix", launchExtras = com.home.tvremote.picks.DeepLinks.netflix(com.home.tvremote.picks.DeepLinks.NETFLIX_TEST_ID, variant)))
+    }
     override fun knownAppIds(): Set<String> = (apps.map { it.id } + usage.keys).toSet()
     override fun openOnTvBrowser(url: String) = enqueue {
         val t = tv()

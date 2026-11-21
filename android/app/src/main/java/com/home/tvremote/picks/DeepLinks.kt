@@ -1,0 +1,47 @@
+package com.home.tvremote.picks
+
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
+import okhttp3.HttpUrl.Companion.toHttpUrl
+import okhttp3.OkHttpClient
+import okhttp3.Request
+import org.json.JSONObject
+import java.util.concurrent.TimeUnit
+
+/**
+ * Opening a title inside a streaming app instead of just the app.
+ * TMDB doesn't carry the apps' own title IDs; Wikidata (public, CC0) maps TMDB IDs to Netflix IDs for many titles.
+ * How the LG Netflix app accepts a title differs between firmware versions, so there are variants to try on the TV.
+ */
+object DeepLinks {
+    /** Variants of the extra launch fields for Netflix, tried on the TV from the menu ("Test opening a show"). */
+    val NETFLIX_VARIANTS = listOf("A", "B", "C")
+
+    /** A well-known Netflix title for the on-TV test: Stranger Things. */
+    const val NETFLIX_TEST_ID = "80057281"
+
+    fun netflix(id: String, variant: String): JSONObject = when (variant) {
+        "B" -> JSONObject().put("params", JSONObject().put("contentTarget", "https://www.netflix.com/watch/$id"))
+        "C" -> JSONObject().put("contentId", "m=https://www.netflix.com/title/$id&source_type=4")
+        else -> JSONObject().put("contentId", "m=http://api-global.netflix.com/catalog/titles/movies/$id&source_type=4")
+    }
+}
+
+/** TMDB key ("tv:1396") → Netflix title ID, via Wikidata. Null when Wikidata doesn't know it. */
+class Wikidata(private val base: String = "https://query.wikidata.org/sparql") {
+    private val http = OkHttpClient.Builder().connectTimeout(5, TimeUnit.SECONDS).readTimeout(8, TimeUnit.SECONDS).build()
+
+    suspend fun netflixId(key: String): String? = withContext(Dispatchers.IO) {
+        val (kind, id) = key.split(':').takeIf { it.size == 2 } ?: return@withContext null
+        if (id.toIntOrNull() == null) return@withContext null
+        val tmdbProp = if (kind == "movie") "P4947" else "P4983"          // TMDB movie ID / TMDB TV series ID
+        val query = """SELECT ?nf WHERE { ?i wdt:$tmdbProp "$id" ; wdt:P1874 ?nf } LIMIT 1"""   // P1874 = Netflix ID
+        val url = base.toHttpUrl().newBuilder().addQueryParameter("format", "json").addQueryParameter("query", query).build()
+        val req = Request.Builder().url(url).header("User-Agent", "TVRemoteApp/0.7 (Android)").header("Accept", "application/sparql-results+json").build()
+        http.newCall(req).execute().use { r ->
+            if (!r.isSuccessful) return@use null
+            JSONObject(r.body?.string().orEmpty()).optJSONObject("results")?.optJSONArray("bindings")
+                ?.optJSONObject(0)?.optJSONObject("nf")?.optString("value")?.takeIf { it.all(Char::isDigit) && it.isNotEmpty() }
+        }
+    }
+}

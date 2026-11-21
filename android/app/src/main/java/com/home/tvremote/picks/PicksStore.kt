@@ -90,6 +90,11 @@ class PicksStore(private val prefs: SharedPreferences) {
     var aiChoice: String
         get() = prefs.getString("aiChoice", null) ?: if (groqKey.isNotBlank()) "groq" else "phone"
         set(v) = prefs.edit().putString("aiChoice", v).apply()
+    /** Which Netflix link format this TV accepts (see DeepLinks), chosen with "Test opening a show". */
+    var netflixLink: String
+        get() = prefs.getString("netflixLink", "A") ?: "A"
+        set(v) = prefs.edit().putString("netflixLink", v).apply()
+
     var showOnTv: Boolean
         get() = prefs.getBoolean("showOnTv", false)
         set(v) = prefs.edit().putBoolean("showOnTv", v).apply()
