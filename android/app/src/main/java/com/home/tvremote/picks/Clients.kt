@@ -153,7 +153,7 @@ class Groq(private val key: String, private val model: String, private val base:
  * (e.g. Groq, then the on-phone model); if all fail, the caller falls back to rules.
  * The model only ever chooses candidate IDs, so it can't invent titles or availability.
  */
-class AiPicker(private val engines: List<AiEngine>) {
+class AiPicker(val engines: List<AiEngine>) {
     /** Which engine produced the last result, and the last failure (for Diagnostics). */
     @Volatile var lastEngine: String? = null
     @Volatile var lastError: String? = null

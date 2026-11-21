@@ -265,14 +265,26 @@ private fun OffScreen(tv: TvController) {
     Column(Modifier.fillMaxSize().padding(horizontal = 20.dp)) {
         Header(tv, showPower = false)
         Column(Modifier.fillMaxWidth().weight(1f), horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.Center) {
-            Box(Modifier.size(176.dp).card(CircleShape).clickable(enabled = !tv.waking) { tv.turnOn() }, contentAlignment = Alignment.Center) {
-                if (tv.waking) CircularProgressIndicator(color = Palette.text, strokeWidth = 2.dp, modifier = Modifier.size(56.dp))
-                else Icon(Icons.Rounded.PowerSettingsNew, "Turn on", tint = Palette.text, modifier = Modifier.size(60.dp))
+            Box(Modifier.size(184.dp), contentAlignment = Alignment.Center) {
+                // While waking: a thin ring around the same button, so the screen doesn't change shape.
+                if (tv.waking) CircularProgressIndicator(color = Palette.text, strokeWidth = 2.dp, modifier = Modifier.fillMaxSize())
+                Box(Modifier.size(168.dp).card(CircleShape).clickable(enabled = !tv.waking) { tv.turnOn() }, contentAlignment = Alignment.Center) {
+                    Icon(Icons.Rounded.PowerSettingsNew, "Turn on", tint = if (tv.waking) Palette.muted else Palette.text, modifier = Modifier.size(60.dp))
+                }
             }
             Spacer(Modifier.height(24.dp))
             Text(if (tv.waking) "Turning on…" else "Turn on", color = Palette.text, fontSize = 17.sp, fontWeight = FontWeight.SemiBold)
+            Text(
+                when {
+                    !tv.waking -> " "
+                    tv.wakeSeconds < 6 -> "Waking the TV"
+                    else -> "Still waking the TV · ${tv.wakeSeconds} s"
+                },
+                color = Palette.muted, fontSize = 14.sp, modifier = Modifier.padding(top = 6.dp),
+            )
             Spacer(Modifier.height(16.dp))
-            Feedback(tv, Modifier.padding(horizontal = 8.dp))
+            // Only problems show here; progress is the ring and the line above.
+            if (tv.feedbackIsError) Feedback(tv, Modifier.padding(horizontal = 8.dp))
         }
     }
 }

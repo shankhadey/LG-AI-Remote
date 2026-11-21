@@ -83,14 +83,13 @@ class PicksStore(private val prefs: SharedPreferences) {
     var leanBack: Boolean
         get() = prefs.getBoolean("leanBack", true)
         set(v) = prefs.edit().putBoolean("leanBack", v).apply()
-    /** Use the phone's own AI model when available (as a fallback, or first if [preferOnDevice]). */
-    var useOnDevice: Boolean
-        get() = prefs.getBoolean("useOnDevice", true)
-        set(v) = prefs.edit().putBoolean("useOnDevice", v).apply()
-    /** Try the on-phone model before Groq: private and offline, a bit less clever. */
-    var preferOnDevice: Boolean
-        get() = prefs.getBoolean("preferOnDevice", false)
-        set(v) = prefs.edit().putBoolean("preferOnDevice", v).apply()
+    /**
+     * Who makes the picks: "phone" (on-phone AI), "groq", or "rules". If the chosen AI isn't available
+     * right now, the other one is tried (when set up), then rules, so picks always work.
+     */
+    var aiChoice: String
+        get() = prefs.getString("aiChoice", null) ?: if (groqKey.isNotBlank()) "groq" else "phone"
+        set(v) = prefs.edit().putString("aiChoice", v).apply()
     var showOnTv: Boolean
         get() = prefs.getBoolean("showOnTv", false)
         set(v) = prefs.edit().putBoolean("showOnTv", v).apply()

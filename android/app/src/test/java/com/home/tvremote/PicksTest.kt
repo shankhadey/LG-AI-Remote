@@ -194,14 +194,16 @@ class PicksTest {
         assertNull(AiPicker(listOf(FakeEngine("Groq", null), FakeEngine("On-phone", """{"picks":[{"id":"x:1","why":"invented"}]}"""))).choose("now", "none", cands))
     }
 
-    @Test fun chainOrderFollowsSettings() {
+    @Test fun chainOrderFollowsTheChoice() {
         val phone = FakeEngine("On-phone", "{}")
         val s = store().apply { groqKey = "g" }
         val pc = PicksController(s, FakeTv(), CoroutineScope(StandardTestDispatcher()), onDevice = phone)
-        val order = { pc.aiChain().let { c -> c.javaClass.getDeclaredField("engines").apply { isAccessible = true }.get(c) as List<*> }.map { (it as AiEngine).name } }
+        val order = { pc.aiChain().engines.map { it.name } }
+        assertEquals("groq", s.aiChoice)                                  // default with a Groq key
         assertEquals(listOf("Groq", "On-phone"), order())
-        s.preferOnDevice = true; assertEquals(listOf("On-phone", "Groq"), order())
-        s.useOnDevice = false; assertEquals(listOf("Groq"), order())
+        s.aiChoice = "phone"; assertEquals(listOf("On-phone", "Groq"), order())
+        s.aiChoice = "rules"; assertEquals(emptyList<String>(), order())
+        assertEquals("phone", PicksStore(FakePrefs()).aiChoice)            // default without a key
     }
 
     // ---------------- quick-backs ----------------

@@ -44,8 +44,12 @@ class PicksController(
     /** Engines in the user's order: Groq and/or the on-phone model. Rules are the final fallback in the recommender. */
     fun aiChain(s: PicksStore = store): AiPicker {
         val groq = s.groqKey.takeIf { it.isNotBlank() }?.let { Groq(it, s.groqModel) }
-        val phone = onDevice?.takeIf { s.useOnDevice }
-        return AiPicker(listOfNotNull(*(if (s.preferOnDevice) arrayOf(phone, groq) else arrayOf(groq, phone))))
+        val phone = onDevice
+        return AiPicker(when (s.aiChoice) {
+            "rules" -> emptyList()
+            "groq" -> listOfNotNull(groq, phone)
+            else -> listOfNotNull(phone, groq)
+        })
     }
 
     private fun recommender(): Recommender =
@@ -83,7 +87,7 @@ class PicksController(
     var onDeviceStatus by mutableStateOf("")
 
     fun refreshOnDevice() {
-        if (onDevice !== OnDeviceAi || !store.useOnDevice) { onDeviceStatus = if (store.useOnDevice) "" else "Off"; return }
+        if (onDevice !== OnDeviceAi) { onDeviceStatus = ""; return }
         scope.launch { OnDeviceAi.refresh(); onDeviceStatus = OnDeviceAi.describe() }
     }
 
@@ -334,9 +338,7 @@ class PicksController(
             appendLine("Quick-backs: <15 min ${strong * 100 / played.size}% · 15–30 min ${weak * 100 / played.size}%")
         }
         Recommender.lastAiError?.let { appendLine("Last AI error (fell back to rules): $it") }
-        val order = listOfNotNull(
-            if (store.preferOnDevice && store.useOnDevice) "On-phone" else null, if (store.groqKey.isNotBlank()) "Groq (${store.groqModel})" else null,
-            if (!store.preferOnDevice && store.useOnDevice) "On-phone" else null, "Rules")
+        val order = aiChain().let { c -> c.engines.map { it.name } } + "Rules"
         appendLine("Settings: ${store.people.size} people · ${store.services.size} services · languages ${store.languages.joinToString()} · lean-back ${if (store.leanBack) "on" else "off"}")
         appendLine("AI order: ${order.joinToString(" → ")} · on-phone: ${if (onDevice == OnDeviceAi) OnDeviceAi.describe() else "n/a"} · last picks by ${Recommender.lastEngine ?: "—"}")
         val fmt = java.text.SimpleDateFormat("EEE d MMM h:mm a", java.util.Locale.US)

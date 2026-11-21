@@ -153,6 +153,13 @@ class ScreenshotTest {
     @Test fun picksResultsLight() { Palette.dark = false; val pc = picks(com.home.tvremote.picks.Step.Results); shot { com.home.tvremote.ui.PicksScreen(pc) } }
     @Test fun picksSetupDark() { Palette.dark = true; val pc = picks(com.home.tvremote.picks.Step.Setup); shot { com.home.tvremote.ui.PicksScreen(pc) } }
 
+    @Test fun offWakingDark() { Palette.dark = true; val tv = remoteTv().apply { connected = false; tvOff = true; waking = true; wakeSeconds = 8 }; shot { RemoteScreen(tv) { true } } }
+    @Test fun picksAiSectionLight() {
+        Palette.dark = false
+        val pc = picks(com.home.tvremote.picks.Step.Setup).apply { onDeviceStatus = "Downloading to this phone (Android does this in the background)" }
+        shot { androidx.compose.foundation.layout.Box(Modifier.padding(20.dp)) { com.home.tvremote.ui.PicksAiSection(pc, "abc", {}, "", {}, "groq") {} } }
+    }
+
     @Test fun checkingDark() { Palette.dark = true; val tv = remoteTv().apply { connected = false; checking = true }; shot { RemoteScreen(tv) { true } } }
     @Test fun listeningDark() { Palette.dark = true; shot { ListeningPanel("Search YouTube for easy weeknight pasta recipes", 0.7f, {}, {}) } }
     @Test fun listeningLight() { Palette.dark = false; shot { ListeningPanel("Search YouTube for easy weeknight pasta recipes", 0.7f, {}, {}) } }

@@ -268,8 +268,7 @@ private fun SetupPicks(pc: PicksController) {
     var tmdb by remember { mutableStateOf(s.tmdbKey) }
     var groq by remember { mutableStateOf(s.groqKey) }
     var leanBack by remember { mutableStateOf(s.leanBack) }
-    var useOnDevice by remember { mutableStateOf(s.useOnDevice) }
-    var preferOnDevice by remember { mutableStateOf(s.preferOnDevice) }
+    var aiChoice by remember { mutableStateOf(s.aiChoice) }
     androidx.compose.runtime.LaunchedEffect(Unit) { pc.refreshOnDevice() }
     var error by remember { mutableStateOf("") }
 
@@ -316,15 +315,7 @@ private fun SetupPicks(pc: PicksController) {
             Switch(leanBack, { leanBack = it }, colors = SwitchDefaults.colors(checkedTrackColor = Palette.primary, checkedThumbColor = Palette.onPrimary))
         }
 
-        Label("Keys (stay on this phone)")
-        KeyField("TMDB key — free at themoviedb.org › Settings › API", tmdb) { tmdb = it }
-        KeyField("Groq key (optional, for AI picks) — free at console.groq.com", groq) { groq = it }
-        Label("On-phone AI")
-        SwitchRow("Use this phone's own AI", "Free, offline, private. ${pc.onDeviceStatus.ifEmpty { "Checking…" }}", useOnDevice) { useOnDevice = it }
-        if (useOnDevice) SwitchRow("Prefer on-phone AI", "Try it before Groq: nothing leaves the phone, a little less clever.", preferOnDevice) { preferOnDevice = it }
-        Text("Order: ${listOfNotNull(if (useOnDevice && preferOnDevice) "On-phone" else null, if (groq.isNotBlank()) "Groq" else null,
-            if (useOnDevice && !preferOnDevice) "On-phone" else null, "simple rules").joinToString(" → ")}",
-            color = Palette.faint, fontSize = 12.sp, modifier = Modifier.padding(top = 6.dp))
+        PicksAiSection(pc, tmdb, { tmdb = it }, groq, { groq = it }, aiChoice) { aiChoice = it }
 
         if (error.isNotEmpty()) Text(error, color = Palette.danger, fontSize = 14.sp, modifier = Modifier.padding(top = 14.dp))
         Box(Modifier.padding(top = 16.dp, bottom = 24.dp)) {
@@ -332,13 +323,14 @@ private fun SetupPicks(pc: PicksController) {
                 if (newPerson.isNotBlank()) { people += newPerson.trim(); newPerson = "" }
                 error = when {
                     services.isEmpty() -> "Choose at least one service"
-                    tmdb.isBlank() -> "A TMDB key is needed to find titles"
+                    tmdb.isBlank() -> "A TMDB key is needed to find shows"
+                    aiChoice == "groq" && groq.isBlank() -> "Paste your Groq key, or choose another option"
                     else -> ""
                 }
                 if (error.isEmpty()) {
                     s.people = people.toList(); s.services = services.toList(); s.languages = langs.toList()
                     s.weekdayBedtime = weekday; s.weekendBedtime = weekend; s.tmdbKey = tmdb; s.groqKey = groq; s.leanBack = leanBack
-                    s.useOnDevice = useOnDevice; s.preferOnDevice = preferOnDevice
+                    s.aiChoice = aiChoice
                     pc.finishSetup()
                 }
             }
@@ -346,14 +338,41 @@ private fun SetupPicks(pc: PicksController) {
     }
 }
 
+/** "Finding shows" (TMDB key) and "Who makes the picks?" — part of setup. */
 @Composable
-private fun SwitchRow(title: String, sub: String, on: Boolean, onChange: (Boolean) -> Unit) {
-    Row(Modifier.fillMaxWidth().padding(bottom = 8.dp).card(RoundedCornerShape(14.dp)).padding(horizontal = 14.dp, vertical = 10.dp), verticalAlignment = Alignment.CenterVertically) {
-        Column(Modifier.weight(1f)) {
-            Text(title, color = Palette.text, fontSize = 15.sp)
-            Text(sub, color = Palette.muted, fontSize = 12.sp)
+internal fun PicksAiSection(
+    pc: PicksController, tmdb: String, onTmdb: (String) -> Unit, groq: String, onGroq: (String) -> Unit,
+    aiChoice: String, onChoice: (String) -> Unit,
+) {
+    Column {
+        Label("Finding shows")
+        KeyField("TMDB key", "Needed to find shows and where they're streaming. Free at themoviedb.org › Settings › API.", tmdb) { onTmdb(it) }
+
+        Label("Who makes the picks?")
+        Choice("This phone's AI", "Private and free — nothing leaves your phone. " + pc.onDeviceStatus.ifEmpty { "Checking…" },
+            aiChoice == "phone") { onChoice("phone") }
+        Choice("Groq (online AI)", "A bigger, cleverer AI. Needs a free key from console.groq.com.", aiChoice == "groq") { onChoice("groq") }
+        if (aiChoice == "groq") KeyField("Groq key", "Paste the key from console.groq.com › API Keys.", groq) { onGroq(it) }
+        Choice("No AI", "Simple rules: popular, well-rated shows that fit your mood and time.", aiChoice == "rules") { onChoice("rules") }
+        Text("If your choice isn't available at that moment, the app uses the next option automatically, so you always get picks. Keys stay on this phone.",
+            color = Palette.faint, fontSize = 12.sp, modifier = Modifier.padding(top = 4.dp))
+
+    }
+}
+
+@Composable
+private fun Choice(title: String, sub: String, selected: Boolean, onClick: () -> Unit) {
+    Row(Modifier.fillMaxWidth().padding(bottom = 8.dp).card(RoundedCornerShape(14.dp))
+        .then(if (selected) Modifier.border(2.dp, Palette.text, RoundedCornerShape(14.dp)) else Modifier)
+        .clickable(onClick = onClick).padding(horizontal = 14.dp, vertical = 12.dp), verticalAlignment = Alignment.CenterVertically) {
+        Box(Modifier.size(22.dp).clip(CircleShape).border(2.dp, if (selected) Palette.text else Palette.faint, CircleShape), contentAlignment = Alignment.Center) {
+            if (selected) Box(Modifier.size(12.dp).clip(CircleShape).background(Palette.text))
         }
-        Switch(on, onChange, colors = SwitchDefaults.colors(checkedTrackColor = Palette.primary, checkedThumbColor = Palette.onPrimary))
+        Spacer(Modifier.width(12.dp))
+        Column(Modifier.weight(1f)) {
+            Text(title, color = Palette.text, fontSize = 15.sp, fontWeight = FontWeight.SemiBold)
+            Text(sub, color = Palette.muted, fontSize = 12.sp, lineHeight = 16.sp)
+        }
     }
 }
 
@@ -373,11 +392,18 @@ private fun clock(min: Int): String {
 }
 
 @Composable
-private fun KeyField(hint: String, value: String, onChange: (String) -> Unit) {
-    Box(Modifier.fillMaxWidth().padding(top = 8.dp).card(RoundedCornerShape(14.dp)).padding(14.dp)) {
-        if (value.isEmpty()) Text(hint, color = Palette.faint, fontSize = 13.sp)
-        BasicTextField(value, onChange, singleLine = true, textStyle = TextStyle(color = Palette.text, fontSize = 15.sp),
-            cursorBrush = SolidColor(Palette.accent), visualTransformation = PasswordVisualTransformation(), modifier = Modifier.fillMaxWidth())
+private fun KeyField(title: String, help: String, value: String, onChange: (String) -> Unit) {
+    Column(Modifier.fillMaxWidth().padding(bottom = 8.dp).card(RoundedCornerShape(14.dp)).padding(14.dp)) {
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Text(title, color = Palette.text, fontSize = 15.sp, fontWeight = FontWeight.SemiBold, modifier = Modifier.weight(1f))
+            if (value.isNotBlank()) Text("Saved ✓", color = Palette.muted, fontSize = 12.sp)
+        }
+        Text(help, color = Palette.muted, fontSize = 12.sp, lineHeight = 16.sp, modifier = Modifier.padding(top = 2.dp, bottom = 8.dp))
+        Box(Modifier.fillMaxWidth().clip(RoundedCornerShape(10.dp)).background(Palette.surface2).padding(horizontal = 12.dp, vertical = 10.dp)) {
+            if (value.isEmpty()) Text("Paste key", color = Palette.faint, fontSize = 14.sp)
+            BasicTextField(value, onChange, singleLine = true, textStyle = TextStyle(color = Palette.text, fontSize = 14.sp),
+                cursorBrush = SolidColor(Palette.accent), visualTransformation = PasswordVisualTransformation(), modifier = Modifier.fillMaxWidth())
+        }
     }
 }
 

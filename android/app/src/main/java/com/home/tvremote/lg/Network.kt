@@ -199,10 +199,12 @@ object Discovery {
  */
 object WakeOnLan {
     /** Quick check: is the TV's control port answering? */
-    suspend fun reachable(ip: String): Boolean = withContext(Dispatchers.IO) {
-        listOf(3001, 3000).any { port ->
-            try { java.net.Socket().use { it.connect(InetSocketAddress(ip, port), 800); true } } catch (_: Exception) { false }
+    suspend fun reachable(ip: String, timeoutMs: Int = 500): Boolean = withContext(Dispatchers.IO) {
+        // Both ports at once: total wait is one timeout, not two.
+        val checks = listOf(3001, 3000).map { port ->
+            async { try { java.net.Socket().use { it.connect(InetSocketAddress(ip, port), timeoutMs); true } } catch (_: Exception) { false } }
         }
+        checks.awaitAll().any { it }
     }
 
     /** Sends the packets; returns how many actually left the phone (0 = nothing could be sent). */

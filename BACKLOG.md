@@ -67,6 +67,10 @@ Things we decided to remember for later.
 - **iPhone version** for the other household phone (original ask).
 
 ## Done
+- v0.5.2: faster turn-on detection (wake sent immediately, both ports checked at once every 0.5 s, short
+  connection retries; timeline in Diagnostics as WAKE lines). Turning-on screen: one state, ring around the
+  button, "Still waking the TV · N s", status line says Turning on. TV name falls back to the model name.
+  Setup: "Who makes the picks?" — This phone's AI / Groq / No AI (auto-fallback), labelled key fields.
 - v0.5.1: on-phone AI (Gemini Nano via Android's on-device AI, ML Kit GenAI Prompt API beta4) as a fallback:
   Groq → on-phone → rules, or on-phone first with "Prefer on-phone AI". Shared prompts + "only candidate IDs"
   check for every engine. Diagnostics shows the AI order, on-phone status and which engine made each set of picks.
