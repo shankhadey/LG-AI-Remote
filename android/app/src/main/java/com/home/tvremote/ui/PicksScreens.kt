@@ -91,6 +91,8 @@ fun WhatToWatchCard(pc: PicksController) {
 fun PicksScreen(pc: PicksController) {
     BackHandler { if (pc.step == Step.Results || pc.step == Step.Error) pc.back() else pc.close() }
     Box(Modifier.fillMaxSize().background(Palette.bg)) {
+        // "On TV" ticked and the page is up: look at the TV, point and click with the phone.
+        if (pc.tvPageOn && pc.step != Step.Setup) { TouchpadPicks(pc); return@Box }
         when (pc.step) {
             Step.Setup -> SetupPicks(pc)
             Step.Choose -> ChoosePicks(pc)
@@ -136,6 +138,41 @@ private fun ShowOnTv(pc: PicksController, short: Boolean = false) {
         }
         Spacer(Modifier.width(8.dp))
         Text(if (short) "On TV" else "Show on TV", color = Palette.text, fontSize = 14.sp)
+    }
+}
+
+/** The phone as a touchpad for the picker on the TV: header with the On TV box, what's pointed at, the pad, the mic. */
+@Composable
+private fun TouchpadPicks(pc: PicksController) {
+    val context = LocalContext.current
+    var heard by remember { mutableStateOf("") }
+    var listening by remember { mutableStateOf(false) }
+    val voice = remember {
+        VoiceInput(context, onPartial = { heard = it }, onResult = { g -> heard = ""; pc.ask(g.first()) },
+            onError = { listening = false; heard = "" }, onEnd = { listening = false })
+    }
+    DisposableEffect(Unit) { onDispose { voice.release() } }
+    Column(Modifier.fillMaxSize().padding(horizontal = 20.dp, vertical = 8.dp)) {
+        PicksTop(pc, if (pc.step == Step.Choose) pc.title else pc.summary) { if (pc.step == Step.Choose) pc.close() else pc.back() }
+        Row(Modifier.padding(top = 10.dp, bottom = 12.dp, start = 4.dp)) {
+            when {
+                listening -> Text(heard.ifEmpty { "Listening…" }, color = Palette.text, fontSize = 14.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                pc.pointingAt.isNotEmpty() -> {
+                    Text("Pointing at: ", color = Palette.faint, fontSize = 14.sp)
+                    Text(pc.pointingAt, color = Palette.text, fontSize = 14.sp, fontWeight = FontWeight.SemiBold, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                }
+                else -> Text("Look at the TV", color = Palette.faint, fontSize = 14.sp)
+            }
+        }
+        Touchpad(onMove = pc::move, onClick = pc::tap, onScroll = pc::scroll, modifier = Modifier.fillMaxWidth().weight(1f),
+            hint = "Move to point · tap to click")
+        Box(Modifier.fillMaxWidth().padding(top = 16.dp, bottom = 8.dp), contentAlignment = Alignment.Center) {
+            Box(Modifier.size(58.dp).clip(CircleShape).background(if (listening) Palette.danger else Palette.primary).clickable {
+                if (ContextCompat.checkSelfPermission(context, Manifest.permission.RECORD_AUDIO) == PackageManager.PERMISSION_GRANTED && voice.available) {
+                    if (listening) voice.finish() else { listening = true; heard = ""; voice.start() }
+                } else pc.noteMicNeeded()
+            }, contentAlignment = Alignment.Center) { Icon(Icons.Rounded.Mic, "Say it", tint = Palette.onPrimary, modifier = Modifier.size(24.dp)) }
+        }
     }
 }
 
@@ -304,16 +341,6 @@ private fun SetupPicks(pc: PicksController) {
         Label("Usually in bed by")
         BedtimeRow("Sun–Thu", weekday) { weekday = it }
         BedtimeRow("Fri–Sat", weekend) { weekend = it }
-
-        Label("Lean-back mode")
-        Row(Modifier.fillMaxWidth().card(RoundedCornerShape(14.dp)).padding(horizontal = 14.dp, vertical = 10.dp), verticalAlignment = Alignment.CenterVertically) {
-            Column(Modifier.weight(1f)) {
-                Text("Choose on the TV too", color = Palette.text, fontSize = 15.sp)
-                Text("With Show on TV ticked, pick who, language and mood on the TV with the pointer. Off: only the picks go to the TV.",
-                    color = Palette.muted, fontSize = 12.sp)
-            }
-            Switch(leanBack, { leanBack = it }, colors = SwitchDefaults.colors(checkedTrackColor = Palette.primary, checkedThumbColor = Palette.onPrimary))
-        }
 
         PicksAiSection(pc, tmdb, { tmdb = it }, groq, { groq = it }, aiChoice) { aiChoice = it }
 

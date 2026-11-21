@@ -24,6 +24,10 @@ interface TvActions {
     fun phoneIp(): String?
     val tvIp: String?
     fun note(message: String, error: Boolean = false)
+    // The TV pointer, for the touchpad shown while the picker is on the TV.
+    fun pointerMove(dx: Float, dy: Float) {}
+    fun pointerTap() {}
+    fun pointerScroll(dy: Float) {}
 }
 
 enum class Step { Setup, Choose, Loading, Results, Error }
@@ -62,6 +66,16 @@ class PicksController(
     /** null = Any. */
     var language by mutableStateOf<String?>(null)
     var showOnTv by mutableStateOf(store.showOnTv)
+    /** The picker page is up on the TV: the phone becomes a touchpad. */
+    var tvPageOn by mutableStateOf(false)
+        internal set
+    /** What the TV pointer is over, reported by the TV page. */
+    var pointingAt by mutableStateOf("")
+        internal set
+    fun move(dx: Float, dy: Float) = tv.pointerMove(dx, dy)
+    fun noteMicNeeded() = tv.note("Allow the microphone first (tap the remote's mic once)", true)
+    fun tap() = tv.pointerTap()
+    fun scroll(dy: Float) = tv.pointerScroll(dy)
     var message by mutableStateOf("")
     var summary by mutableStateOf("")
     val picks = mutableStateListOf<Pick>()
@@ -277,12 +291,13 @@ class PicksController(
     private fun startTvPage() {
         if (web != null) return
         val ip = tv.phoneIp() ?: run { tv.note("The phone isn't on Wi-Fi, so the TV can't show the picks", true); return }
-        val w = PicksWeb(state = ::webState, action = { d, v -> scope.launch(Dispatchers.Main) { webAction(d, v) } }, allowedIp = tv.tvIp)
-        w.start(); web = w
+        val w = PicksWeb(state = ::webState, action = { d, v -> scope.launch(Dispatchers.Main) { webAction(d, v) } }, allowedIp = tv.tvIp,
+            focus = { l -> scope.launch(Dispatchers.Main) { pointingAt = l } })
+        w.start(); web = w; tvPageOn = true; pointingAt = ""
         tv.openOnTvBrowser(w.url(ip))
     }
 
-    private fun stopTvPage() { web?.stop(); web = null }
+    private fun stopTvPage() { web?.stop(); web = null; tvPageOn = false; pointingAt = "" }
 
     private fun bump() { version++ }
 
@@ -306,7 +321,7 @@ class PicksController(
             !open && session == null && pending != null -> "playing"
             step == Step.Loading -> "loading"; step == Step.Results -> "picks"; step == Step.Error -> "error"; else -> "choose"
         }
-        val j = JSONObject().put("v", version).put("phase", phase).put("leanBack", store.leanBack)
+        val j = JSONObject().put("v", version).put("phase", phase).put("leanBack", true)
             .put("title", title).put("context", contextLine).put("summary", summary.ifEmpty { "Waiting for a mood…" })
             .put("message", if (phase == "playing") "Opening ${pending?.service ?: "the app"} — look for ${pending?.playedName ?: ""}" else message)
             .put("keep", keep?.playedName)
@@ -357,7 +372,7 @@ class PicksController(
         }
         Recommender.lastAiError?.let { appendLine("Last AI error (fell back to rules): $it") }
         val order = aiChain().let { c -> c.engines.map { it.name } } + "Rules"
-        appendLine("Settings: ${store.people.size} people · ${store.services.size} services · languages ${store.languages.joinToString()} · lean-back ${if (store.leanBack) "on" else "off"}")
+        appendLine("Settings: ${store.people.size} people · ${store.services.size} services · languages ${store.languages.joinToString()} · on TV ${if (showOnTv) "on" else "off"}")
         appendLine("AI order: ${order.joinToString(" → ")} · on-phone: ${if (onDevice == OnDeviceAi) OnDeviceAi.describe() else "n/a"} · last picks by ${Recommender.lastEngine ?: "—"}")
         val fmt = java.text.SimpleDateFormat("EEE d MMM h:mm a", java.util.Locale.US)
         for (s in all.takeLast(20).reversed()) {

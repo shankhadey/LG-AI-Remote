@@ -296,7 +296,8 @@ class PicksTest {
     // ---------------- the TV page ----------------
     @Test fun tvPageNeedsTheTokenAndForwardsClicks() {
         val clicks = mutableListOf<String>()
-        val web = PicksWeb(state = { """{"v":1}""" }, action = { d, v -> clicks += "$d=$v" }, allowedIp = null)
+        val focused = mutableListOf<String>()
+        val web = PicksWeb(state = { """{"v":1}""" }, action = { d, v -> clicks += "$d=$v" }, allowedIp = null, focus = { focused += it })
         web.start(preferredPort = 0)
         try {
             fun get(path: String) = (URL("http://127.0.0.1:${web.port}$path").openConnection() as HttpURLConnection).run {
@@ -308,7 +309,25 @@ class PicksTest {
             assertEquals("""{"v":1}""", get("/s?k=${web.token}").second)
             get("/a?k=${web.token}&do=play&v=1")
             assertEquals(listOf("play=1"), clicks)
+            get("/f?k=${web.token}&l=Seinfeld%20%C2%B7%20Play")
+            assertEquals(listOf("Seinfeld · Play"), focused)
+            assertEquals(403, get("/f?l=x").first)
         } finally { web.stop() }
+    }
+
+    @Test fun onTvTheTouchpadDrivesTheTvPointer() {
+        val moves = mutableListOf<String>()
+        val tv = object : TvActions by FakeTv() {
+            override fun pointerMove(dx: Float, dy: Float) { moves += "move" }
+            override fun pointerTap() { moves += "tap" }
+        }
+        val pc = PicksController(store(), tv, CoroutineScope(StandardTestDispatcher()), clock = { at(Calendar.TUESDAY, 21, 30) }, onDevice = null)
+        pc.openPicker(); pc.changeShowOnTv(true)
+        assertTrue(pc.tvPageOn)
+        pc.move(3f, 4f); pc.tap()
+        assertEquals(listOf("move", "tap"), moves)
+        pc.changeShowOnTv(false)
+        assertFalse(pc.tvPageOn)
     }
 
     // ---------------- voice ----------------

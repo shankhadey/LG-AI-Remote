@@ -150,6 +150,8 @@ class ScreenshotTest {
     @Test fun picksChooseDark() { Palette.dark = true; val pc = picks(com.home.tvremote.picks.Step.Choose); shot { com.home.tvremote.ui.PicksScreen(pc) } }
     @Test fun picksChooseLight() { Palette.dark = false; val pc = picks(com.home.tvremote.picks.Step.Choose); shot { com.home.tvremote.ui.PicksScreen(pc) } }
     @Test fun picksResultsDark() { Palette.dark = true; val pc = picks(com.home.tvremote.picks.Step.Results); shot { com.home.tvremote.ui.PicksScreen(pc) } }
+    @Test fun picksOnTvTouchpadLight() { Palette.dark = false; val pc = picks(com.home.tvremote.picks.Step.Results).apply { showOnTv = true; tvPageOn = true; pointingAt = "Seinfeld · Play" }; shot { com.home.tvremote.ui.PicksScreen(pc) } }
+    @Test fun picksOnTvTouchpadDark() { Palette.dark = true; val pc = picks(com.home.tvremote.picks.Step.Choose).apply { showOnTv = true; tvPageOn = true; pointingAt = "Light & funny" }; shot { com.home.tvremote.ui.PicksScreen(pc) } }
     @Test fun picksResultsLight() { Palette.dark = false; val pc = picks(com.home.tvremote.picks.Step.Results); shot { com.home.tvremote.ui.PicksScreen(pc) } }
     @Test fun picksSetupDark() { Palette.dark = true; val pc = picks(com.home.tvremote.picks.Step.Setup); shot { com.home.tvremote.ui.PicksScreen(pc) } }
 

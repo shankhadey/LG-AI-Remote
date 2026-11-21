@@ -6,7 +6,7 @@ Things we decided to remember for later.
 - **v0.5.0 "What should we watch?"** — first run: enter names, services, languages, bedtimes, TMDB key (and Groq
   key for AI). Check: picks are on your services; hoichoi / ZEE5 coverage; "Not now" / "Never" swap a pick;
   Play opens the right app + "Look for …" pop-up on the TV; Max / hoichoi / ZEE5 need opening once from the TV so
-  the app learns their IDs. Show on TV: lean-back chooser and clickable picks with the pointer + OK. Diagnostics
+  the app learns their IDs. Show on TV: phone becomes a touchpad; choose and pick on the TV. Diagnostics
   › Share includes the Picks report.
 - **v0.4.1: after waking the TV from the app, it should open Home instead of "No signal".** Setting under the
   TV name menu ("After turning on: open Home").
@@ -67,6 +67,9 @@ Things we decided to remember for later.
 - **iPhone version** for the other household phone (original ask).
 
 ## Done
+- v0.6.0: "On TV" ticked = the phone becomes a full-screen touchpad for the picker on the TV (point and click,
+  "Pointing at: …" reported by the TV page, mic at the bottom). Unticked = the normal phone screens. The chooser
+  is always on the TV page now, so the separate lean-back setting is gone.
 - v0.5.5: Diagnostics logs each failed connect attempt during turn-on (to see whether the ~9 s between "network up"
   and "connected" is the TV booting or the app). Closing the picker before any picks is "closed before any
   picks", not "gave up". v0.5.4 turn-on confirmed working on the TV (network up 17.3 s, connected 26.1 s).

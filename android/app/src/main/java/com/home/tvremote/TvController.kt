@@ -389,6 +389,9 @@ class TvController(app: Application) : AndroidViewModel(app), TvActions {
     override fun phoneIp(): String? = Discovery.phoneWifiIp(getApplication())
     override val tvIp: String? get() = prefs.getString("ip", null)
     override fun note(message: String, error: Boolean) = say(message, error)
+    override fun pointerMove(dx: Float, dy: Float) = move(dx, dy)
+    override fun pointerTap() = tap()
+    override fun pointerScroll(dy: Float) = scroll(dy)
 
     fun diagnostics(): String = buildString {
         appendLine("App ${com.home.tvremote.BuildConfig.VERSION_NAME} · TV ${prefs.getString("ip", "?")} · connected=$connected")

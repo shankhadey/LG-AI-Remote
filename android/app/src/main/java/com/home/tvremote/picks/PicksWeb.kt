@@ -18,6 +18,8 @@ class PicksWeb(
     private val state: () -> String,
     private val action: (String, String) -> Unit,
     private val allowedIp: String?,
+    /** What the TV pointer is over (e.g. "Seinfeld · Play"), shown on the phone. */
+    private val focus: (String) -> Unit = {},
 ) {
     val token: String = ByteArray(9).also { SecureRandom().nextBytes(it) }.joinToString("") { "%02x".format(it) }
     private var socket: ServerSocket? = null
@@ -52,6 +54,7 @@ class PicksWeb(
             !ok -> Triple("403 Forbidden", "text/plain", "Forbidden")
             path == "/" || path == "/picks" -> Triple("200 OK", "text/html; charset=utf-8", PAGE)
             path == "/s" -> Triple("200 OK", "application/json", state())
+            path == "/f" -> { focus(q["l"].orEmpty()); Triple("200 OK", "application/json", "{}") }
             path == "/a" -> { action(q["do"].orEmpty(), q["v"].orEmpty()); Triple("200 OK", "application/json", state()) }
             else -> Triple("404 Not Found", "text/plain", "Not found")
         }
@@ -99,6 +102,8 @@ button.on:focus,button.on:hover{background:#FFFFFF;color:#0C0C0E}
 var k=new URLSearchParams(location.search).get('k'),v=-1,cur=null;
 function esc(s){return String(s==null?'':s).replace(/[&<>"]/g,function(c){return{'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]})}
 function req(url,cb){var r=new XMLHttpRequest();r.open('GET',url+(url.indexOf('?')<0?'?':'&')+'k='+k+'&t='+Date.now());r.onload=function(){try{cb(JSON.parse(r.responseText))}catch(e){}};r.send();}
+function label(b){var t=(b.querySelector('b')||b).textContent.replace('▶','').trim(),c=b.parentNode&&b.parentNode.parentNode,h=c&&c.className==='card'&&c.querySelector('h2');return h?h.textContent+' · '+t:t}
+var told='';function tell(b){var l=label(b);if(l===told)return;told=l;req('/f?l='+encodeURIComponent(l),function(){})}
 function act(d,val){req('/a?do='+d+'&v='+encodeURIComponent(val||''),show)}
 function btn(id,cls,html,d,val){return '<button id="'+id+'" class="'+cls+'" data-d="'+d+'" data-v="'+esc(val)+'">'+html+'</button>'}
 function show(s){if(!s||s.v===v)return;v=s.v;cur=s;var f=document.activeElement&&document.activeElement.id,h='';
@@ -122,10 +127,10 @@ function show(s){if(!s||s.v===v)return;v=s.v;cur=s;var f=document.activeElement&
    '<div class="acts">'+btn('p'+i,'primary','▶ Play','play',i)+btn('n'+i,'','Not now','notnow',i)+btn('x'+i,'','Never','never',i)+'</div></div>';});
   h+='</div><div class="row" style="margin-top:2.4vh">'+btn('more','','Show 3 more','more','')+(s.leanBack?btn('back','','Back to moods','back',''):'')+'</div>';
  }
- h+='<div class="foot"><span>Point and press OK · or use your phone</span><span>Data from TMDB</span></div>';
+ h+='<div class="foot"><span>Point with your phone · tap to choose</span><span>Data from TMDB</span></div>';
  document.getElementById('app').innerHTML=h;
  var bs=[].slice.call(document.querySelectorAll('button'));
- bs.forEach(function(b){b.onclick=function(){act(b.getAttribute('data-d'),b.getAttribute('data-v'))};b.onmouseover=function(){b.focus()}});
+ bs.forEach(function(b){b.onclick=function(){act(b.getAttribute('data-d'),b.getAttribute('data-v'))};b.onmouseover=function(){b.focus()};b.onfocus=function(){tell(b)}});
  var keep=f&&document.getElementById(f);(keep||bs[0])&&(keep||bs[0]).focus();}
 // Arrow keys move between buttons (for remotes without a pointer).
 document.addEventListener('keydown',function(e){var bs=[].slice.call(document.querySelectorAll('button'));if(!bs.length)return;
