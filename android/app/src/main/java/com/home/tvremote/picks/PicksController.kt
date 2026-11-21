@@ -201,6 +201,17 @@ class PicksController(
 
     fun back() { job?.cancel(); step = Step.Choose; bump() }
 
+    // ---- favourites ("shows you loved") -------------------------------------
+    /** Show the card for this person: not "Together", fewer than 3 favourites, not snoozed. */
+    fun wantsFavourites(person: String = who) = person != Catalog.TOGETHER && person in store.people &&
+        store.favourites(person).size < 3 && !store.favouritesSnoozed(person)
+    /** Bumped when favourites change, so screens showing them redraw. */
+    var favVersion by mutableStateOf(0)
+        private set
+    fun favouritesLater(person: String = who) { store.snoozeFavourites(person); favVersion++ }
+    fun saveFavourites(person: String, list: List<Pair<String, String>>) { store.setFavourites(person, list); favVersion++ }
+    suspend fun searchTitles(q: String): List<Title> = runCatching { Tmdb(store.tmdbKey).search(q) }.getOrDefault(emptyList())
+
     // ---- feedback ----------------------------------------------------------
     fun notNow(i: Int) = dismiss(i, never = false)
     fun never(i: Int) = dismiss(i, never = true)

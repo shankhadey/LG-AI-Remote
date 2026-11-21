@@ -135,6 +135,19 @@ class PicksStore(private val prefs: SharedPreferences) {
         val arr = obj(j, "liked").optJSONArray(who) ?: JSONArray().also { obj(j, "liked").put(who, it) }
         arr.put(JSONObject().put("key", key).put("name", name))
     }
+    /** Shows/movies a person named as loved ("favourites"). "Together" = everyone's. */
+    fun favourites(who: String): List<Pair<String, String>> {
+        if (who == Catalog.TOGETHER) return people.flatMap { favourites(it) }.distinctBy { it.first }
+        val arr = learning().optJSONObject("favourites")?.optJSONArray(who) ?: return emptyList()
+        return (0 until arr.length()).map { arr.getJSONObject(it) }.map { it.optString("key") to it.optString("name") }
+    }
+    fun setFavourites(who: String, list: List<Pair<String, String>>) = edit { j ->
+        obj(j, "favourites").put(who, JSONArray(list.map { JSONObject().put("key", it.first).put("name", it.second) }))
+    }
+    /** "Later" on the favourites card: hidden for a week. */
+    fun favouritesSnoozed(who: String, now: Long = System.currentTimeMillis()) = now - prefs.getLong("favLater:$who", 0) < 7 * DAY
+    fun snoozeFavourites(who: String, now: Long = System.currentTimeMillis()) = prefs.edit().putLong("favLater:$who", now).apply()
+
     /** Quick-backs under 15 min: avoided for this person for two weeks. */
     fun recentBails(who: String, now: Long = System.currentTimeMillis()): Set<String> =
         sessions().filter { it.who == who && it.outcome == "quick-back" && (it.leftAfterMin ?: 99) < 15 && now - it.openedAt < 14 * DAY }

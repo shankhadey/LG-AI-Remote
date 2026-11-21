@@ -258,6 +258,44 @@ class PicksTest {
         assertTrue("contentTarget" in b)
     }
 
+    @Test fun favouritesSteerPicksAndAreNeverOfferedThemselves() = runBlocking {
+        tmdbAndGroq(null, 500)
+        val s = store()
+        s.setFavourites("Alex", listOf("tv:1" to "Schitt's Creek"))      // TMDB "also liked" of tv:1 includes tv:3
+        val r = Recommender(s, Tmdb("k", server.url("/3").toString().trimEnd('/')), null)
+            .pick("Alex", "weekend-late", Ask(Mood.Light), null, null, "late")
+        assertTrue(r.pool.none { it.key == "tv:1" })
+        assertEquals("Fans of Schitt's Creek also loved it.", r.picks.first { it.title.key == "tv:3" }.why)
+        assertEquals("tv:3", r.pool.first().key)                          // the boost puts it first
+    }
+
+    @Test fun favouritesCardShowsUntilThreeOrLater() {
+        val s = store()
+        assertEquals(listOf("tv:1" to "A", "movie:2" to "B"), s.apply { setFavourites("Alex", listOf("tv:1" to "A", "movie:2" to "B")) }.favourites("Alex"))
+        s.setFavourites("Sam", listOf("tv:1" to "A", "tv:9" to "C"))
+        assertEquals(3, s.favourites(Catalog.TOGETHER).size)               // everyone's, without duplicates
+        val pc = PicksController(s, FakeTv(), CoroutineScope(StandardTestDispatcher()), clock = { at(Calendar.TUESDAY, 21, 30) }, onDevice = null, netflixIdOf = null)
+        assertTrue(pc.wantsFavourites("Alex"))
+        assertFalse(pc.wantsFavourites(Catalog.TOGETHER))
+        pc.saveFavourites("Alex", s.favourites("Alex") + ("tv:5" to "D"))
+        assertFalse(pc.wantsFavourites("Alex"))
+        pc.favouritesLater("Sam")
+        assertFalse(pc.wantsFavourites("Sam"))
+    }
+
+    @Test fun tmdbSearchKeepsOnlySeriesAndFilms() = runBlocking {
+        server.dispatcher = object : Dispatcher() {
+            override fun dispatch(r: RecordedRequest) = MockResponse().setBody(JSONObject().put("results", org.json.JSONArray()
+                .put(JSONObject().put("media_type", "tv").put("id", 1).put("name", "Fleabag").put("first_air_date", "2016-07-21"))
+                .put(JSONObject().put("media_type", "person").put("id", 2).put("name", "Phoebe"))
+                .put(JSONObject().put("media_type", "movie").put("id", 3).put("title", "Fleabag Live").put("release_date", "2019-09-12"))).toString())
+        }
+        server.start()
+        val r = Tmdb("k", server.url("/3").toString().trimEnd('/')).search("fleab")
+        assertEquals(listOf("tv:1", "movie:3"), r.map { it.key })
+        assertEquals("2016", r[0].year)
+    }
+
     private fun MockWebServer.takeRequestsPaths(): List<String> = (0 until requestCount).mapNotNull { takeRequest().path }
 
     // ---------------- AI fallback chain ----------------

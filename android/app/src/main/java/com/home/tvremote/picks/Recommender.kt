@@ -45,7 +45,8 @@ class Recommender(
             }
         }
 
-        val blocked = store.never(who) + store.notNow(who, slot) + store.recentBails(who) + store.liked(who).map { it.first }
+        val blocked = store.never(who) + store.notNow(who, slot) + store.recentBails(who) + store.liked(who).map { it.first } +
+            store.favourites(who).map { it.first }
         val fans = fansMap(who)
         val pool = candidates.distinctBy { it.key }
             .filter { it.key !in blocked }
@@ -92,8 +93,11 @@ class Recommender(
     private suspend fun choosePicks(top: List<Title>, who: String, ask: Ask, context: String, fans: Map<String, String>): List<Pick> {
         if (ai != null && !ai.isEmpty) {
             val taste = buildString {
-                val liked = store.liked(who).takeLast(8).map { it.second }
-                append(if (liked.isEmpty()) "no history yet" else "enjoyed ${liked.joinToString()}")
+                val favs = store.favourites(who).map { it.second }
+                val liked = store.liked(who).takeLast(8).map { it.second }.filter { it !in favs }
+                if (favs.isNotEmpty()) append("loves ${favs.joinToString()}")
+                if (liked.isNotEmpty()) append((if (favs.isNotEmpty()) "; recently enjoyed " else "enjoyed ") + liked.joinToString())
+                if (favs.isEmpty() && liked.isEmpty()) append("no history yet")
                 if (ask.likeTitles.isNotEmpty()) append("; asked for something like ${ask.likeTitles.joinToString()}")
             }
             val annotated = top.map { t -> fans[t.key]?.let { t.copy(overview = "(fans of $it also liked this) " + t.overview) } ?: t }
@@ -144,7 +148,9 @@ class Recommender(
     /** TMDB recommendations of what this person liked: candidate key → liked title. */
     private suspend fun fansMap(who: String): Map<String, String> {
         val out = mutableMapOf<String, String>()
-        for ((key, name) in store.liked(who).takeLast(3).reversed()) {
+        // Favourites first (what they said they love), then recent likes; up to 5 titles' "also liked" lists.
+        val sources = (store.favourites(who) + store.liked(who).reversed()).distinctBy { it.first }.take(5)
+        for ((key, name) in sources) {
             for (rec in runCatching { tmdb.recommendations(key) }.getOrDefault(emptySet())) out.putIfAbsent(rec, name)
         }
         return out

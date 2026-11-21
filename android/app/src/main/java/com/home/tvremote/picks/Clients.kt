@@ -70,6 +70,15 @@ class Tmdb(private val key: String, private val base: String = "https://api.them
         return (0 until arr.length()).map { parse(kind, arr.getJSONObject(it)) }
     }
 
+    /** Title search for favourites (series and films; people and others dropped). */
+    suspend fun search(query: String): List<Title> {
+        if (query.isBlank()) return emptyList()
+        val arr = get("/search/multi", mapOf("query" to query, "include_adult" to "false")).optJSONArray("results") ?: JSONArray()
+        return (0 until arr.length()).map { arr.getJSONObject(it) }.mapNotNull { o ->
+            when (o.optString("media_type")) { "movie" -> parse(Kind.Movie, o); "tv" -> parse(Kind.Tv, o); else -> null }
+        }.take(8)
+    }
+
     /** Runtime (movie length or typical episode length) and which of the user's services has it. */
     suspend fun enrich(t: Title, services: List<Service>): Title {
         val path = if (t.kind == Kind.Movie) "/movie/${t.id}" else "/tv/${t.id}"

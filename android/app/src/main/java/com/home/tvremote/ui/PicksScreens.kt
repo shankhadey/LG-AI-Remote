@@ -181,6 +181,8 @@ private fun TouchpadPicks(pc: PicksController) {
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
 private fun ChoosePicks(pc: PicksController) {
+    var editing by remember { mutableStateOf<String?>(null) }
+    editing?.let { person -> FavouritesEditor(pc, person) { editing = null }; return }
     val context = LocalContext.current
     var text by remember { mutableStateOf("") }
     var listening by remember { mutableStateOf(false) }
@@ -206,6 +208,19 @@ private fun ChoosePicks(pc: PicksController) {
             FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
                 Chip("Any", pc.language == null) { pc.selectLanguage(null) }
                 for (c in pc.store.languages) Chip(Catalog.languageLabel(c), pc.language == c) { pc.selectLanguage(c) }
+            }
+        }
+        pc.favVersion.let { }   // redraw when favourites change
+        if (pc.wantsFavourites()) {
+            Column(Modifier.fillMaxWidth().padding(top = 14.dp).card(RoundedCornerShape(18.dp)).padding(14.dp)) {
+                Text("Picks get better when I know ${pc.who}'s taste", color = Palette.text, fontSize = 15.sp, fontWeight = FontWeight.SemiBold)
+                Text("Name 3–5 shows or movies ${pc.who} loved. Takes a minute.", color = Palette.muted, fontSize = 13.sp, modifier = Modifier.padding(top = 4.dp, bottom = 10.dp))
+                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Text("Add favourites", color = Palette.onPrimary, fontSize = 13.sp, fontWeight = FontWeight.SemiBold,
+                        modifier = Modifier.clip(RoundedCornerShape(16.dp)).background(Palette.primary).clickable { editing = pc.who }.padding(horizontal = 14.dp, vertical = 8.dp))
+                    Text("Later", color = Palette.muted, fontSize = 13.sp,
+                        modifier = Modifier.clip(RoundedCornerShape(16.dp)).background(Palette.surface2).clickable { pc.favouritesLater() }.padding(horizontal = 14.dp, vertical = 8.dp))
+                }
             }
         }
         pc.keep?.let { k ->
@@ -297,11 +312,76 @@ private fun PickCard(pc: PicksController, p: Pick, i: Int) {
     }
 }
 
+// ---- favourites ----------------------------------------------------------------
+
+/** "Shows you loved" for one person: search TMDB, tap + to add, ✕ to remove. Saved on Done. */
+@OptIn(ExperimentalLayoutApi::class)
+@Composable
+private fun FavouritesEditor(pc: PicksController, person: String, onDone: () -> Unit) {
+    BackHandler(onBack = onDone)
+    val chosen = remember { mutableStateListOf<Pair<String, String>>().apply { addAll(pc.store.favourites(person)) } }
+    var query by remember { mutableStateOf("") }
+    var results by remember { mutableStateOf<List<com.home.tvremote.picks.Title>>(emptyList()) }
+    var searching by remember { mutableStateOf(false) }
+    androidx.compose.runtime.LaunchedEffect(query) {
+        if (query.trim().length < 2) { results = emptyList(); return@LaunchedEffect }
+        kotlinx.coroutines.delay(350)   // wait for typing to pause
+        searching = true; results = pc.searchTitles(query.trim()); searching = false
+    }
+    fun finish() { pc.saveFavourites(person, chosen.toList()); onDone() }
+    Column(Modifier.fillMaxSize().background(Palette.bg).padding(horizontal = 20.dp, vertical = 8.dp)) {
+        Box(Modifier.size(40.dp).clip(CircleShape).clickable { finish() }, contentAlignment = Alignment.Center) {
+            Icon(Icons.AutoMirrored.Rounded.ArrowBack, "Back", tint = Palette.text)
+        }
+        Text("$person's favourites", color = Palette.text, fontSize = 26.sp, fontWeight = FontWeight.Bold, modifier = Modifier.padding(top = 6.dp))
+        Text("Shows or movies $person loved. 3 is enough.", color = Palette.muted, fontSize = 14.sp, modifier = Modifier.padding(top = 4.dp))
+        Box(Modifier.fillMaxWidth().padding(top = 14.dp).card(RoundedCornerShape(24.dp)).padding(horizontal = 18.dp, vertical = 14.dp)) {
+            if (query.isEmpty()) Text("Type a title…", color = Palette.faint, fontSize = 15.sp)
+            BasicTextField(query, { query = it }, singleLine = true, textStyle = TextStyle(color = Palette.text, fontSize = 15.sp),
+                cursorBrush = SolidColor(Palette.accent), modifier = Modifier.fillMaxWidth())
+        }
+        Column(Modifier.weight(1f).verticalScroll(rememberScrollState()).padding(top = 10.dp)) {
+            if (searching && results.isEmpty()) Text("Searching…", color = Palette.faint, fontSize = 13.sp)
+            if (!searching && query.trim().length >= 2 && results.isEmpty()) Text("Nothing found. Check the spelling, or the TMDB key in Picks settings.", color = Palette.faint, fontSize = 13.sp)
+            for (t in results) {
+                val added = chosen.any { it.first == t.key }
+                Row(Modifier.fillMaxWidth().padding(bottom = 8.dp).card(RoundedCornerShape(14.dp))
+                    .clickable { if (added) chosen.removeAll { it.first == t.key } else chosen += t.key to t.name }.padding(8.dp),
+                    verticalAlignment = Alignment.CenterVertically) {
+                    Box(Modifier.width(40.dp).height(60.dp).clip(RoundedCornerShape(6.dp)).background(Color(android.graphics.Color.parseColor(pc.color(t.name))))) {
+                        pc.posterUrl(t)?.let { AsyncImage(model = it, contentDescription = null, contentScale = ContentScale.Crop, modifier = Modifier.fillMaxSize()) }
+                    }
+                    Column(Modifier.weight(1f).padding(horizontal = 12.dp)) {
+                        Text(t.name, color = Palette.text, fontSize = 15.sp, fontWeight = FontWeight.SemiBold, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                        Text(listOf(if (t.kind == com.home.tvremote.picks.Kind.Tv) "Series" else "Movie", t.year).filter { it.isNotEmpty() }.joinToString(" · "),
+                            color = Palette.muted, fontSize = 12.sp)
+                    }
+                    Box(Modifier.size(32.dp).clip(CircleShape).background(if (added) Palette.primary else Palette.surface2), contentAlignment = Alignment.Center) {
+                        if (added) Icon(Icons.Rounded.Check, "Added", tint = Palette.onPrimary, modifier = Modifier.size(18.dp))
+                        else Text("+", color = Palette.muted, fontSize = 20.sp)
+                    }
+                }
+            }
+            if (chosen.isNotEmpty()) {
+                Label("Added")
+                FlowRow(horizontalArrangement = Arrangement.spacedBy(6.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                    for (c in chosen.toList()) Chip("${c.second}  ✕", true) { chosen.remove(c) }
+                }
+            }
+        }
+        Box(Modifier.fillMaxWidth().padding(vertical = 10.dp).height(50.dp).clip(RoundedCornerShape(25.dp)).background(Palette.primary).clickable { finish() },
+            contentAlignment = Alignment.Center) {
+            Text(if (chosen.isEmpty()) "Done" else "Done · ${chosen.size} added", color = Palette.onPrimary, fontSize = 15.sp, fontWeight = FontWeight.SemiBold)
+        }
+    }
+}
+
 // ---- setup -------------------------------------------------------------------
 
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
 private fun SetupPicks(pc: PicksController) {
+    var editingFav by remember { mutableStateOf<String?>(null) }
     val s = pc.store
     val people = remember { mutableStateListOf<String>().apply { addAll(s.people) } }
     val services = remember { mutableStateListOf<String>().apply { addAll(s.services) } }
@@ -315,6 +395,8 @@ private fun SetupPicks(pc: PicksController) {
     var aiChoice by remember { mutableStateOf(s.aiChoice) }
     androidx.compose.runtime.LaunchedEffect(Unit) { pc.refreshOnDevice() }
     var error by remember { mutableStateOf("") }
+    // Editing someone's favourites covers the settings without losing what's been typed here.
+    editingFav?.let { person -> FavouritesEditor(pc, person) { editingFav = null }; return }
 
     Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(horizontal = 20.dp, vertical = 8.dp)) {
         Box(Modifier.size(40.dp).clip(CircleShape).clickable { pc.close() }, contentAlignment = Alignment.Center) {
@@ -348,6 +430,20 @@ private fun SetupPicks(pc: PicksController) {
         Label("Usually in bed by")
         BedtimeRow("Sun–Thu", weekday) { weekday = it }
         BedtimeRow("Fri–Sat", weekend) { weekend = it }
+
+        if (people.isNotEmpty()) {
+            Label("Favourites")
+            pc.favVersion.let { }
+            Column(Modifier.fillMaxWidth().card(RoundedCornerShape(14.dp)).padding(horizontal = 14.dp, vertical = 6.dp)) {
+                for (p in people.toList()) Row(Modifier.fillMaxWidth().clickable { editingFav = p }.padding(vertical = 8.dp), verticalAlignment = Alignment.CenterVertically) {
+                    Column(Modifier.weight(1f)) {
+                        Text(p, color = Palette.text, fontSize = 15.sp)
+                        Text(s.favourites(p).joinToString { it.second }.ifEmpty { "None yet: tap to add" }, color = Palette.muted, fontSize = 12.sp, maxLines = 2, overflow = TextOverflow.Ellipsis)
+                    }
+                    Icon(Icons.Rounded.ChevronRight, null, tint = Palette.faint)
+                }
+            }
+        }
 
         PicksAiSection(pc, tmdb, { tmdb = it }, groq, { groq = it }, aiChoice) { aiChoice = it }
 

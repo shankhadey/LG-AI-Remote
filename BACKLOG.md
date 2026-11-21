@@ -22,7 +22,10 @@ Measure it: time from opening to Play, quick-backs, "Not now" count per session.
 4. Play opens the app, not the title — v0.7.1: Netflix opens the title when Wikidata maps the TMDB ID to a Netflix
    ID (P4947/P4983 → P1874). Three LG launch formats; menu › "Test opening a show" picks the one this TV accepts.
    Then: Disney+, Prime, Hulu, Max (Wikidata has IDs for some; launch formats unknown — test the same way).
-5. "Shows you loved" card (optional, per person) — after 5 picks.
+5. ~~"Shows you loved"~~ v0.8.0: favourites card per person (until 3, "Later" = a week), TMDB search to add,
+   editable in Picks settings; favourites feed "Fans of X also loved it", the AI's taste line, and are never
+   offered as picks. Netflix links: formats 1 (api-global contentId) and 3 (https title contentId) open the title
+   on our TV; 2 (contentTarget /watch) didn't. Default 1.
 - Smaller APK: turn on R8 shrinking before sharing the app (11 MB on 18 Nov → 20 MB now; +3 MB is on-phone AI).
 
 ## Parked (low impact)
