@@ -70,6 +70,15 @@ Measure it: time from opening to Play, quick-backs, "Not now" count per session.
 - To test on the TV: Search 1/2 (Netflix search page with "The Crown" filled in).
 - Next: Prime Video and Disney+ title/search links (same 3-try test).
 
+## Speed (v0.9.4): picks took ~10 s on the phone
+- Ranking now chooses; the AI only rewrites the reasons afterwards (same picks, same order). Details for the 5 picks
+  fetched in parallel. Mood-independent data (providers, trending, favourites' "also liked", genres) cached and
+  warmed when the picker opens / the person changes.
+- Live TMDB from the cloud box: cold 1.4 s, after warm-up 0.4 s. Diagnostics: "PICKS ready in … ms (catalog+ranking …
+  · details …)" and "PICKS reasons by … in … ms".
+- Opening search inside apps: no cross-app way to pick a profile or open search; only per-app remote-button
+  sequences (fragile). Better: per-app title IDs (Wikidata has Disney+ / Prime Video IDs) → open the show directly.
+
 ## Test results 21 Nov (v0.9.2) → v0.9.3
 - Power with QS+: all passed (app on/off, TV-remote on/off noticed). Picks: "way better".
 - Netflix: Try 1 (api-global contentId) and Try 3 (https title contentId) open the show; search links (S1, S2) don't →

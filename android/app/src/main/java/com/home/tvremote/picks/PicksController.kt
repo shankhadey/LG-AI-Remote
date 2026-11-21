@@ -68,8 +68,31 @@ class PicksController(
         })
     }
 
+    private val cache = PicksCache()
+    /** Ranking chooses (fast); the AI, if any, writes the reasons afterwards (see [explainLater]). */
     private fun recommender(): Recommender =
-        makeRecommender?.invoke(store, aiChain()) ?: Recommender(store, Tmdb(store.tmdbKey, tmdbBase), aiChain())
+        makeRecommender?.invoke(store, aiChain()) ?: Recommender(store, Tmdb(store.tmdbKey, tmdbBase), aiChain(), cache = cache, aiChooses = false)
+
+    /** After picks are on screen: let the AI write warmer one-line reasons, replacing the simple ones in place. */
+    private var explainJob: Job? = null
+    private fun explainLater(context: String, ask: Ask = Ask()) {
+        val chain = aiChain(); if (chain.isEmpty || makeRecommender != null) return
+        val shownNow = picks.toList(); if (shownNow.isEmpty()) return
+        explainJob?.cancel()
+        explainJob = scope.launch {
+            val t0 = System.currentTimeMillis()
+            val got = runCatching { chain.choose(context, recommender().tasteLine(who, ask), shownNow.map { it.title }) }.getOrNull().orEmpty().toMap()
+            if (got.isEmpty()) return@launch
+            Recommender.lastEngine = chain.lastEngine ?: Recommender.lastEngine
+            for (i in picks.indices) {
+                val p = picks[i]; val why = got[p.title.key]?.takeIf { it.isNotBlank() } ?: continue
+                if (shownNow.any { it.title.key == p.title.key }) picks[i] = p.copy(why = why)
+            }
+            session?.engine = chain.lastEngine ?: ""
+            tv.log("PICKS reasons by ${chain.lastEngine} in ${System.currentTimeMillis() - t0} ms")
+            bump()
+        }
+    }
 
     var open by mutableStateOf(false)
     var step by mutableStateOf(Step.Choose)
@@ -134,6 +157,8 @@ class PicksController(
         summary = ""
         bump()
         if (showOnTv) startTvPage()
+        // Start the mood-independent work now, while they choose (services, trending, favourites' "also liked").
+        if (store.tmdbKey.isNotBlank() && makeRecommender == null) scope.launch { runCatching { recommender().warm(who) } }
     }
 
     fun close() {
@@ -150,7 +175,10 @@ class PicksController(
         if (on && open) startTvPage() else if (!on) { stopTvPage(); if (tv.foreground == "com.webos.app.browser") tv.goHome() }
     }
 
-    fun selectWho(w: String) { who = w; keep = store.keepWatching(w); session?.who = w; bump() }
+    fun selectWho(w: String) {
+        who = w; keep = store.keepWatching(w); session?.who = w; bump()
+        if (store.tmdbKey.isNotBlank() && makeRecommender == null) scope.launch { runCatching { recommender().warm(w) } }
+    }
     fun selectLanguage(code: String?) { language = code; bump() }
 
     // ---- asking ------------------------------------------------------------
@@ -189,10 +217,13 @@ class PicksController(
         job?.cancel()
         job = scope.launch {
             try {
+                val t0 = System.currentTimeMillis()
                 val r = recommender().pick(who, slot, ask, ask.language ?: language, minutesLeft, contextLine + " · " + summary)
                 set = r; picks.clear(); picks.addAll(r.picks); shown += r.picks.map { it.title.key }
                 sess.shown += r.picks.size; sess.engine = Recommender.lastEngine ?: ""; store.saveSession(sess)
                 step = Step.Results
+                tv.log("PICKS ready in ${System.currentTimeMillis() - t0} ms (${Recommender.lastTimings})")
+                explainLater(contextLine + " · " + summary, ask)
             } catch (e: Exception) {
                 message = (e as? PicksException)?.message ?: "Couldn't get picks (${e.message}). Check your internet and keys."
                 step = Step.Error
@@ -210,6 +241,7 @@ class PicksController(
                 set = r.copy(pool = prev.pool); picks.clear(); picks.addAll(r.picks); shown += r.picks.map { it.title.key }
                 session?.let { it.shown += r.picks.size; store.saveSession(it) }
                 step = Step.Results
+                explainLater(contextLine + " · " + summary)
             } catch (e: Exception) { message = e.message ?: "No more picks"; step = Step.Error }
             bump()
         }

@@ -450,6 +450,22 @@ class PicksTest {
         assertEquals(listOf("Friends"), pc.picks.map { it.title.name })
     }
 
+    @Test fun picksShowRightAwayAndTheAiOnlyRewritesTheReasonsLater() {
+        tmdbAndGroq(null, 500)
+        val ai = FakeEngine("On-phone", """{"picks":[{"id":"tv:6","why":"Warm, witty and short."}]}""")
+        val d = StandardTestDispatcher()
+        val pc = PicksController(store(), FakeTv(), CoroutineScope(d), clock = { at(Calendar.TUESDAY, 21, 30) }, onDevice = ai,
+            netflixIdOf = null, tmdbBase = server.url("/3").toString().trimEnd('/'))
+        pc.openPicker(); pc.chooseMood(Mood.Light)
+        // Real network calls (MockWebServer) inside the test dispatcher: run until the set is shown.
+        var n = 0; while (pc.step != Step.Results && n++ < 200) { d.scheduler.advanceUntilIdle(); Thread.sleep(20) }
+        assertEquals(Step.Results, pc.step)
+        n = 0; while (pc.picks.none { it.why == "Warm, witty and short." } && n++ < 200) { d.scheduler.advanceUntilIdle(); Thread.sleep(20) }
+        val keysBefore = pc.picks.map { it.title.key }
+        assertTrue(pc.picks.toString(), pc.picks.any { it.title.key == "tv:6" && it.why == "Warm, witty and short." })
+        assertEquals(keysBefore, pc.picks.map { it.title.key })                   // same picks, same order
+    }
+
     private fun MockWebServer.takeRequestsPaths(): List<String> = (0 until requestCount).mapNotNull { takeRequest().path }
 
     // ---------------- AI fallback chain ----------------

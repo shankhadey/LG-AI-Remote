@@ -7,12 +7,52 @@ import kotlinx.coroutines.async
 /** Picks shown now, plus the ranked remainder used for "Not now", "Never" and "Show more". */
 data class PickSet(val picks: List<Pick>, val pool: List<Title>, val fans: Map<String, String>)
 
+/**
+ * Things that don't depend on the mood (provider IDs, trending, favourites' "also liked", their genres), kept for a
+ * while so a set of picks only waits for the mood-specific queries. Warmed when the picker opens.
+ */
+class PicksCache {
+    private class Entry(val at: Long, val value: Any?)
+    private val map = java.util.concurrent.ConcurrentHashMap<String, Entry>()
+    @Suppress("UNCHECKED_CAST")
+    suspend fun <T> get(key: String, ttlMs: Long, load: suspend () -> T): T {
+        map[key]?.let { if (System.currentTimeMillis() - it.at < ttlMs) return it.value as T }
+        val v = load(); map[key] = Entry(System.currentTimeMillis(), v); return v
+    }
+}
+
 class Recommender(
     private val store: PicksStore,
     private val tmdb: Tmdb,
     private val ai: AiPicker?,
     private val now: () -> java.util.Calendar = { java.util.Calendar.getInstance() },
+    private val cache: PicksCache = PicksCache(),
+    /** True: the AI chooses among the top 15 (slow on-phone). False: ranking chooses, the AI only writes reasons later. */
+    private val aiChooses: Boolean = true,
 ) {
+    private val HOUR = 3_600_000L
+    private suspend fun providers() = cache.get("providers:" + store.services.sorted().joinToString(), 24 * HOUR) { tmdb.providerIds(services) }
+    private suspend fun trending(k: Kind) = cache.get("trending:$k", HOUR) { runCatching { tmdb.trending(k) }.getOrDefault(emptyMap()) }
+    private suspend fun recsOf(key: String) = cache.get("recs:$key", 24 * HOUR) { runCatching { tmdb.recommendationTitles(key) }.getOrDefault(emptyList()) }
+    private suspend fun genresOf(key: String) = cache.get("genres:$key", 24 * HOUR) { runCatching { tmdb.genresOf(key) }.getOrDefault(emptyList()) }
+    private fun sources(who: String) = (store.favourites(who) + store.liked(who).reversed()).distinctBy { it.first }.take(5)
+
+    /** Fetch the mood-independent parts in parallel (called when the picker opens). */
+    suspend fun warm(who: String) = kotlinx.coroutines.coroutineScope {
+        val jobs = listOf(async { runCatching { providers() } }) + Kind.entries.map { k -> async { trending(k) } } +
+            sources(who).map { s -> async { recsOf(s.first) } } + store.favourites(who).take(5).map { f -> async { genresOf(f.first) } }
+        jobs.forEach { it.await() }
+    }
+
+    /** "loves Succession, …; recently enjoyed …" for the AI. */
+    fun tasteLine(who: String, ask: Ask = Ask()): String = buildString {
+        val favs = store.favourites(who).map { it.second }
+        val liked = store.liked(who).takeLast(8).map { it.second }.filter { it !in favs }
+        if (favs.isNotEmpty()) append("loves ${favs.joinToString()}")
+        if (liked.isNotEmpty()) append((if (favs.isNotEmpty()) "; recently enjoyed " else "enjoyed ") + liked.joinToString())
+        if (favs.isEmpty() && liked.isEmpty()) append("no history yet")
+        if (ask.likeTitles.isNotEmpty()) append("; asked for something like ${ask.likeTitles.joinToString()}")
+    }
     /** yyyy-MM-dd, [months] ago. */
     private fun monthsAgo(months: Int): String = now().apply { add(java.util.Calendar.MONTH, -months) }
         .let { String.format(java.util.Locale.US, "%04d-%02d-%02d", it.get(java.util.Calendar.YEAR), it.get(java.util.Calendar.MONTH) + 1, it.get(java.util.Calendar.DAY_OF_MONTH)) }
@@ -40,7 +80,8 @@ class Recommender(
      * services. Scored on quality, what's trending this week, recency and taste; then re-ordered for variety.
      */
     suspend fun pick(who: String, slot: String, ask: Ask, languagePref: String?, minutesLeft: Int?, context: String): PickSet = kotlinx.coroutines.coroutineScope {
-        val providers = tmdb.providerIds(services)
+        val t0 = System.currentTimeMillis()
+        val providers = providers()
         if (providers.isEmpty()) throw PicksException("None of your services were found in TMDB's US list")
 
         val language = ask.language ?: languagePref
@@ -66,10 +107,9 @@ class Recommender(
                 if (language != null && language != "en") add(async { safe { tmdb.discover(k, providers, ask.mood, language, c, page = 2) } })
             }
         }
-        val trendJobs = wanted.map { k -> async { runCatching { tmdb.trending(k) }.getOrDefault(emptyMap()) } }
-        val sources = (store.favourites(who) + store.liked(who).reversed()).distinctBy { it.first }.take(5)
-        val recJobs = sources.map { src -> async { src.second to runCatching { tmdb.recommendationTitles(src.first) }.getOrDefault(emptyList()) } }
-        val tasteJob = async { Taste(store.favourites(who).take(5).flatMap { runCatching { tmdb.genresOf(it.first) }.getOrDefault(emptyList()) }.toSet()) }
+        val trendJobs = wanted.map { k -> async { trending(k) } }
+        val recJobs = sources(who).map { src -> async { src.second to recsOf(src.first) } }
+        val tasteJob = async { Taste(store.favourites(who).take(5).flatMap { genresOf(it.first) }.toSet()) }
 
         val discovered = lists.flatMap { it.await() }
         val trend = trendJobs.flatMap { it.await().entries }.associate { it.key to it.value }
@@ -98,9 +138,13 @@ class Recommender(
             .associateWith { score(it, fans, taste, fanCount[it.key] ?: 0, thisYear()) }
         if (scored.isEmpty()) throw PicksException("Nothing matched — try another mood, language or “Any”")
         val pool = diversify(scored)
+        val t1 = System.currentTimeMillis()
 
-        val chosen = choosePicks(balanced(pool), who, ask, context, fans)
-        finish(chosen, pool, fans, minutesLeft)
+        val chosen = if (aiChooses) choosePicks(balanced(pool), who, ask, context, fans) else { lastEngine = "Rules"; rulePicks(balanced(pool), fans) }
+        val t2 = System.currentTimeMillis()
+        val set = finish(chosen, pool, fans, minutesLeft)
+        lastTimings = "catalog+ranking ${t1 - t0} ms · choosing ${t2 - t1} ms · details ${System.currentTimeMillis() - t2} ms"
+        set
     }
 
     private fun fitsCap(t: Title, maxMin: Int?) = maxMin == null || t.runtimeMin == null ||
@@ -130,7 +174,7 @@ class Recommender(
     suspend fun more(prev: PickSet, shown: Set<String>, who: String, context: String, minutesLeft: Int?): PickSet {
         val rest = prev.pool.filter { it.key !in shown }
         if (rest.isEmpty()) throw PicksException("That's everything for this mood — try another one")
-        val chosen = choosePicks(balanced(rest), who, Ask(), context, prev.fans)
+        val chosen = if (aiChooses) choosePicks(balanced(rest), who, Ask(), context, prev.fans) else rulePicks(balanced(rest), prev.fans)
         return finish(chosen, rest, prev.fans, minutesLeft)
     }
 
@@ -193,11 +237,13 @@ class Recommender(
         return out.take(PICKS).map { Pick(it, ruleReason(it, fans)) }
     }
 
-    private suspend fun finish(chosen: List<Pick>, pool: List<Title>, fans: Map<String, String>, minutesLeft: Int?): PickSet {
+    private suspend fun finish(chosen: List<Pick>, pool: List<Title>, fans: Map<String, String>, minutesLeft: Int?): PickSet = kotlinx.coroutines.coroutineScope {
         val out = mutableListOf<Pick>()
         val used = chosen.map { it.title.key }.toMutableSet()
-        for (p in chosen) {
-            var e = runCatching { tmdb.enrich(p.title, services) }.getOrDefault(p.title)
+        // Details for all picks at once (was one after another: ~10 requests in a row).
+        val details = chosen.map { p -> async { runCatching { tmdb.enrich(p.title, services) }.getOrDefault(p.title) } }.map { it.await() }
+        for ((idx, p) in chosen.withIndex()) {
+            var e = details[idx]
             var why = p.why
             if (!fits(e, minutesLeft)) {
                 // Too long for tonight: swap in the next title that fits.
@@ -209,7 +255,7 @@ class Recommender(
             }
             out += Pick(e, why)
         }
-        return PickSet(out, pool, fans)
+        PickSet(out, pool, fans)
     }
 
     private fun fits(t: Title, minutesLeft: Int?) =
@@ -220,6 +266,8 @@ class Recommender(
         @Volatile var lastAiError: String? = null
         /** Which engine made the last set of picks: "Groq", "On-phone" or "Rules". */
         @Volatile var lastEngine: String? = null
+        /** Where the time went in the last set (for Diagnostics). */
+        @Volatile var lastTimings: String = ""
 
         private val GENRES = mapOf(35 to "Comedy", 18 to "Drama", 80 to "Crime", 9648 to "Mystery", 53 to "Thriller",
             878 to "Sci-fi", 10765 to "Sci-fi & fantasy", 14 to "Fantasy", 10749 to "Romance", 10751 to "Family",
