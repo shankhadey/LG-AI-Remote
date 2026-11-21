@@ -174,6 +174,42 @@ class PicksTest {
         assertTrue(server.takeRequestsPaths().none { it.startsWith("/3/discover/movie") })
     }
 
+    @Test fun aFilmIsIncludedEvenWhenTheAiPicksOnlySeries() = runBlocking {
+        tmdbAndGroq("""{"picks":[{"id":"tv:6","why":"a"},{"id":"tv:5","why":"b"},{"id":"tv:4","why":"c"}]}""")
+        val r = Recommender(store(), Tmdb("k", server.url("/3").toString().trimEnd('/')), AiPicker(listOf(Groq("g", "m", server.url("/openai/v1").toString().trimEnd('/')))))
+            .pick("Together", "weekend-late", Ask(Mood.Light), null, null, "Saturday night")
+        assertEquals(listOf("tv:6", "tv:5"), r.picks.take(2).map { it.title.key })
+        assertEquals(Kind.Movie, r.picks[2].title.kind)
+    }
+
+    @Test fun newMoodAsksTmdbForRecentTitlesOnly() = runBlocking {
+        tmdbAndGroq(null, 500)
+        val now = Calendar.getInstance().apply { set(2026, Calendar.NOVEMBER, 21) }
+        val r = Recommender(store(), Tmdb("k", server.url("/3").toString().trimEnd('/')), null, now = { now.clone() as Calendar })
+            .pick("Alex", "weekend-late", Ask(Mood.New), null, null, "late")
+        val discover = server.takeRequestsPaths().filter { it.startsWith("/3/discover") }
+        assertTrue(discover.isNotEmpty())
+        assertTrue(discover.toString(), discover.all { "2025-11-21" in it })   // 12 months back, every query
+        assertTrue(r.picks.all { it.title.fresh })
+    }
+
+    @Test fun otherMoodsAlsoFetchRecentTitlesAndBoostThem() = runBlocking {
+        tmdbAndGroq(null, 500)
+        Recommender(store(), Tmdb("k", server.url("/3").toString().trimEnd('/')), null).pick("Alex", "weekend-late", Ask(Mood.Light), null, null, "late")
+        val discover = server.takeRequestsPaths().filter { it.startsWith("/3/discover/tv") }
+        assertEquals(2, discover.size)                                          // recent + all-time
+        assertEquals(1, discover.count { "air_date.gte" in it })
+        val old = Title(Kind.Tv, 1, "Seinfeld", year = "1989", rating = 8.2, votes = 4000, popularity = 80.0)
+        val new = Title(Kind.Tv, 2, "New show", year = "2026", rating = 7.8, votes = 300, popularity = 80.0, fresh = true)
+        assertTrue(Recommender.score(new, emptyMap()) > Recommender.score(old, emptyMap()))
+    }
+
+    @Test fun sayingNewMeansRecent() {
+        assertEquals(Mood.New, RulesAsk.parse("anything new tonight?").mood)
+        val a = RulesAsk.parse("something new and funny")
+        assertEquals(Mood.Light, a.mood); assertTrue(a.newOnly)
+    }
+
     private fun MockWebServer.takeRequestsPaths(): List<String> = (0 until requestCount).mapNotNull { takeRequest().path }
 
     // ---------------- AI fallback chain ----------------

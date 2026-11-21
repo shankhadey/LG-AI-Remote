@@ -4,6 +4,7 @@ import java.util.Calendar
 
 /** Moods offered as one-tap buttons. Each maps to TMDB genres (movie, tv) to include and exclude. */
 enum class Mood(val label: String, val hint: String, val movieGenres: String, val tvGenres: String, val without: String) {
+    New("New", "Out this year", "", "", "27"),
     Light("Light & funny", "Easy, no thinking", "35", "35", "27|53|10752"),
     Cozy("Cozy", "Warm, comforting", "10751|10749|16|35", "10751|16|35", "27|53|80|10752"),
     Gripping("Gripping", "Can't look away", "53|80|9648|28", "80|9648|10759", "16|10751"),
@@ -28,6 +29,8 @@ data class Title(
     val posterPath: String? = null,
     val runtimeMin: Int? = null,
     val service: String? = null,
+    /** Came out (or had new episodes) recently. */
+    val fresh: Boolean = false,
 ) {
     val key get() = "${if (kind == Kind.Movie) "movie" else "tv"}:$id"
 }
@@ -127,10 +130,10 @@ object Moment {
 
     /** Default mood order for a slot, before learning. */
     fun defaultMoodOrder(slot: String): List<Mood> = when {
-        slot.endsWith("late") && slot.startsWith("weekday") -> listOf(Mood.Light, Mood.Cozy, Mood.Gripping, Mood.MindBending)
-        slot.startsWith("weekend") && (slot.endsWith("evening") || slot.endsWith("late")) -> listOf(Mood.Gripping, Mood.MindBending, Mood.Light, Mood.Cozy)
-        slot.endsWith("afternoon") || slot.endsWith("morning") -> listOf(Mood.Cozy, Mood.Light, Mood.Gripping, Mood.MindBending)
-        else -> listOf(Mood.Light, Mood.Gripping, Mood.Cozy, Mood.MindBending)
+        slot.endsWith("late") && slot.startsWith("weekday") -> listOf(Mood.Light, Mood.New, Mood.Cozy, Mood.Gripping, Mood.MindBending)
+        slot.startsWith("weekend") && (slot.endsWith("evening") || slot.endsWith("late")) -> listOf(Mood.Gripping, Mood.New, Mood.MindBending, Mood.Light, Mood.Cozy)
+        slot.endsWith("afternoon") || slot.endsWith("morning") -> listOf(Mood.Cozy, Mood.New, Mood.Light, Mood.Gripping, Mood.MindBending)
+        else -> listOf(Mood.Light, Mood.New, Mood.Gripping, Mood.Cozy, Mood.MindBending)
     }
 
     /** Learned order: moods picked most in this slot first; ties keep the default order. */

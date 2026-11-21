@@ -14,10 +14,12 @@ Things we decided to remember for later.
   some TVs drop Wi-Fi in deep standby. If it fails, turn Quick Start+ back on.
 
 ## Picks: functional issues raised 21 Nov (next)
-1. Only series are recommended, no movies.
-2. 3 picks may be too few; explain how ranking works.
-3. Picks are all old (Seinfeld, Modern Family…); nothing new.
-4. Play opens the app, not the title.
+Bar (user): must beat scrolling through dozens of titles across apps when the TV goes on, or there's no point.
+Measure it: time from opening to Play, quick-backs, "Not now" count per session.
+1. ~~Only series~~ v0.7.0: balanced series/films for the AI, ≥1 film guaranteed, too-long films swapped for films.
+2. 5 picks (decided) — design first.
+3. ~~All old~~ v0.7.0: recent titles fetched and boosted; "New" mood (last 12 months).
+4. Play opens the app, not the title — next: test deep links on the TV, Netflix first.
 - Smaller APK: turn on R8 shrinking before sharing the app (11 MB on 18 Nov → 20 MB now; +3 MB is on-phone AI).
 
 ## Parked (low impact)

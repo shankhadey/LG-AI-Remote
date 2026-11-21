@@ -405,9 +405,10 @@ object RulesAsk {
             else -> Mood.Any
         }
         val kind = when { "movie" in t || "film" in t -> Kind.Movie; "series" in t || "show" in t || "episode" in t -> Kind.Tv; else -> null }
+        val newOnly = listOf("new ", "newest", "latest", "recent", "just came out", "just released").any { it in "$t " }
         val lang = Catalog.LANGUAGES.entries.firstOrNull { it.key.lowercase() in t }?.value
         val max = Regex("(\\d+) ?(?:min|minutes)").find(t)?.groupValues?.get(1)?.toIntOrNull()
             ?: if (listOf("short", "quick").any { it in t }) 35 else null
-        return Ask(mood, kind, lang, max)
+        return Ask(if (mood == Mood.Any && newOnly) Mood.New else mood, kind, lang, max, newOnly = newOnly)
     }
 }

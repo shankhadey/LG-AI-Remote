@@ -46,7 +46,8 @@ class Tmdb(private val key: String, private val base: String = "https://api.them
     }
 
     /** Titles on the user's services matching mood/language/length. */
-    suspend fun discover(kind: Kind, providers: List<Int>, mood: Mood, language: String?, maxRuntime: Int?, page: Int = 1): List<Title> {
+    /** [since] (yyyy-MM-dd): only films released, or series with episodes aired, since then. */
+    suspend fun discover(kind: Kind, providers: List<Int>, mood: Mood, language: String?, maxRuntime: Int?, page: Int = 1, since: String? = null): List<Title> {
         val p = mutableMapOf(
             "watch_region" to region, "with_watch_providers" to providers.joinToString("|"),
             "with_watch_monetization_types" to "flatrate", "sort_by" to "popularity.desc",
@@ -58,6 +59,10 @@ class Tmdb(private val key: String, private val base: String = "https://api.them
         if (mood.without.isNotEmpty()) p["without_genres"] = mood.without
         if (language != null) p["with_original_language"] = language
         if (maxRuntime != null) p["with_runtime.lte"] = maxRuntime.toString()
+        if (since != null) {
+            p[if (kind == Kind.Movie) "primary_release_date.gte" else "air_date.gte"] = since
+            p["vote_count.gte"] = "10"   // new titles haven't had time to collect votes
+        }
         val arr = get("/discover/${if (kind == Kind.Movie) "movie" else "tv"}", p).optJSONArray("results") ?: JSONArray()
         return (0 until arr.length()).map { parse(kind, arr.getJSONObject(it)) }
     }
@@ -110,6 +115,8 @@ data class Ask(
     val language: String? = null,
     val maxMinutes: Int? = null,
     val likeTitles: List<String> = emptyList(),
+    /** Only recent titles ("something new"). */
+    val newOnly: Boolean = false,
 )
 
 /** One AI backend: given instructions and input, return a JSON object. */
@@ -171,7 +178,7 @@ class AiPicker(val engines: List<AiEngine>) {
     suspend fun parseRequest(text: String, languages: Map<String, String>): Ask? = firstSuccess { e ->
         val j = e.json(
             """Convert a TV-viewing request into JSON filters. Reply with JSON only, no other text:
-{"mood":"light|cozy|gripping|mindbending|any","kind":"movie|tv|any","language":"<ISO 639-1 code or null>","max_minutes":<number or null>,"like_titles":["..."]}
+{"mood":"light|cozy|gripping|mindbending|any","kind":"movie|tv|any","language":"<ISO 639-1 code or null>","max_minutes":<number or null>,"like_titles":["..."],"new":<true if they want something new or recent, else false>}
 Languages the household watches: ${languages.entries.joinToString { "${it.key}=${it.value}" }}.""",
             text,
         )
@@ -181,17 +188,19 @@ Languages the household watches: ${languages.entries.joinToString { "${it.key}=$
             language = j.optString("language").takeIf { it.length == 2 },
             maxMinutes = j.optInt("max_minutes").takeIf { it > 0 },
             likeTitles = j.optJSONArray("like_titles")?.let { a -> (0 until a.length()).map { a.getString(it) } }.orEmpty(),
+            newOnly = j.optBoolean("new"),
         )
     }
 
     /** Up to 3 (candidate key, reason). Unknown keys are dropped; an engine that returns none counts as failed. */
     suspend fun choose(context: String, taste: String, candidates: List<Title>): List<Pair<String, String>>? = firstSuccess { e ->
         val list = candidates.take(if (e.compact) 10 else 15).joinToString("\n") { t ->
-            "${t.key} | ${t.name} (${t.year}) | ${if (t.kind == Kind.Movie) "movie" else "series"} | lang ${t.language} | ★${"%.1f".format(t.rating)} | ${t.overview.take(if (e.compact) 90 else 160)}"
+            "${t.key} | ${t.name} (${t.year}${if (t.fresh) ", NEW" else ""}) | ${if (t.kind == Kind.Movie) "movie" else "series"} | lang ${t.language} | ★${"%.1f".format(t.rating)} | ${t.overview.take(if (e.compact) 90 else 160)}"
         }
         val j = e.json(
             """You help a household decide what to watch, fast. Choose exactly 3 titles from the candidate list,
-using ONLY ids from the list. Prefer variety and a good fit for the moment. For each, write one short, warm
+using ONLY ids from the list. Prefer variety and a good fit for the moment. When the list has both, include
+at least one movie and one series. Favour titles marked NEW over older ones of similar appeal. For each, write one short, warm
 reason (max 14 words) grounded in the description or the household's taste. No spoilers, no made-up facts.
 Reply with JSON only, no other text: {"picks":[{"id":"tv:123","why":"..."}]}""",
             "Moment: $context\nTaste: $taste\nCandidates:\n$list",
