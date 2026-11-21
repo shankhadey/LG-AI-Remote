@@ -13,6 +13,10 @@ Things we decided to remember for later.
 - **Wake after a long time off** with Quick Start+ OFF (e.g. next morning). Worked right after switching off;
   some TVs drop Wi-Fi in deep standby. If it fails, turn Quick Start+ back on.
 
+## Next small fixes (ship with the next build)
+- Picks: opening and closing the picker with 0 picks shown shouldn't count as "gave up" (record as "browsed", or
+  don't save the session). Only "gave up" if picks were shown and none played.
+
 ## Parked (low impact)
 - Diagnostics: also show attempts still in flight when Diagnostics is opened.
 
