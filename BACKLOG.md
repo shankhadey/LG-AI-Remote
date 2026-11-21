@@ -70,6 +70,14 @@ Measure it: time from opening to Play, quick-backs, "Not now" count per session.
 - To test on the TV: Search 1/2 (Netflix search page with "The Crown" filled in).
 - Next: Prime Video and Disney+ title/search links (same 3-try test).
 
+## Quick Start+ ON (21 Nov): wake from the app now ~5.6 s (was ~26 s)
+- v0.9.2: with QS+ an off TV stays reachable, so "reachable" ≠ "on". Bug: the app-open connect to a standby TV hung,
+  then failed after turn-on had already connected, and flipped the screen back to "Turn on" (user saw ~5 min of
+  "off" while links still worked). Fix: stale attempts can't overwrite newer state; power state asked from the TV;
+  live power subscription (on/off by any remote); auto-reconnect after a drop (5 tries); Diagnostics log kept
+  across restarts with APP/CHECK/CONNECT/DROPPED/RECONNECT/POWER lines.
+- Netflix link tests with QS+ on: user thinks none worked (earlier 1 and 3 did). Re-test from a fresh Home screen.
+
 ## Ranking (v0.9.1, tuned on live TMDB — LiveRankingReport, run with TMDB_KEY set)
 - Candidates in parallel: mood on their services (popular + first released/aired in 2 years), plus "fans also
   liked" of favourites/likes that fit the mood and are on their services (checked live).

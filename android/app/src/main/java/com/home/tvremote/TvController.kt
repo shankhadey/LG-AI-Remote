@@ -37,6 +37,10 @@ enum class Screen { Setup, Pairing, Remote }
 
 class TvController(app: Application) : AndroidViewModel(app), TvActions {
     private val prefs = app.getSharedPreferences("tv", Context.MODE_PRIVATE)
+    /** Wake-up timeline and other events for Diagnostics. Declared early: init code below logs to it. */
+    private val events = java.util.concurrent.ConcurrentLinkedDeque<String>(
+        // Kept across app restarts, so Diagnostics shows what happened before the app was reopened.
+        prefs.getString("events", "").orEmpty().split('\n').filter { it.isNotBlank() })
     /** "What should we watch?" (declared early: onForeground() forwards to it). */
     val picks = PicksController(PicksStore(app.getSharedPreferences("picks", Context.MODE_PRIVATE)), this, viewModelScope)
 
@@ -95,8 +99,34 @@ class TvController(app: Application) : AndroidViewModel(app), TvActions {
         checking = true
         viewModelScope.launch {
             try {
-                if (WakeOnLan.reachable(ip)) { tvOff = false; connect() } else tvOff = true
+                val t0 = System.currentTimeMillis()
+                val up = WakeOnLan.reachable(ip)
+                event("CHECK TV ${if (up) "reachable" else "not reachable"} (${System.currentTimeMillis() - t0} ms)")
+                // Reachable doesn't mean on: with Quick Start+ an off TV stays on the network. connect() asks the TV.
+                if (up) connect() else tvOff = true
             } finally { checking = false }
+        }
+    }
+
+    /** Bumped by every connection attempt and by turning on/off, so a slow, older attempt can't overwrite newer state. */
+    @Volatile private var connEpoch = 0
+    /** Whether the app is on screen (reconnect only then). */
+    @Volatile var appVisible = false
+    private var reconnectJob: kotlinx.coroutines.Job? = null
+
+    /** The connection dropped by itself: try again a few times while the app is open (1.5 s, 3 s, 6 s, 12 s, 24 s). */
+    private fun scheduleReconnect() {
+        reconnectJob?.cancel()
+        reconnectJob = viewModelScope.launch {
+            var wait = 1500L
+            repeat(5) {
+                delay(wait); wait *= 2
+                if (connected || waking || connecting || !appVisible) return@launch
+                event("RECONNECT try ${it + 1}")
+                refresh()
+                delay(3000)
+                if (connected || tvOff) return@launch
+            }
         }
     }
 
@@ -146,20 +176,30 @@ class TvController(app: Application) : AndroidViewModel(app), TvActions {
     private fun ensureTv(ip: String): LgTv = tv ?: LgTv(
         ip, prefs.getString("clientKey", null),
         onClientKey = { prefs.edit().putString("clientKey", it).apply() },
-        onDisconnect = { connected = false },
+        onDisconnect = {
+            connected = false
+            event("DROPPED connection")
+            if (!waking && System.currentTimeMillis() - offAt > 20_000) scheduleReconnect()
+        },
     ).also { tv = it }
 
     fun connect(pairing: Boolean = false) {
         val ip = prefs.getString("ip", null) ?: return
         if (connecting) return
         connecting = true
+        val epoch = ++connEpoch
+        val t0 = System.currentTimeMillis()
         viewModelScope.launch {
             try {
                 val t = ensureTv(ip)
                 val firstTime = prefs.getString("clientKey", null) == null
                 t.connect(onPrompt = { screen = Screen.Pairing })
+                if (epoch != connEpoch && connected) return@launch   // a newer attempt (e.g. turning on) already won
                 connected = true
-                tvOff = false
+                // Ask the TV, don't guess: with Quick Start+ the app can connect to a TV that is in standby.
+                val state = runCatching { withTimeout(3000) { t.request("ssap://com.webos.service.tvpower/power/getPowerState").optString("state") } }.getOrNull()
+                event("CONNECT ok in ${System.currentTimeMillis() - t0} ms, TV says ${state ?: "?"}")
+                tvOff = state in STANDBY_STATES
                 screen = Screen.Remote
                 if (firstTime || pairing) {
                     runCatching { t.request("ssap://system.notifications/createToast", JSONObject().put("message", "Phone remote connected")) }
@@ -167,6 +207,8 @@ class TvController(app: Application) : AndroidViewModel(app), TvActions {
                 }
                 afterConnect(t)
             } catch (e: Exception) {
+                event("CONNECT failed after ${System.currentTimeMillis() - t0} ms: ${e.message?.take(80)}")
+                if (epoch != connEpoch) return@launch   // stale: something newer (turning on, a later connect) is in charge
                 connected = false
                 if (screen == Screen.Pairing) screen = if (prefs.getString("clientKey", null) == null) Screen.Setup else Screen.Remote
                 // Unreachable after pairing = most likely switched off: show the "Turn on" screen instead of an error.
@@ -177,6 +219,18 @@ class TvController(app: Application) : AndroidViewModel(app), TvActions {
     }
 
     private suspend fun afterConnect(t: LgTv) {
+        // Tell us when the TV turns on or off by any remote (with Quick Start+ the connection survives standby).
+        runCatching {
+            t.subscribe("ssap://com.webos.service.tvpower/power/getPowerState") { p ->
+                val st = p.optString("state").takeIf { it.isNotEmpty() } ?: return@subscribe
+                val off = st in STANDBY_STATES
+                if (off != tvOff && !waking) {
+                    event("POWER TV says $st")
+                    if (!off && System.currentTimeMillis() - offAt < 3000) return@subscribe   // still shutting down
+                    tvOff = off
+                }
+            }
+        }
         if (!prefs.getBoolean("nameCustom", false)) viewModelScope.launch {
             // In the background so it never delays a button press.
             prefs.getString("ip", null)?.let { ip ->
@@ -505,7 +559,7 @@ class TvController(app: Application) : AndroidViewModel(app), TvActions {
 
     /** Turn off, then drop the connection: the TV goes away without closing it, which left a stale socket. */
     private fun turnOff() {
-        say("Turning off"); tvOff = true; foregroundApp = null; offAt = System.currentTimeMillis()
+        say("Turning off"); tvOff = true; foregroundApp = null; offAt = System.currentTimeMillis(); connEpoch++
         enqueue {
             runCatching { tv().request("ssap://system/turnOff") }
             tv?.close(); connected = false
@@ -521,11 +575,14 @@ class TvController(app: Application) : AndroidViewModel(app), TvActions {
 
     /** Seconds since the wake signal was first sent (shown on the Turn on screen). */
     var wakeSeconds by mutableStateOf(0)
+    fun appEvent(msg: String) = event(msg)
+
     /** Wake-up timeline and other controller events, for Diagnostics. */
-    private val events = java.util.concurrent.ConcurrentLinkedDeque<String>()
+
     private fun event(msg: String) {
         events.addFirst(java.text.SimpleDateFormat("HH:mm:ss", java.util.Locale.US).format(java.util.Date()) + " " + msg)
         while (events.size > 60) events.pollLast()
+        prefs.edit().putString("events", events.joinToString("\n")).apply()
     }
 
     private fun powerOn() {
@@ -542,6 +599,7 @@ class TvController(app: Application) : AndroidViewModel(app), TvActions {
         }
         waking = true
         wakeSeconds = 0
+        connEpoch++   // any connection attempt still running is now stale
         tv?.close(); connected = false
         if (homeOnWake) homeAfterWakeUntil = System.currentTimeMillis() + 90_000
         viewModelScope.launch {
@@ -700,6 +758,9 @@ class TvController(app: Application) : AndroidViewModel(app), TvActions {
     override fun onCleared() { tv?.close() }
 
     companion object {
+        /** Power states that mean "the TV is off" (the screen-off state still counts as on). */
+        val STANDBY_STATES = setOf("Active Standby", "Suspend", "Power Off")
+
         /** Screens that aren't "apps you use" and shouldn't count towards Most used. */
         val SYSTEM_APPS = setOf(
             "com.webos.app.home", "com.webos.app.livetv", "com.webos.surfacemanager", "com.webos.app.inputpicker",

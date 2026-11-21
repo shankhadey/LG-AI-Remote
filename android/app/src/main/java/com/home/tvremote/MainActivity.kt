@@ -58,8 +58,12 @@ class MainActivity : ComponentActivity() {
 
     override fun onResume() {
         super.onResume()
+        tv.appVisible = true
+        tv.appEvent("APP opened (connected=${tv.connected}, off=${tv.tvOff})")
         if (tv.screen == Screen.Remote && !tv.connected) tv.refresh()
     }
+
+    override fun onPause() { super.onPause(); tv.appVisible = false }
 
     // The phone's own volume buttons control the TV's volume.
     override fun dispatchKeyEvent(event: KeyEvent): Boolean {
