@@ -28,6 +28,8 @@ interface TvActions {
     fun pointerMove(dx: Float, dy: Float) {}
     fun pointerTap() {}
     fun pointerScroll(dy: Float) {}
+    /** A line for Diagnostics. */
+    fun log(message: String) {}
 }
 
 enum class Step { Setup, Choose, Loading, Results, Error }
@@ -292,8 +294,9 @@ class PicksController(
         if (web != null) return
         val ip = tv.phoneIp() ?: run { tv.note("The phone isn't on Wi-Fi, so the TV can't show the picks", true); return }
         val w = PicksWeb(state = ::webState, action = { d, v -> scope.launch(Dispatchers.Main) { webAction(d, v) } }, allowedIp = tv.tvIp,
-            focus = { l -> scope.launch(Dispatchers.Main) { pointingAt = l } })
+            focus = { l -> scope.launch(Dispatchers.Main) { pointingAt = l } }, log = { tv.log("PAGE $it") })
         w.start(); web = w; tvPageOn = true; pointingAt = ""
+        tv.log("PAGE opening on the TV")
         tv.openOnTvBrowser(w.url(ip))
     }
 

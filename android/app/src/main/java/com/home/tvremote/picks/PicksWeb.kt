@@ -20,6 +20,8 @@ class PicksWeb(
     private val allowedIp: String?,
     /** What the TV pointer is over (e.g. "Seinfeld · Play"), shown on the phone. */
     private val focus: (String) -> Unit = {},
+    /** What the page did (loaded, first pointer movement, clicks, script errors), for Diagnostics. */
+    private val log: (String) -> Unit = {},
 ) {
     val token: String = ByteArray(9).also { SecureRandom().nextBytes(it) }.joinToString("") { "%02x".format(it) }
     private var socket: ServerSocket? = null
@@ -52,10 +54,11 @@ class PicksWeb(
         val ok = q["k"] == token && (allowedIp == null || remote == allowedIp || remote == "127.0.0.1")
         val (status, type, body) = when {
             !ok -> Triple("403 Forbidden", "text/plain", "Forbidden")
-            path == "/" || path == "/picks" -> Triple("200 OK", "text/html; charset=utf-8", PAGE)
+            path == "/" || path == "/picks" -> { log("page requested by the TV"); Triple("200 OK", "text/html; charset=utf-8", PAGE) }
+            path == "/e" -> { log(q["m"].orEmpty().take(160)); Triple("200 OK", "application/json", "{}") }
             path == "/s" -> Triple("200 OK", "application/json", state())
-            path == "/f" -> { focus(q["l"].orEmpty()); Triple("200 OK", "application/json", "{}") }
-            path == "/a" -> { action(q["do"].orEmpty(), q["v"].orEmpty()); Triple("200 OK", "application/json", state()) }
+            path == "/f" -> { focus(q["l"].orEmpty()); log("pointing at " + q["l"].orEmpty()); Triple("200 OK", "application/json", "{}") }
+            path == "/a" -> { log("clicked " + q["do"].orEmpty() + " " + q["v"].orEmpty()); action(q["do"].orEmpty(), q["v"].orEmpty()); Triple("200 OK", "application/json", state()) }
             else -> Triple("404 Not Found", "text/plain", "Not found")
         }
         val bytes = body.toByteArray()
@@ -104,6 +107,15 @@ function esc(s){return String(s==null?'':s).replace(/[&<>"]/g,function(c){return
 function req(url,cb){var r=new XMLHttpRequest();r.open('GET',url+(url.indexOf('?')<0?'?':'&')+'k='+k+'&t='+Date.now());r.onload=function(){try{cb(JSON.parse(r.responseText))}catch(e){}};r.send();}
 function label(b){var t=(b.querySelector('b')||b).textContent.replace('▶','').trim(),c=b.parentNode&&b.parentNode.parentNode,h=c&&c.className==='card'&&c.querySelector('h2');return h?h.textContent+' · '+t:t}
 var told='';function tell(b){var l=label(b);if(l===told)return;told=l;req('/f?l='+encodeURIComponent(l),function(){})}
+function note(m){req('/e?m='+encodeURIComponent(m),function(){})}
+window.onerror=function(m,u,l){note('script error: '+m+' line '+l)};
+var mx=-1,my=-1,seen={};function once(k,m){if(!seen[k]){seen[k]=1;note(m)}}
+function under(){return mx<0?null:document.elementFromPoint(mx,my)}
+function btnOf(e){while(e&&e.tagName!=='BUTTON')e=e.parentNode;return e}
+document.addEventListener('mousemove',function(e){mx=e.clientX;my=e.clientY;once('mm','pointer seen by the page at '+mx+','+my);var b=btnOf(under());if(b&&document.activeElement!==b)b.focus()},true);
+document.addEventListener('mousedown',function(e){once('md','click seen by the page')},true);
+document.addEventListener('keydown',function(e){once('k'+e.keyCode,'key '+e.keyCode+' seen by the page');
+ if(e.keyCode===13){var b=btnOf(under())||btnOf(document.activeElement);if(b){e.preventDefault();b.click()}}},true);
 function act(d,val){req('/a?do='+d+'&v='+encodeURIComponent(val||''),show)}
 function btn(id,cls,html,d,val){return '<button id="'+id+'" class="'+cls+'" data-d="'+d+'" data-v="'+esc(val)+'">'+html+'</button>'}
 function show(s){if(!s||s.v===v)return;v=s.v;cur=s;var f=document.activeElement&&document.activeElement.id,h='';
@@ -138,6 +150,7 @@ document.addEventListener('keydown',function(e){var bs=[].slice.call(document.qu
  if(!d||!r)return;bs.forEach(function(b){if(b===a)return;var q=b.getBoundingClientRect(),dx=(q.left+q.width/2)-(r.left+r.width/2),dy=(q.top+q.height/2)-(r.top+r.height/2);
  if(d[0]&&Math.sign(dx)!==d[0]||d[1]&&Math.sign(dy)!==d[1])return;var dist=Math.abs(dx)+Math.abs(dy)*(d[0]?3:1)+Math.abs(dx)*(d[1]?3:0);if(dist<bd){bd=dist;best=b}});
  if(best){best.focus();e.preventDefault()}});
+note('page loaded '+window.innerWidth+'x'+window.innerHeight+' · '+navigator.userAgent.slice(0,90));
 req('/s',show);setInterval(function(){req('/s',show)},800);
 </script></body></html>
 """.trimIndent()

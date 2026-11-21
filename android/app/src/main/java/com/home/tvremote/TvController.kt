@@ -390,7 +390,9 @@ class TvController(app: Application) : AndroidViewModel(app), TvActions {
     override val tvIp: String? get() = prefs.getString("ip", null)
     override fun note(message: String, error: Boolean) = say(message, error)
     override fun pointerMove(dx: Float, dy: Float) = move(dx, dy)
-    override fun pointerTap() = tap()
+    // On the picks page a real pointer click is what a web page understands (OK is a key press there).
+    override fun pointerTap() = sendTap("click")
+    override fun log(message: String) = event(message)
     override fun pointerScroll(dy: Float) = scroll(dy)
 
     fun diagnostics(): String = buildString {
@@ -487,7 +489,7 @@ class TvController(app: Application) : AndroidViewModel(app), TvActions {
     private val events = java.util.concurrent.ConcurrentLinkedDeque<String>()
     private fun event(msg: String) {
         events.addFirst(java.text.SimpleDateFormat("HH:mm:ss", java.util.Locale.US).format(java.util.Date()) + " " + msg)
-        while (events.size > 30) events.pollLast()
+        while (events.size > 60) events.pollLast()
     }
 
     private fun powerOn() {

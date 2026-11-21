@@ -67,6 +67,11 @@ Things we decided to remember for later.
 - **iPhone version** for the other household phone (original ask).
 
 ## Done
+- v0.6.1 (diagnosing): v0.6.0 on the TV — page loaded and the pointer moved, but the page never reported a
+  button under the pointer and OK (ENTER) clicked nothing. Now: tap sends a real pointer click while the picks
+  page is up; the page clicks the button under the pointer on OK; Diagnostics records PAGE lines (loaded, pointer
+  seen, keys seen, clicks, script errors). Page verified in desktop Chromium. Wake gap confirmed TV-side (attempts
+  time out until ~23–25 s after wake).
 - v0.6.0: "On TV" ticked = the phone becomes a full-screen touchpad for the picker on the TV (point and click,
   "Pointing at: …" reported by the TV page, mic at the bottom). Unticked = the normal phone screens. The chooser
   is always on the TV page now, so the separate lean-back setting is gone.
