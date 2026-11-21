@@ -109,8 +109,9 @@ class CommandParserTest {
     }
 
     @Test fun misheardAppNames() {
-        check("open netflex", Command.OpenApp(netflix))      // what the phone actually heard
-        check("open nerfkex", Command.OpenApp(netflix))      // what was typed in the bug report
+        // Loose matches still open the app, after checking there's no show or film with exactly that name.
+        check("open netflex", Command.MaybeApp(netflix, "netflex"))      // what the phone actually heard
+        check("open nerfkex", Command.MaybeApp(netflix, "nerfkex"))      // what was typed in the bug report
         check("Netflex", Command.OpenApp(netflix))
         check("launch you tube", Command.OpenApp(youtube))
         check("search for the crown on netflex", Command.Search("the crown", netflix))
@@ -121,7 +122,12 @@ class CommandParserTest {
         val bare = CommandParser(emptyList())
         assertEquals(Command.OpenApp(TvApp("netflix", "Netflix")), bare.parse("open netflix"))
         assertEquals(Command.OpenApp(TvApp("youtube.leanback.v4", "YouTube")), bare.parse("open youtube"))
-        assertEquals(Command.OpenApp(TvApp("netflix", "Netflix")), bare.parse("open netflex"))
+        assertEquals(Command.MaybeApp(TvApp("netflix", "Netflix"), "netflex"), bare.parse("open netflex"))
+    }
+
+    @Test fun exactAppNamesOpenStraightAway() {
+        check("open netflix", Command.OpenApp(netflix))
+        check("open the crown", Command.NoSuchApp("crown"))
     }
 
     @Test fun nonsenseIsNotACommand() {

@@ -54,7 +54,14 @@ Measure it: time from opening to Play, quick-backs, "Not now" count per session.
   also used as a soft negative signal. Picks summary + last 20 sessions in Diagnostics with Copy / Share.
   Limitation: can't see title changes inside an app, only which app is in front.
 
-## Opening titles (v0.8.1)
+## Opening titles (v0.9.0)
+- Default for apps without a direct link (Prime, Disney+, Hulu, Max, Apple TV+…): open the app; when its search box
+  is selected (TV keyboard opens) the title is typed and Enter pressed automatically (2-minute window).
+- Voice order: keyword commands → exact app names → exact title (TMDB, beats loose app sound-alikes) → AI
+  (title / person / description / mood) → message saying why ("Barbie is on Max, which isn't one of your
+  services"). "play/watch" with nothing found → YouTube, saying so. "search for X on Netflix" → Netflix search page;
+  other apps → auto-type.
+- Person / description → shown as picks (on their services only).
 - Voice: "open / play / watch <title>" (optionally "on <service>") → TMDB search → which of their services has
   it → opened like Play. App names still win. Not on their services → YouTube search (play/watch) or a message.
 - "Not it?" bar on the remote for 3 min after opening: Netflix with ID → search page → other format → type it.

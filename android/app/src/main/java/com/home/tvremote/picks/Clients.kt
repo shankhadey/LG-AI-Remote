@@ -79,6 +79,22 @@ class Tmdb(private val key: String, private val base: String = "https://api.them
         }.take(8)
     }
 
+    /** Names of the subscription services that carry a title in this region (for "it's on Max"). */
+    suspend fun providerNames(t: Title): List<String> {
+        val path = if (t.kind == Kind.Movie) "/movie/${t.id}" else "/tv/${t.id}"
+        val flat = runCatching { get("$path/watch/providers").optJSONObject("results")?.optJSONObject(region)?.optJSONArray("flatrate") }.getOrNull()
+        return (0 until (flat?.length() ?: 0)).map { flat!!.getJSONObject(it).optString("provider_name") }
+    }
+
+    /** A person's best-known series and films, most popular first ("shows with Jennifer Aniston"). */
+    suspend fun personCredits(name: String): List<Title> {
+        val p = get("/search/person", mapOf("query" to name)).optJSONArray("results")?.optJSONObject(0) ?: return emptyList()
+        val arr = get("/person/${p.optInt("id")}/combined_credits").optJSONArray("cast") ?: JSONArray()
+        return (0 until arr.length()).map { arr.getJSONObject(it) }.mapNotNull { o ->
+            when (o.optString("media_type")) { "movie" -> parse(Kind.Movie, o); "tv" -> parse(Kind.Tv, o); else -> null }
+        }.filter { it.votes >= 20 }.distinctBy { it.key }.sortedByDescending { it.popularity }.take(15)
+    }
+
     /** Runtime (movie length or typical episode length) and which of the user's services has it. */
     suspend fun enrich(t: Title, services: List<Service>): Title {
         val path = if (t.kind == Kind.Movie) "/movie/${t.id}" else "/tv/${t.id}"
@@ -202,6 +218,20 @@ Languages the household watches: ${languages.entries.joinToString { "${it.key}=$
             likeTitles = j.optJSONArray("like_titles")?.let { a -> (0 until a.length()).map { a.getString(it) } }.orEmpty(),
             newOnly = j.optBoolean("new"),
         )
+    }
+
+    /** Open-ended requests ("that show with Jennifer Aniston", "the submarine movie"), when no rule understood them. */
+    suspend fun interpret(text: String): JSONObject? = firstSuccess { e ->
+        e.json(
+            """Interpret what someone said to their TV remote. Reply with JSON only, no other text:
+{"kind":"title|person|description|mood|other","titles":["..."],"person":"<name or null>"}
+title: they named a show or film; give its official title (fix mishearings).
+person: they want something with an actor or director; give the name.
+description: they described a show or film; list up to 5 real titles that best match, best first.
+mood: they want a recommendation by mood or genre.
+other: anything else.""",
+            text,
+        ).takeIf { it.has("kind") }
     }
 
     /** Up to [PICKS] (candidate key, reason). Unknown keys are dropped; an engine that returns none counts as failed. */

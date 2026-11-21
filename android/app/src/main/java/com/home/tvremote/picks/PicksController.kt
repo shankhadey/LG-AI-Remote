@@ -29,6 +29,8 @@ interface TvActions {
     fun openTitle(appId: String, title: String, extras: JSONObject) = openApp(appId, title)
     /** Types into the TV's search box and presses Enter, only if a keyboard is open there. False if none is. */
     fun typeIntoSearch(text: String): Boolean = false
+    /** Type [text] (and press Enter) the moment a search box is selected on the TV, within the next ~2 minutes. */
+    fun typeWhenSearchOpens(text: String) {}
     // The TV pointer, for the touchpad shown while the picker is on the TV.
     fun pointerMove(dx: Float, dy: Float) {}
     fun pointerTap() {}
@@ -287,10 +289,11 @@ class PicksController(
             }
             tv.note("Opening $name on Netflix")
         } else {
+            // No direct link for this app yet: open it, and type the name as soon as its search box is selected.
             tv.openApp(appId, svc.name)
-            // There's no way (yet) to open a title in this app from outside, so say what to look for.
-            scope.launch { delay(4000); tv.toastOnTv("Look for: $name") }
-            tv.note("Opening ${svc.name} — look for $name")
+            tv.typeWhenSearchOpens(name)
+            scope.launch { delay(4000); tv.toastOnTv("Select Search — the remote will type “$name”") }
+            tv.note("Opening ${svc.name}. Select its search box and “$name” is typed for you.")
             remember(Opened(key, name, svc.name, appId, null, listOf("type")))
         }
     }
@@ -321,7 +324,7 @@ class PicksController(
             s.startsWith("format:") && o.netflixId != null -> tv.openTitle(o.appId, o.service, DeepLinks.netflix(o.netflixId, s.removePrefix("format:")))
             s == "type" -> {
                 if (tv.typeIntoSearch(o.name)) tv.note("Typed “${o.name}”")
-                else tv.note("Point at ${o.service}'s search box and tap it, then tap “Type” again", error = true)
+                else { tv.typeWhenSearchOpens(o.name); tv.note("Select ${o.service}'s search box: “${o.name}” is typed as soon as it opens") }
                 return   // stays on "type" so it can be tapped again
             }
         }
@@ -332,13 +335,25 @@ class PicksController(
      * Voice: "open / play / watch <title>" (optionally "on <service>"). Finds the title on TMDB, checks which of
      * the household's services has it, and opens it like Play. False when nothing on their services matches.
      */
-    suspend fun openByName(query: String, serviceHint: String? = null): Boolean {
-        if (store.tmdbKey.isBlank()) return false
+    /** Result of looking a title up by name. */
+    sealed interface Found {
+        data object Opened : Found
+        data class Elsewhere(val name: String, val services: List<String>) : Found
+        data object Nothing : Found
+    }
+
+    suspend fun openByName(query: String, serviceHint: String? = null): Boolean = findAndOpen(query, serviceHint) == Found.Opened
+
+    /**
+     * "open / play / watch <title>" (optionally "on <service>"): TMDB search, which of the household's services has
+     * it, then open it like Play. [exactOnly]: only a title whose name matches exactly (used before a loose app match).
+     */
+    suspend fun findAndOpen(query: String, serviceHint: String? = null, exactOnly: Boolean = false): Found {
+        if (store.tmdbKey.isBlank()) return Found.Nothing
         val tmdb = Tmdb(store.tmdbKey, tmdbBase)
         val mine = Catalog.SERVICES.filter { it.name in store.services }
         val found = runCatching { tmdb.search(query) }.getOrDefault(emptyList()).take(5)
-        fun norm(x: String) = x.lowercase().replace(Regex("[^a-z0-9]"), "")
-        val ranked = found.sortedByDescending { if (norm(it.name) == norm(query)) 1 else 0 }
+        val ranked = found.sortedByDescending { if (norm(it.name) == norm(query)) 1 else 0 }.filter { !exactOnly || norm(it.name) == norm(query) }
         for (t in ranked) {
             val e = runCatching { tmdb.enrich(t, mine) }.getOrDefault(t)
             val svcName = e.service?.takeIf { serviceHint == null || it == serviceHint }
@@ -348,11 +363,76 @@ class PicksController(
             val appId = appIdFor(svc) ?: continue
             tv.log("VOICE “$query” → ${t.name} (${t.year}) on $svcName")
             openIn(t.key, t.name, svc, appId)
-            return true
+            return Found.Opened
         }
-        tv.log("VOICE “$query” → nothing on your services")
-        return false
+        // Found, but not on their services: say where it is instead of searching YouTube.
+        ranked.firstOrNull { norm(it.name) == norm(query) }?.let { t ->
+            val where = runCatching { tmdb.providerNames(t) }.getOrDefault(emptyList())
+            tv.log("VOICE “$query” → ${t.name}, on ${where.ifEmpty { listOf("no subscription service") }.joinToString()}")
+            return Found.Elsewhere(t.name, where)
+        }
+        tv.log("VOICE “$query” → nothing found")
+        return Found.Nothing
     }
+
+    private fun norm(x: String) = x.lowercase().trim().removePrefix("the ").replace("&", "and").replace(Regex("[^a-z0-9]"), "")
+
+    /**
+     * Last resort for what rules didn't understand: the AI says if it's a title, a person, a description or a mood.
+     * Titles open directly; several matches (a person's films, a description) are shown as picks. Returns a message
+     * for the user when nothing on their services fits, or null when handled.
+     */
+    suspend fun interpret(text: String): String? {
+        if (!store.isSetUp || store.tmdbKey.isBlank()) return "Didn't understand “$text”"
+        val j = aiChain().interpret(text) ?: return "Didn't understand “$text”"
+        tv.log("VOICE AI “$text” → $j")
+        val tmdb = Tmdb(store.tmdbKey, tmdbBase)
+        val mine = Catalog.SERVICES.filter { it.name in store.services }
+        suspend fun onMine(ts: List<Title>) = ts.take(10).map { runCatching { tmdb.enrich(it, mine) }.getOrDefault(it) }.filter { it.service != null }
+        val titles = j.optJSONArray("titles")?.let { a -> (0 until a.length()).map { a.getString(it) } }.orEmpty().filter { it.isNotBlank() }
+        return when (j.optString("kind")) {
+            "title" -> titles.firstOrNull()?.let { name ->
+                when (val r = findAndOpen(name)) {
+                    Found.Opened -> null
+                    is Found.Elsewhere -> elsewhere(r)
+                    Found.Nothing -> "Couldn't find “$name”"
+                }
+            } ?: "Didn't understand “$text”"
+            "person" -> {
+                val person = j.optString("person").takeIf { it.isNotBlank() && it != "null" } ?: return "Didn't understand “$text”"
+                val list = onMine(runCatching { tmdb.personCredits(person) }.getOrDefault(emptyList()))
+                if (list.isEmpty()) "Nothing with $person on your services" else { showList(list, "With $person") { "With $person." }; null }
+            }
+            "description" -> {
+                val list = onMine(titles.mapNotNull { n -> runCatching { tmdb.search(n) }.getOrNull()?.firstOrNull() }.distinctBy { it.key })
+                when {
+                    list.size == 1 -> { val t = list[0]; Catalog.SERVICES.firstOrNull { it.name == t.service }?.let { s -> appIdFor(s)?.let { openIn(t.key, t.name, s, it) } }; null }
+                    list.isNotEmpty() -> { showList(list, "“$text”") { "Matches what you described." }; null }
+                    else -> "Nothing like that on your services"
+                }
+            }
+            "mood" -> { openPicker(); if (step == Step.Choose) ask(text); null }
+            else -> "Didn't understand “$text”"
+        }
+    }
+
+    fun elsewhere(r: Found.Elsewhere): String =
+        if (r.services.isEmpty()) "${r.name} isn't on a subscription service in the US"
+        else "${r.name} is on ${r.services.take(2).joinToString(" and ")}, which isn't one of your services"
+
+    /** Shows a ready-made list (a person's films, titles matching a description) on the picks screen. */
+    private fun showList(list: List<Title>, label: String, why: (Title) -> String) {
+        openPicker()
+        if (step != Step.Choose) return   // first-run setup comes first
+        session?.how = "voice: $label"
+        summary = label
+        val ps = list.map { Pick(it, why(it)) }
+        set = PickSet(ps.take(PICKS), list.drop(PICKS), emptyMap())
+        picks.clear(); picks.addAll(ps.take(PICKS)); shown += ps.take(PICKS).map { it.title.key }
+        session?.let { it.shown += picks.size; store.saveSession(it) }
+        step = Step.Results; bump()
+    }
+
 
     /** Which app on this TV is the service: learned app IDs first, then well-known LG IDs. */
     fun appIdFor(s: Service): String? {

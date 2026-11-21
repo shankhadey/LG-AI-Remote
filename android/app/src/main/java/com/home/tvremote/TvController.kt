@@ -220,7 +220,18 @@ class TvController(app: Application) : AndroidViewModel(app), TvActions {
         runCatching {
             // Tell us when a text box is focused on the TV, so typing/voice goes straight into it.
             t.subscribe("ssap://com.webos.service.ime/registerRemoteKeyboard") { p ->
-                p.optJSONObject("currentWidget")?.let { tvKeyboardOpen = it.optBoolean("focus", false) }
+                p.optJSONObject("currentWidget")?.let {
+                    val open = it.optBoolean("focus", false)
+                    val wasOpen = tvKeyboardOpen
+                    tvKeyboardOpen = open
+                    // A search box was just selected and something is waiting to be typed: type it and search.
+                    val waiting = autoType
+                    if (open && !wasOpen && waiting != null && System.currentTimeMillis() < autoTypeUntil) {
+                        autoType = null
+                        event("TYPE “$waiting” into the search box")
+                        typeOnTv(waiting); enterOnTv(); say("Typed “$waiting”")
+                    }
+                }
             }
         }
         // Refresh on every connect and MERGE: Wake-on-LAN only works on the interface the TV actually
@@ -378,6 +389,10 @@ class TvController(app: Application) : AndroidViewModel(app), TvActions {
     // ---- TvActions (for the picker) -------------------------------------------
     override fun openApp(appId: String, title: String) = launch(TvApp(appId, title))
     override fun openTitle(appId: String, title: String, extras: JSONObject) = launch(TvApp(appId, title, launchExtras = extras))
+    @Volatile private var autoType: String? = null
+    @Volatile private var autoTypeUntil = 0L
+    override fun typeWhenSearchOpens(text: String) { autoType = text; autoTypeUntil = System.currentTimeMillis() + 120_000 }
+
     override fun typeIntoSearch(text: String): Boolean {
         if (!tvKeyboardOpen) return false
         typeOnTv(text); enterOnTv(); return true
@@ -594,9 +609,12 @@ class TvController(app: Application) : AndroidViewModel(app), TvActions {
         }
         val parsed = CommandParser(apps).parse(t)
         if (parsed == null && fromVoice) {
-            // Don't turn an unrecognised spoken command into a YouTube search; typed text still searches.
-            say("Didn't understand \"$t\". To search, say \"search for …\"", error = true)
-            return false
+            // Rules didn't understand: let the AI try (a person, a description, a mood). Never a silent YouTube search.
+            say("Thinking…")
+            viewModelScope.launch {
+                picks.interpret(t)?.let { say("$it. To search, say “search for …”", error = true) }
+            }
+            return true
         }
         val cmd = parsed ?: Command.Search(t, null)
         run(cmd)
@@ -618,16 +636,33 @@ class TvController(app: Application) : AndroidViewModel(app), TvActions {
             is Command.ChannelNumber -> { say("Channel ${cmd.number}"); ssap("ssap://tv/openChannel", JSONObject().put("channelNumber", cmd.number)) }
             is Command.Input -> { say("HDMI ${cmd.hdmi}"); ssap("ssap://system.launcher/launch", JSONObject().put("id", "com.webos.app.hdmi${cmd.hdmi}")) }
             is Command.OpenApp -> launch(cmd.app)
-            is Command.Search -> if (!cmd.title) search(cmd.query, cmd.app) else viewModelScope.launch {
-                // "play / watch X": a show or film on their services first; otherwise search as before.
+            is Command.Search -> if (!cmd.title || cmd.app?.id?.startsWith("youtube") == true) search(cmd.query, cmd.app) else viewModelScope.launch {
+                // "play / watch X": a show or film on their services first.
                 say("Looking for ${cmd.query}…")
                 val hint = cmd.app?.let { a -> com.home.tvremote.picks.Catalog.SERVICES.firstOrNull { s -> picks.appIdFor(s) == a.id }?.name }
-                if (cmd.app?.id?.startsWith("youtube") == true || !picks.openByName(cmd.query, hint)) search(cmd.query, cmd.app)
+                when (val r = picks.findAndOpen(cmd.query, hint)) {
+                    com.home.tvremote.picks.PicksController.Found.Opened -> {}
+                    is com.home.tvremote.picks.PicksController.Found.Elsewhere -> say(picks.elsewhere(r), error = true)
+                    com.home.tvremote.picks.PicksController.Found.Nothing -> {
+                        // Not a title: maybe a person or a description. Last resort: YouTube, saying so.
+                        val msg = picks.interpret(cmd.query)
+                        if (msg != null) { search(cmd.query, cmd.app); say("Not a show or film on your services — searching YouTube") }
+                    }
+                }
             }
             is Command.NoSuchApp -> viewModelScope.launch {
-                // "open X" where X isn't an app: maybe it's a show or film.
+                // "open X" where X isn't an app: maybe it's a show or film, a person, or a description.
                 say("Looking for ${cmd.name}…")
-                if (!picks.openByName(cmd.name)) say("Couldn't find an app or a show called \"${cmd.name}\" on your services", error = true)
+                when (val r = picks.findAndOpen(cmd.name)) {
+                    com.home.tvremote.picks.PicksController.Found.Opened -> {}
+                    is com.home.tvremote.picks.PicksController.Found.Elsewhere -> say(picks.elsewhere(r), error = true)
+                    com.home.tvremote.picks.PicksController.Found.Nothing ->
+                        picks.interpret("open ${cmd.name}")?.let { say("Couldn't find an app or a show called “${cmd.name}” on your services", error = true) }
+                }
+            }
+            is Command.MaybeApp -> viewModelScope.launch {
+                // Sounds a bit like an app, but an exact show or film title wins ("open Severance" isn't Settings).
+                if (picks.findAndOpen(cmd.spoken, exactOnly = true) != com.home.tvremote.picks.PicksController.Found.Opened) launch(cmd.app)
             }
             is Command.SleepTimer -> startTimer(TimerKind.TurnOff, cmd.minutes)
             is Command.ScreenTimer -> startTimer(TimerKind.OnScreen, cmd.minutes)
@@ -643,11 +678,14 @@ class TvController(app: Application) : AndroidViewModel(app), TvActions {
             say("Searching YouTube for \"$query\"")
             val url = "https://www.youtube.com/tv?launch=voice&vq=" + URLEncoder.encode(query, "UTF-8")
             ssap("ssap://system.launcher/launch", JSONObject().put("id", target.id).put("params", JSONObject().put("contentTarget", url)))
+        } else if (target.id == "netflix") {
+            say("Searching Netflix for “$query”")
+            launch(target.copy(launchExtras = com.home.tvremote.picks.DeepLinks.netflixSearch(query, picks.store.netflixSearch)))
         } else {
-            // Other apps don't accept a search from outside: open it, then the TV's search
-            // box will pick up typing/voice automatically once it's focused.
+            // No search link for this app yet: open it and type the words as soon as its search box is selected.
             launch(target)
-            say("Opened ${target.title}. Open its search box, then say \"$query\" again.")
+            typeWhenSearchOpens(query)
+            say("Opened ${target.title}. Select its search box and “$query” is typed for you.")
         }
     }
 

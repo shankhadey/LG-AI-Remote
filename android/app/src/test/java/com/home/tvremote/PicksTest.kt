@@ -355,6 +355,51 @@ class PicksTest {
         assertEquals("The Crown", pc.lastOpened?.name)
     }
 
+    private fun fakeTmdbForVoice() {
+        server.dispatcher = object : Dispatcher() {
+            override fun dispatch(r: RecordedRequest): MockResponse {
+                val p = r.path ?: ""
+                fun json(o: Any) = MockResponse().setBody(o.toString())
+                fun provider(name: String) = json(JSONObject().put("results", JSONObject().put("US", JSONObject()
+                    .put("flatrate", org.json.JSONArray().put(JSONObject().put("provider_name", name))))))
+                return when {
+                    p.startsWith("/3/search/multi") && "barbie" in p.lowercase() -> json(JSONObject().put("results", org.json.JSONArray()
+                        .put(JSONObject().put("media_type", "movie").put("id", 346698).put("title", "Barbie").put("release_date", "2023-07-21"))))
+                    p.startsWith("/3/search/person") -> json(JSONObject().put("results", org.json.JSONArray().put(JSONObject().put("id", 4491))))
+                    p.startsWith("/3/person/4491/combined_credits") -> json(JSONObject().put("cast", org.json.JSONArray()
+                        .put(JSONObject().put("media_type", "tv").put("id", 1668).put("name", "Friends").put("vote_count", 9000).put("popularity", 90.0))
+                        .put(JSONObject().put("media_type", "tv").put("id", 70796).put("name", "The Morning Show").put("vote_count", 900).put("popularity", 50.0))))
+                    p.startsWith("/3/movie/346698/watch/providers") -> provider("Max")
+                    p.startsWith("/3/tv/1668/watch/providers") -> provider("Netflix")
+                    p.startsWith("/3/tv/70796/watch/providers") -> provider("Apple TV Plus")
+                    else -> json(JSONObject())
+                }
+            }
+        }
+        server.start()
+    }
+
+    @Test fun titleOnAServiceTheyDontHaveSaysWhere() = runBlocking {
+        fakeTmdbForVoice()
+        val pc = PicksController(store(), OpenLog(), CoroutineScope(StandardTestDispatcher()), clock = { at(Calendar.TUESDAY, 21, 30) }, onDevice = null,
+            netflixIdOf = null, tmdbBase = server.url("/3").toString().trimEnd('/'))
+        val r = pc.findAndOpen("barbie")
+        assertTrue(r.toString(), r is PicksController.Found.Elsewhere)
+        assertEquals("Barbie is on Max, which isn't one of your services", pc.elsewhere(r as PicksController.Found.Elsewhere))
+    }
+
+    @Test fun aiTurnsAPersonIntoPicksOnTheirServices() = runBlocking {
+        fakeTmdbForVoice()
+        val ai = FakeEngine("On-phone", """{"kind":"person","titles":[],"person":"Jennifer Aniston"}""")
+        val s = store().apply { services = listOf("Netflix", "Hulu") }
+        val pc = PicksController(s, OpenLog(), CoroutineScope(StandardTestDispatcher()), clock = { at(Calendar.TUESDAY, 21, 30) }, onDevice = ai,
+            netflixIdOf = null, tmdbBase = server.url("/3").toString().trimEnd('/'))
+        assertNull(pc.interpret("that show with jennifer aniston"))
+        assertEquals(Step.Results, pc.step)
+        assertEquals(listOf("Friends"), pc.picks.map { it.title.name })          // The Morning Show is on Apple TV+, not theirs
+        assertEquals("With Jennifer Aniston", pc.summary)
+    }
+
     private fun MockWebServer.takeRequestsPaths(): List<String> = (0 until requestCount).mapNotNull { takeRequest().path }
 
     // ---------------- AI fallback chain ----------------

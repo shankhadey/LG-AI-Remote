@@ -17,6 +17,8 @@ sealed interface Command {
     data class Search(val query: String, val app: TvApp?, val title: Boolean = false) : Command
     /** "open X" where X isn't an app on the TV. */
     data class NoSuchApp(val name: String) : Command
+    /** "open X" where X only loosely sounds like an app: check it isn't a show or film called X first. */
+    data class MaybeApp(val app: TvApp, val spoken: String) : Command
     /** Turn the TV off after [minutes], with pop-up reminders. */
     data class SleepTimer(val minutes: Int) : Command
     /** Show a full-screen countdown on the TV. */
@@ -153,7 +155,8 @@ class CommandParser(tvApps: List<TvApp>) {
         Regex("(?:open|launch|start|go to|switch to|run|load)(?: up)?(?: the)? (.+?)(?: app)?").matchEntire(t)?.let { m ->
             val name = m.groupValues[1]
             // They clearly asked for an app, so accept a looser sound-alike ("netflex", "nerfkex").
-            return (matchApp(name) ?: fuzzyApp(name, lenient = true))?.let { Command.OpenApp(it) } ?: Command.NoSuchApp(name)
+            matchApp(name, exactOnly = true)?.let { return Command.OpenApp(it) }
+            return (matchApp(name) ?: fuzzyApp(name, lenient = true))?.let { Command.MaybeApp(it, name) } ?: Command.NoSuchApp(name)
         }
         matchApp(t, exactOnly = true)?.let { return Command.OpenApp(it) }
         fuzzyApp(t, lenient = false)?.let { return Command.OpenApp(it) }
