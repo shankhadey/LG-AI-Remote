@@ -234,7 +234,7 @@ class PicksTest {
         assertEquals(listOf("netflix"), tv.opened)
         val t0 = pc.store.sessions().last().playedAt!!
         pc.onForeground("netflix", t0 + 30_000)
-        pc.onForeground("com.webos.app.home", t0 + 9 * 60_000)
+        pc.onForeground("com.webos.app.home", t0 + 30_000 + 9 * 60_000) // 9 min after the app came up
         val s = pc.store.sessions().last()
         assertEquals("quick-back", s.outcome); assertEquals(9, s.leftAfterMin)
         assertTrue(pc.store.recentBails("Together").contains("tv:7"))
@@ -248,6 +248,35 @@ class PicksTest {
         assertEquals("watched", pc.store.sessions().last().outcome)
         assertTrue(pc.store.liked("Together").any { it.first == "movie:8" })
         assertTrue(pc.diagnostics().contains("Quick-backs"))
+    }
+
+    @Test fun leavingWithinTwoMinutesIsNotAQuickBack() {
+        val tv = FakeTv()
+        val pc = controller(tv)
+        pc.openPicker()
+        pc.picks += Pick(Title(Kind.Tv, 9, "Modern Family", service = "Netflix"), "why")
+        pc.play(0)
+        val t0 = pc.store.sessions().last().playedAt!!
+        pc.onForeground("com.webos.app.home", t0 + 5_000)        // before the app even came up: ignored
+        pc.onForeground("netflix", t0 + 20_000)
+        pc.onForeground("com.webos.app.home", t0 + 80_000)       // 1 min in: a no-start
+        assertFalse(pc.store.recentBails("Together").contains("tv:9"))
+        assertTrue(pc.store.liked("Together").none { it.first == "tv:9" })
+        pc.onForeground("netflix", t0 + 120_000)                 // came back: measuring again from here
+        pc.onForeground("com.webos.app.home", t0 + 120_000 + 5 * 60_000)
+        val s = pc.store.sessions().last()
+        assertEquals("quick-back", s.outcome); assertEquals(5, s.leftAfterMin)
+
+        // A no-start that never comes back is recorded as such and excluded from the percentages.
+        pc.openPicker()
+        pc.picks += Pick(Title(Kind.Movie, 10, "Film", service = "Netflix"), "why")
+        pc.play(0)
+        val t1 = pc.store.sessions().last().playedAt!!
+        pc.onForeground("netflix", t1 + 10_000)
+        pc.onForeground("com.webos.app.home", t1 + 70_000)
+        assertEquals("no-start", pc.store.sessions().last().outcome)
+        val d = pc.diagnostics()
+        assertTrue(d, d.contains("Quick-backs: <15 min 100%") && d.contains("1 left within 2 min (not counted)"))
     }
 
     @Test fun learnedAppIdsAreUsedForLesserKnownServices() {

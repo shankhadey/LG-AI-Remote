@@ -67,6 +67,11 @@ Things we decided to remember for later.
 - **iPhone version** for the other household phone (original ask).
 
 ## Done
+- v0.5.3: turn-on fix. The wake loop now creates the TV connection itself (it used to hand off to a slow single
+  connect when the app was opened with the TV off, adding ~11 s and briefly showing the Turn-on screen again).
+  Stays on "Turning on…" until connected, then goes straight to the remote. WakeLoop tested on a virtual clock.
+  Quick-backs: measured from when the app actually came up; leaving within 2 min is a "no-start" (not a bail,
+  not liked, excluded from the percentages, shown in Diagnostics).
 - v0.5.2: faster turn-on detection (wake sent immediately, both ports checked at once every 0.5 s, short
   connection retries; timeline in Diagnostics as WAKE lines). Turning-on screen: one state, ring around the
   button, "Still waking the TV · N s", status line says Turning on. TV name falls back to the model name.

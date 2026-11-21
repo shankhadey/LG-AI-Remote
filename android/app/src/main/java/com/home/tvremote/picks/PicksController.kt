@@ -215,7 +215,7 @@ class PicksController(
             playedKey = key; playedName = name; this.service = service; this.appId = appId
             playedAt = System.currentTimeMillis(); outcome = "played"; store.saveSession(this)
         }
-        pending = session
+        pending = session; pendingStartedAt = null
         tv.openApp(appId, svc.name)
         // There's no reliable way to open a specific title in these apps from outside, so say what to look for.
         scope.launch { delay(4000); tv.toastOnTv("Look for: $name") }
@@ -235,27 +235,38 @@ class PicksController(
 
     // ---- measurement: quick-backs --------------------------------------------
     private var pending: Session? = null
-    private var pendingStarted = false
+    private companion object { const val NO_START_MS = 2 * 60_000L }
 
-    /** Called with every change of the app on the TV screen. */
+    /** When the played app was first seen in front of the TV (the clock for quick-backs); null = not yet. */
+    private var pendingStartedAt: Long? = null
+
+    /**
+     * Called with every change of the app on the TV screen.
+     * Time is measured from when the app actually came up, not from tapping Play (apps take a while to open).
+     * Leaving within [NO_START_MS] isn't a judgement of the show (a misfire, a profile screen, a wrong app):
+     * it's a "no-start", not a quick-back, and we keep watching in case the app comes back.
+     */
     fun onForeground(appId: String, now: Long = System.currentTimeMillis()) {
         val p = pending ?: return
-        val at = p.playedAt ?: return
-        if (appId == p.appId) { pendingStarted = true; return }
-        if (!pendingStarted) return
-        val min = ((now - at) / 60_000).toInt()
-        if (min < 30) { p.leftAfterMin = min; p.outcome = "quick-back" } else { p.outcome = "watched"; store.addLiked(p.who, p.playedKey!!, p.playedName ?: "") }
-        if (min in 15..29) store.addLiked(p.who, p.playedKey!!, p.playedName ?: "") // weak signal: still counts as liked
-        store.saveSession(p); pending = null; pendingStarted = false
+        if (p.playedAt == null) return
+        if (appId == p.appId) {
+            if (pendingStartedAt == null) { pendingStartedAt = now; if (p.outcome == "no-start") p.outcome = "played" }
+            return
+        }
+        val started = pendingStartedAt ?: return
+        if (now - started < NO_START_MS) { p.outcome = "no-start"; store.saveSession(p); pendingStartedAt = null; return }
+        val min = ((now - started) / 60_000).toInt()
+        if (min < 30) { p.leftAfterMin = min; p.outcome = "quick-back" } else p.outcome = "watched"
+        if (min >= 15) store.addLiked(p.who, p.playedKey!!, p.playedName ?: "") // 15–30 min is a weak signal, still liked
+        store.saveSession(p); pending = null; pendingStartedAt = null
     }
 
-    /** A play that wasn't left within 30 minutes counts as watched (and liked). */
+    /** A play that wasn't left within 30 minutes counts as watched (and liked); a no-start is just recorded. */
     private fun settleOldPlay(now: Long = System.currentTimeMillis()) {
         val p = pending ?: return
-        if (now - (p.playedAt ?: now) >= 30 * 60_000) {
-            p.outcome = "watched"; p.playedKey?.let { store.addLiked(p.who, it, p.playedName ?: "") }
-            store.saveSession(p); pending = null; pendingStarted = false
-        }
+        if (now - (p.playedAt ?: now) < 30 * 60_000) return
+        if (p.outcome != "no-start") { p.outcome = "watched"; p.playedKey?.let { store.addLiked(p.who, it, p.playedName ?: "") } }
+        store.saveSession(p); pending = null; pendingStartedAt = null
     }
 
     // ---- settings ----------------------------------------------------------
@@ -333,9 +344,12 @@ class PicksController(
         val secs = played.mapNotNull { it.secondsToPlay }.sorted()
         appendLine("PICKS · ${all.size} sessions · ${played.size} played · ${all.count { it.outcome == "abandoned" }} gave up")
         if (secs.isNotEmpty()) appendLine("Typical time to Play: ${secs[secs.size / 2]} s (fastest ${secs.first()} s, slowest ${secs.last()} s)")
-        if (played.isNotEmpty()) {
-            val strong = played.count { (it.leftAfterMin ?: 99) < 15 }; val weak = played.count { (it.leftAfterMin ?: 99) in 15..29 }
-            appendLine("Quick-backs: <15 min ${strong * 100 / played.size}% · 15–30 min ${weak * 100 / played.size}%")
+        val counted = played.filter { it.outcome != "no-start" }
+        if (counted.isNotEmpty()) {
+            val qb = counted.filter { it.outcome == "quick-back" }
+            val strong = qb.count { (it.leftAfterMin ?: 99) < 15 }; val weak = qb.count { (it.leftAfterMin ?: 99) in 15..29 }
+            appendLine("Quick-backs: <15 min ${strong * 100 / counted.size}% · 15–30 min ${weak * 100 / counted.size}%" +
+                (played.size - counted.size).let { if (it > 0) " · $it left within 2 min (not counted)" else "" })
         }
         Recommender.lastAiError?.let { appendLine("Last AI error (fell back to rules): $it") }
         val order = aiChain().let { c -> c.engines.map { it.name } } + "Rules"
@@ -349,6 +363,7 @@ class PicksController(
             when (s.outcome) {
                 "quick-back" -> append(" · LEFT after ${s.leftAfterMin} min")
                 "watched" -> append(" · watched 30+ min")
+                "no-start" -> append(" · left within 2 min (not counted)")
                 "abandoned" -> append(" · gave up")
             }
             appendLine()
