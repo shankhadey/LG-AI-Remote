@@ -637,6 +637,8 @@ class PicksController(
         }
         Recommender.lastAiError?.let { appendLine("Last AI error (fell back to rules): $it") }
         val order = aiChain().let { c -> c.engines.map { it.name } } + "Rules"
+        appendLine("Favourites: " + store.people.joinToString(" · ") { "$it ${store.favourites(it).size}" } +
+            " · card shown for " + store.people.filter { wantsFavourites(it) }.joinToString().ifEmpty { "nobody" })
         appendLine("Settings: ${store.people.size} people · ${store.services.size} services · languages ${store.languages.joinToString()} · on TV ${if (showOnTv) "on" else "off"}")
         appendLine("AI order: ${order.joinToString(" → ")} · on-phone: ${if (onDevice == OnDeviceAi) OnDeviceAi.describe() else "n/a"} · last picks by ${Recommender.lastEngine ?: "—"}")
         val fmt = java.text.SimpleDateFormat("EEE d MMM h:mm a", java.util.Locale.US)

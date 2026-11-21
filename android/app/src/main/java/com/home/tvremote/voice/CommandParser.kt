@@ -8,6 +8,8 @@ sealed interface Command {
     data class VolumeSet(val level: Int) : Command
     data class Mute(val mute: Boolean) : Command
     data class Media(val action: String) : Command            // play, pause, stop, rewind, fastForward
+    /** "skip 5 minutes" (+300), "go back 30 seconds" (−30): sent as 10-second arrow presses. */
+    data class Seek(val seconds: Int) : Command
     data class Button(val name: String) : Command             // UP, DOWN, LEFT, RIGHT, ENTER, BACK, HOME, MENU, INFO
     data class ChannelStep(val up: Boolean) : Command
     data class ChannelNumber(val number: String) : Command
@@ -96,6 +98,15 @@ class CommandParser(tvApps: List<TvApp>) {
         // Looser playback phrasing: "pause the movie", "stop the video", "resume the show".
         Regex("(pause|stop|resume|unpause|continue)(?: (?:the|this) (?:show|movie|video|film|episode|music|song|tv|game|match))?(?: for a (?:second|sec|minute|bit))?").matchEntire(t)?.let {
             return Command.Media(when (it.groupValues[1]) { "pause" -> "pause"; "stop" -> "stop"; else -> "play" })
+        }
+
+        // Skipping by an amount: "skip 5 minutes", "go back 30 seconds", "forward 2 min", "rewind a minute"
+        Regex("(skip ahead|skip forward|skip|fast forward|forward|go forward|jump ahead|ahead|go back|back|rewind|skip back|jump back)(?: by)? (\\d+|an?|one|two|three|four|five|ten|fifteen|twenty|thirty) ?(seconds?|secs?|minutes?|mins?)").matchEntire(t)?.let { m ->
+            val n = when (val w = m.groupValues[2]) { "a", "an", "one" -> 1; "two" -> 2; "three" -> 3; "four" -> 4; "five" -> 5; "ten" -> 10
+                "fifteen" -> 15; "twenty" -> 20; "thirty" -> 30; else -> w.toIntOrNull() ?: 1 }
+            val secs = if (m.groupValues[3].startsWith("m")) n * 60 else n
+            val back = m.groupValues[1].let { it.contains("back") || it == "rewind" }
+            return Command.Seek(if (back) -secs else secs)
         }
 
         // Playback (bare words only — "play X" is a search)

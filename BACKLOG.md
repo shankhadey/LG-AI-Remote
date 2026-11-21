@@ -70,6 +70,13 @@ Measure it: time from opening to Play, quick-backs, "Not now" count per session.
 - To test on the TV: Search 1/2 (Netflix search page with "The Crown" filled in).
 - Next: Prime Video and Disney+ title/search links (same 3-try test).
 
+## v0.9.5: skipping while watching
+- ⟲ 10 s / 10 s ⟳ buttons above the touchpad while something plays (hold = keep skipping; LEFT/RIGHT arrows).
+- Voice: "skip 5 minutes", "go back 30 seconds" (10-s arrow presses, max 10 min). Jump to a spot: pause, point at the
+  app's timeline on the TV, tap (to confirm on the TV).
+- Diagnostics: "Favourites: Shankha 3 · Priya 0 · …" and who still gets the card.
+- Phone timing confirmed (v0.9.4): picks ready 0.5–1.0 s; Gemini Nano reasons 10.7–11.6 s (in the background).
+
 ## Speed (v0.9.4): picks took ~10 s on the phone
 - Ranking now chooses; the AI only rewrites the reasons afterwards (same picks, same order). Details for the 5 picks
   fetched in parallel. Mood-independent data (providers, trending, favourites' "also liked", genres) cached and

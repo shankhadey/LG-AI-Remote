@@ -403,6 +403,19 @@ class TvController(app: Application) : AndroidViewModel(app), TvActions {
         }
     }
     fun scroll(dy: Float) = enqueue { tv().scroll(dy) }
+
+    /**
+     * Skip while watching: streaming apps skip ~10 s per left/right arrow during playback, so an amount becomes
+     * that many presses (capped at 10 minutes).
+     */
+    fun seek(seconds: Int) {
+        val presses = (kotlin.math.abs(seconds) + 5) / 10
+        if (presses == 0) return
+        val key = if (seconds > 0) "RIGHT" else "LEFT"
+        say(if (seconds > 0) "Forward ${humanTime(seconds)}" else "Back ${humanTime(-seconds)}")
+        enqueue { repeat(presses.coerceAtMost(60)) { tv().button(key); delay(180) } }
+    }
+    private fun humanTime(s: Int) = if (s >= 60 && s % 60 == 0) "${s / 60} min" else if (s >= 60) "${s / 60} min ${s % 60} s" else "$s s"
     /**
      * Opens an app and checks it actually came to the front. If the usual launch call is rejected
      * or silently ignored, retry through the application manager, and report what the TV said.
@@ -729,6 +742,7 @@ class TvController(app: Application) : AndroidViewModel(app), TvActions {
             is Command.Mute -> { say(if (cmd.mute) "Muted" else "Sound on"); ssap("ssap://audio/setMute", JSONObject().put("mute", cmd.mute)) }
             is Command.Media -> { if (cmd.action == "pause") assumePlaying = false else if (cmd.action == "play") assumePlaying = true; say(cmd.action.replaceFirstChar { it.uppercase() }.replace("Forward", " forward")); ssap("ssap://media.controls/${cmd.action}") }
             is Command.Button -> button(cmd.name)
+            is Command.Seek -> seek(cmd.seconds)
             is Command.ChannelStep -> { say(if (cmd.up) "Channel up" else "Channel down"); ssap(if (cmd.up) "ssap://tv/channelUp" else "ssap://tv/channelDown") }
             is Command.ChannelNumber -> { say("Channel ${cmd.number}"); ssap("ssap://tv/openChannel", JSONObject().put("channelNumber", cmd.number)) }
             is Command.Input -> { say("HDMI ${cmd.hdmi}"); ssap("ssap://system.launcher/launch", JSONObject().put("id", "com.webos.app.hdmi${cmd.hdmi}")) }

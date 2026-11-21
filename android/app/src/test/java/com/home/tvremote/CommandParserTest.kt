@@ -125,6 +125,17 @@ class CommandParserTest {
         assertEquals(Command.MaybeApp(TvApp("netflix", "Netflix"), "netflex"), bare.parse("open netflex"))
     }
 
+    @Test fun skippingByAnAmount() {
+        check("skip 5 minutes", Command.Seek(300))
+        check("go back 30 seconds", Command.Seek(-30))
+        check("forward 2 min", Command.Seek(120))
+        check("rewind a minute", Command.Seek(-60))
+        check("skip back ten seconds", Command.Seek(-10))
+        check("skip ahead 90 seconds", Command.Seek(90))
+        check("back", Command.Button("BACK"))                  // bare "back" is still the Back button
+        check("skip", Command.Media("fastForward"))
+    }
+
     @Test fun exactAppNamesOpenStraightAway() {
         check("open netflix", Command.OpenApp(netflix))
         check("open the crown", Command.NoSuchApp("crown"))

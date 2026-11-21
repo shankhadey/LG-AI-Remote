@@ -1,5 +1,13 @@
 package com.home.tvremote.ui
 
+import kotlinx.coroutines.launch
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.semantics
+import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.foundation.gestures.waitForUpOrCancellation
+import androidx.compose.foundation.gestures.awaitFirstDown
+import androidx.compose.foundation.gestures.awaitEachGesture
 import android.Manifest
 import android.content.pm.PackageManager
 import android.os.Build
@@ -172,6 +180,7 @@ fun RemoteScreen(tv: TvController, hasMicPermission: () -> Boolean) {
             for (app in tv.mostUsed()) AppTile(app) { haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove); tv.launch(app) }
         }
         if (tv.tvKeyboardOpen) KeyboardBar(tv)
+        if (tv.inPlayback) SkipRow(tv)
         TimerEngine.state?.let { TimerPill(it) }
         Box(Modifier.fillMaxWidth().weight(1f).padding(top = 18.dp)) {
             Touchpad(onMove = tv::move, onClick = tv::tap, onScroll = tv::scroll, modifier = Modifier.fillMaxSize(),
@@ -338,6 +347,36 @@ private fun NotItBar(pc: com.home.tvremote.picks.PicksController) {
         Box(Modifier.size(36.dp).clip(CircleShape).clickable { pc.dismissOpened() }, contentAlignment = Alignment.Center) {
             Icon(Icons.Rounded.Close, "Dismiss", tint = Palette.faint, modifier = Modifier.size(18.dp))
         }
+    }
+}
+
+/** While watching: back / forward 10 s. Hold to keep skipping. A tap on the touchpad still pauses and plays. */
+@Composable
+private fun SkipRow(tv: TvController) {
+    Row(Modifier.fillMaxWidth().padding(top = 16.dp), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+        SkipButton("⟲  10 s", "Back 10 seconds", Modifier.weight(1f)) { tv.button("LEFT") }
+        SkipButton("10 s  ⟳", "Forward 10 seconds", Modifier.weight(1f)) { tv.button("RIGHT") }
+    }
+}
+
+@Composable
+private fun SkipButton(text: String, description: String, modifier: Modifier, press: () -> Unit) {
+    val haptic = LocalHapticFeedback.current
+    val scope = rememberCoroutineScope()
+    Box(modifier.height(52.dp).card(RoundedCornerShape(26.dp))
+        .semantics { contentDescription = description }
+        .pointerInput(Unit) {
+            awaitEachGesture {
+                awaitFirstDown()
+                haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
+                press()
+                // Held: keep skipping every 0.4 s until released.
+                val repeat = scope.launch { kotlinx.coroutines.delay(500); while (true) { press(); kotlinx.coroutines.delay(400) } }
+                waitForUpOrCancellation()
+                repeat.cancel()
+            }
+        }, contentAlignment = Alignment.Center) {
+        Text(text, color = Palette.text, fontSize = 16.sp, fontWeight = FontWeight.SemiBold)
     }
 }
 
