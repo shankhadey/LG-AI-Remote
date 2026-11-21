@@ -147,7 +147,9 @@ class PicksTest {
         s.addNever("Together", "tv:4")
         val r = Recommender(s, Tmdb("k", server.url("/3").toString().trimEnd('/')), AiPicker(listOf(Groq("g", "m", server.url("/openai/v1").toString().trimEnd('/')))))
             .pick("Together", "weekday-late", Ask(Mood.Light), null, 90, "Tuesday night")
-        assertEquals(listOf("tv:6", "movie:101", "tv:5"), r.picks.map { it.title.key })   // "tv:999" (not a candidate) dropped
+        assertEquals(listOf("tv:6", "movie:101", "tv:5"), r.picks.take(3).map { it.title.key })   // "tv:999" (not a candidate) dropped
+        assertEquals(5, r.picks.size)                                                       // topped up by rules
+        assertTrue(r.picks.none { it.title.key == "tv:999" })
         assertTrue(r.pool.none { it.key == "tv:4" })                                       // Never excluded
         assertEquals("Netflix", r.picks[0].title.service)
         assertEquals(28, r.picks[0].title.runtimeMin)
@@ -160,7 +162,7 @@ class PicksTest {
         s.addLiked("Together", "tv:1", "Schitt's Creek")      // recommendations of tv:1 include tv:3 → "Fans of…"
         val r = Recommender(s, Tmdb("k", server.url("/3").toString().trimEnd('/')), AiPicker(listOf(Groq("g", "m", server.url("/openai/v1").toString().trimEnd('/')))))
             .pick("Together", "weekday-late", Ask(Mood.Light), null, 90, "Tuesday night")
-        assertEquals(3, r.picks.size)
+        assertEquals(5, r.picks.size)
         assertTrue(r.picks.any { it.title.kind == Kind.Tv } && r.picks.any { it.title.kind == Kind.Movie })
         assertEquals("Fans of Schitt's Creek also loved it.", r.picks.first { it.title.key == "tv:3" }.why)
         assertTrue(r.pool.none { it.key == "tv:1" })          // already watched
@@ -178,8 +180,8 @@ class PicksTest {
         tmdbAndGroq("""{"picks":[{"id":"tv:6","why":"a"},{"id":"tv:5","why":"b"},{"id":"tv:4","why":"c"}]}""")
         val r = Recommender(store(), Tmdb("k", server.url("/3").toString().trimEnd('/')), AiPicker(listOf(Groq("g", "m", server.url("/openai/v1").toString().trimEnd('/')))))
             .pick("Together", "weekend-late", Ask(Mood.Light), null, null, "Saturday night")
-        assertEquals(listOf("tv:6", "tv:5"), r.picks.take(2).map { it.title.key })
-        assertEquals(Kind.Movie, r.picks[2].title.kind)
+        assertEquals(listOf("tv:6", "tv:5", "tv:4"), r.picks.take(3).map { it.title.key })
+        assertTrue(r.picks.any { it.title.kind == Kind.Movie })
     }
 
     @Test fun newMoodAsksTmdbForRecentTitlesOnly() = runBlocking {

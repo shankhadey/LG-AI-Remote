@@ -14,6 +14,9 @@ import java.util.concurrent.TimeUnit
 
 class PicksException(message: String) : Exception(message)
 
+/** How many picks are shown at a time. */
+const val PICKS = 5
+
 private val http = OkHttpClient.Builder().connectTimeout(8, TimeUnit.SECONDS).readTimeout(20, TimeUnit.SECONDS).build()
 
 /** TMDB (themoviedb.org): catalog, US availability, runtimes, "people who liked X also liked". */
@@ -192,13 +195,13 @@ Languages the household watches: ${languages.entries.joinToString { "${it.key}=$
         )
     }
 
-    /** Up to 3 (candidate key, reason). Unknown keys are dropped; an engine that returns none counts as failed. */
+    /** Up to [PICKS] (candidate key, reason). Unknown keys are dropped; an engine that returns none counts as failed. */
     suspend fun choose(context: String, taste: String, candidates: List<Title>): List<Pair<String, String>>? = firstSuccess { e ->
-        val list = candidates.take(if (e.compact) 10 else 15).joinToString("\n") { t ->
+        val list = candidates.take(if (e.compact) 12 else 15).joinToString("\n") { t ->
             "${t.key} | ${t.name} (${t.year}${if (t.fresh) ", NEW" else ""}) | ${if (t.kind == Kind.Movie) "movie" else "series"} | lang ${t.language} | ★${"%.1f".format(t.rating)} | ${t.overview.take(if (e.compact) 90 else 160)}"
         }
         val j = e.json(
-            """You help a household decide what to watch, fast. Choose exactly 3 titles from the candidate list,
+            """You help a household decide what to watch, fast. Choose exactly 5 titles from the candidate list,
 using ONLY ids from the list. Prefer variety and a good fit for the moment. When the list has both, include
 at least one movie and one series. Favour titles marked NEW over older ones of similar appeal. For each, write one short, warm
 reason (max 14 words) grounded in the description or the household's taste. No spoilers, no made-up facts.
@@ -209,7 +212,7 @@ Reply with JSON only, no other text: {"picks":[{"id":"tv:123","why":"..."}]}""",
         val arr = j.optJSONArray("picks") ?: return@firstSuccess null
         (0 until arr.length()).map { arr.getJSONObject(it) }
             .map { it.optString("id") to it.optString("why").take(140) }
-            .filter { it.first in valid }.distinctBy { it.first }.take(3)
+            .filter { it.first in valid }.distinctBy { it.first }.take(PICKS)
             .ifEmpty { null }
     }
 }

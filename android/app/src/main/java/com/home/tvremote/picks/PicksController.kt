@@ -344,7 +344,7 @@ class PicksController(
                 JSONObject().put("code", c ?: "any").put("label", c?.let { Catalog.languageLabel(it) } ?: "Any").put("on", c == language) }))
             .put("moods", JSONArray(moods().map { JSONObject().put("id", it.name).put("label", it.label).put("hint", it.hint) }))
             .put("picks", JSONArray(picks.map { p ->
-                JSONObject().put("name", p.title.name).put("meta", meta(p.title)).put("why", p.why)
+                JSONObject().put("name", p.title.name).put("meta", meta(p.title)).put("why", p.why).put("fresh", p.title.fresh)
                     .put("poster", p.title.posterPath?.let { "https://image.tmdb.org/t/p/w342$it" }).put("color", color(p.title.name))
             }))
         return j.toString()
@@ -352,9 +352,10 @@ class PicksController(
 
     // ---- display helpers ---------------------------------------------------
     fun meta(t: Title): String = listOfNotNull(
-        t.service, Catalog.languageLabel(t.language).takeIf { t.language.isNotEmpty() },
-        t.runtimeMin?.let { (if (t.kind == Kind.Tv) "~" else "") + Moment.duration(it) + if (t.kind == Kind.Tv) " episodes" else "" },
-        endsAt(t), if (t.rating > 0) "★ ${"%.1f".format(t.rating)}" else null,
+        t.service, if (t.kind == Kind.Tv) "series" else "movie",
+        Catalog.languageLabel(t.language).takeIf { t.language.isNotEmpty() && t.language != "en" },
+        t.runtimeMin?.let { (if (t.kind == Kind.Tv) "~" else "") + Moment.duration(it) },
+        if (t.kind == Kind.Movie) endsAt(t) else null, if (t.rating > 0) "★ ${"%.1f".format(t.rating)}" else null,
     ).joinToString(" · ")
 
     private fun endsAt(t: Title): String? {

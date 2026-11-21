@@ -2,7 +2,7 @@ package com.home.tvremote.picks
 
 import kotlin.math.ln
 
-/** Picks shown now, plus the ranked remainder used for "Not now", "Never" and "Show 3 more". */
+/** Picks shown now, plus the ranked remainder used for "Not now", "Never" and "Show more". */
 data class PickSet(val picks: List<Pick>, val pool: List<Title>, val fans: Map<String, String>)
 
 class Recommender(
@@ -53,15 +53,15 @@ class Recommender(
             .sortedByDescending { score(it, fans) }
         if (pool.isEmpty()) throw PicksException("Nothing matched — try another mood, language or “Any”")
 
-        val chosen = chooseThree(balanced(pool), who, ask, context, fans)
+        val chosen = choosePicks(balanced(pool), who, ask, context, fans)
         return finish(chosen, pool, fans, minutesLeft)
     }
 
-    /** "Show 3 more": next three from the pool, skipping what's been shown. */
+    /** "Show more": the next set from the pool, skipping what's been shown. */
     suspend fun more(prev: PickSet, shown: Set<String>, who: String, context: String, minutesLeft: Int?): PickSet {
         val rest = prev.pool.filter { it.key !in shown }
         if (rest.isEmpty()) throw PicksException("That's everything for this mood — try another one")
-        val chosen = chooseThree(balanced(rest), who, Ask(), context, prev.fans)
+        val chosen = choosePicks(balanced(rest), who, Ask(), context, prev.fans)
         return finish(chosen, rest, prev.fans, minutesLeft)
     }
 
@@ -84,12 +84,12 @@ class Recommender(
 
     /** At least one film when films are on offer (series tend to win on ratings alone). */
     private fun withFilm(picks: List<Pick>, top: List<Title>, fans: Map<String, String>): List<Pick> {
-        if (picks.size < 3 || picks.any { it.title.kind == Kind.Movie }) return picks
+        if (picks.size < PICKS || picks.any { it.title.kind == Kind.Movie }) return picks
         val film = top.firstOrNull { it.kind == Kind.Movie } ?: return picks
         return picks.dropLast(1) + Pick(film, ruleReason(film, fans))
     }
 
-    private suspend fun chooseThree(top: List<Title>, who: String, ask: Ask, context: String, fans: Map<String, String>): List<Pick> {
+    private suspend fun choosePicks(top: List<Title>, who: String, ask: Ask, context: String, fans: Map<String, String>): List<Pick> {
         if (ai != null && !ai.isEmpty) {
             val taste = buildString {
                 val liked = store.liked(who).takeLast(8).map { it.second }
@@ -103,20 +103,20 @@ class Recommender(
             if (!got.isNullOrEmpty()) {
                 val byKey = top.associateBy { it.key }
                 val picks = got.mapNotNull { (k, why) -> byKey[k]?.let { Pick(it, why.ifBlank { ruleReason(it, fans) }) } }
-                if (picks.size == 3) return withFilm(picks, top, fans)
-                return withFilm((picks + ruleThree(top.filter { t -> picks.none { it.title.key == t.key } }, fans)).take(3), top, fans)
+                if (picks.size == PICKS) return withFilm(picks, top, fans)
+                return withFilm((picks + rulePicks(top.filter { t -> picks.none { it.title.key == t.key } }, fans)).take(PICKS), top, fans)
             }
         } else lastEngine = "Rules"
-        return ruleThree(top, fans)
+        return rulePicks(top, fans)
     }
 
-    /** Without AI: the top three, mixing series and films when both are available. */
-    private fun ruleThree(top: List<Title>, fans: Map<String, String>): List<Pick> {
+    /** Without AI: the top [PICKS], mixing series and films when both are available. */
+    private fun rulePicks(top: List<Title>, fans: Map<String, String>): List<Pick> {
         val out = mutableListOf<Title>()
         top.firstOrNull { it.kind == Kind.Tv }?.let { out += it }
         top.firstOrNull { it.kind == Kind.Movie }?.let { out += it }
-        for (t in top) { if (out.size >= 3) break; if (t !in out) out += t }
-        return out.take(3).map { Pick(it, ruleReason(it, fans)) }
+        for (t in top) { if (out.size >= PICKS) break; if (t !in out) out += t }
+        return out.take(PICKS).map { Pick(it, ruleReason(it, fans)) }
     }
 
     private suspend fun finish(chosen: List<Pick>, pool: List<Title>, fans: Map<String, String>, minutesLeft: Int?): PickSet {

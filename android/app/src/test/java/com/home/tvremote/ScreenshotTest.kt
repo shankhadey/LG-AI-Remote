@@ -142,6 +142,8 @@ class ScreenshotTest {
                 com.home.tvremote.picks.Pick(com.home.tvremote.picks.Title(com.home.tvremote.picks.Kind.Tv, 1, "Ted Lasso", language = "en", rating = 8.4, runtimeMin = 30, service = "Apple TV+"), "Warm and very funny. Fans of Schitt's Creek also loved it."),
                 com.home.tvremote.picks.Pick(com.home.tvremote.picks.Title(com.home.tvremote.picks.Kind.Tv, 2, "Panchayat", language = "hi", rating = 8.9, runtimeMin = 35, service = "Prime Video"), "Gentle village comedy — short episodes, very easy to watch."),
                 com.home.tvremote.picks.Pick(com.home.tvremote.picks.Title(com.home.tvremote.picks.Kind.Movie, 3, "The Grand Budapest Hotel", language = "en", rating = 8.0, runtimeMin = 100, service = "Hulu"), "Playful and quick, if you have a bit longer."),
+                com.home.tvremote.picks.Pick(com.home.tvremote.picks.Title(com.home.tvremote.picks.Kind.Tv, 4, "The Studio", language = "en", rating = 8.0, runtimeMin = 30, service = "Apple TV+", fresh = true), "Hollywood satire; fans of Curb love it."),
+                com.home.tvremote.picks.Pick(com.home.tvremote.picks.Title(com.home.tvremote.picks.Kind.Movie, 5, "Palm Springs", language = "en", rating = 7.4, runtimeMin = 90, service = "Hulu"), "Clever time-loop comedy, light but smart."),
             )
         }
         this.step = step

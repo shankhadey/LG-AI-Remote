@@ -92,12 +92,13 @@ button.on:focus,button.on:hover{background:#FFFFFF;color:#0C0C0E}
 .primary{background:#F2F2F4;color:#0C0C0E;font-weight:600}
 .primary:focus,.primary:hover{background:#FFFFFF;color:#0C0C0E}
 .primary span{color:#57575F}
-.picks{display:flex;gap:2.4vw;margin-top:4vh;flex:1;min-height:0}
-.card{flex:1;display:flex;flex-direction:column;gap:1.4vh;min-width:0}
-.poster{height:34vh;border-radius:2vh;background:#222226 center/cover no-repeat;display:flex;align-items:flex-end;padding:2vh;box-sizing:border-box;font-size:3.6vh;font-weight:700}
-.card h2{margin:0;font-size:3.2vh;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
-.meta{color:#8E8E96;font-size:2vh}.why{font-size:2.3vh;line-height:1.35;color:#D0D0D6;min-height:6vh}
-.acts{display:flex;gap:1vw}.acts button{padding:1.4vh 1.6vw;font-size:2.2vh}
+.picks{display:flex;gap:1.4vw;margin-top:3vh;flex:1;min-height:0}
+.card{flex:1;display:flex;flex-direction:column;gap:1.2vh;min-width:0}
+.poster{height:38vh;flex:none;position:relative;border-radius:2vh;background:#222226 center/cover no-repeat;display:flex;align-items:flex-end;padding:2vh;box-sizing:border-box;font-size:3.6vh;font-weight:700}
+.tag{position:absolute;left:1.4vh;top:1.4vh;background:#F2F2F4;color:#0C0C0E;font-size:1.7vh;font-weight:700;border-radius:.8vh;padding:.4vh .8vh}
+.card h2{margin:0;font-size:2.8vh;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.meta{color:#8E8E96;font-size:1.8vh}.why{font-size:2vh;line-height:1.35;color:#D0D0D6;min-height:5.4vh}
+.acts{display:flex;gap:.5vw}.acts button{padding:1.2vh .75vw;font-size:1.8vh;white-space:nowrap}
 .big{font-size:4vh;color:#C9C9CF;margin:auto 0}
 .foot{display:flex;justify-content:space-between;align-items:center;color:#5F5F67;font-size:1.8vh;margin-top:2vh}
 </style></head><body><div id="app"><h1>What should we watch?</h1></div>
@@ -133,15 +134,15 @@ function show(s){if(!s||s.v===v)return;v=s.v;cur=s;var f=document.activeElement&
    h+='<div class="lbl">Pick a mood</div><div class="row">';s.moods.forEach(function(m,i){h+=btn('m'+i,'mood','<b>'+esc(m.label)+'</b><span>'+esc(m.hint)+'</span>','mood',m.id)});
    h+=btn('sur','mood primary','<b>Surprise us</b><span>Anything good</span>','surprise','')+'</div>';
   }
- } else if(s.phase==='loading'){h+='<div class="big">Finding three picks…</div>';}
+ } else if(s.phase==='loading'){h+='<div class="big">Finding picks…</div>';}
  else if(s.phase==='error'){h+='<div class="big">'+esc(s.message)+'</div><div class="row">'+btn('back','primary','Back','back','')+'</div>';}
  else if(s.phase==='playing'){h+='<div class="big">'+esc(s.message)+'</div>';}
  else if(s.phase==='picks'){
   h+='<div class="picks">';s.picks.forEach(function(p,i){
-   h+='<div class="card"><div class="poster" style="'+(p.poster?'background-image:url('+esc(p.poster)+')':'background-color:'+esc(p.color))+'">'+(p.poster?'':esc(p.name))+'</div>'+
+   h+='<div class="card"><div class="poster" style="'+(p.poster?'background-image:url('+esc(p.poster)+')':'background-color:'+esc(p.color))+'">'+(p.poster?'':esc(p.name))+(p.fresh?'<span class="tag">NEW</span>':'')+'</div>'+
    '<h2>'+esc(p.name)+'</h2><div class="meta">'+esc(p.meta)+'</div><div class="why">'+esc(p.why)+'</div>'+
    '<div class="acts">'+btn('p'+i,'primary','▶ Play','play',i)+btn('n'+i,'','Not now','notnow',i)+btn('x'+i,'','Never','never',i)+'</div></div>';});
-  h+='</div><div class="row" style="margin-top:2.4vh">'+btn('more','','Show 3 more','more','')+(s.leanBack?btn('back','','Back to moods','back',''):'')+'</div>';
+  h+='</div><div class="row" style="margin-top:2.4vh">'+btn('more','','Show 5 more','more','')+(s.leanBack?btn('back','','Back to moods','back',''):'')+'</div>';
  }
  h+='<div class="foot"><span>Point with your phone · tap to choose</span><span>Data from TMDB</span></div>';
  document.getElementById('app').innerHTML=h;

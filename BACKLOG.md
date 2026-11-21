@@ -17,7 +17,7 @@ Things we decided to remember for later.
 Bar (user): must beat scrolling through dozens of titles across apps when the TV goes on, or there's no point.
 Measure it: time from opening to Play, quick-backs, "Not now" count per session.
 1. ~~Only series~~ v0.7.0: balanced series/films for the AI, ≥1 film guaranteed, too-long films swapped for films.
-2. 5 picks (decided) — design first.
+2. ~~3 picks~~ v0.7.2: 5 picks (compact phone cards, 5 across on the TV, NEW tag, "series"/"movie" on every card).
 3. ~~All old~~ v0.7.0: recent titles fetched and boosted; "New" mood (last 12 months).
 4. Play opens the app, not the title — v0.7.1: Netflix opens the title when Wikidata maps the TMDB ID to a Netflix
    ID (P4947/P4983 → P1874). Three LG launch formats; menu › "Test opening a show" picks the one this TV accepts.
@@ -50,6 +50,16 @@ Measure it: time from opening to Play, quick-backs, "Not now" count per session.
 - Measure: seconds from opening to Play; quick-back if the app is left within 30 min (<15 strong, 15–30 weak),
   also used as a soft negative signal. Picks summary + last 20 sessions in Diagnostics with Copy / Share.
   Limitation: can't see title changes inside an app, only which app is in front.
+
+## Works on other people's LG TVs (before sharing)
+- Netflix link format: self-calibrating instead of the test menu — after a Netflix Play, ask once "Did it open
+  <title>?"; No → next variant next time; remember per TV. Same for other apps as their formats are found.
+- Ship a table of known-good formats per app × webOS version; seed from our TV, grow from testers' Diagnostics.
+- App IDs differ by region/firmware (e.g. Max, hoichoi): already learned from what the TV lists/opens; keep
+  the "open it once from the TV" fallback.
+- Region: TMDB region is fixed to US; make it a setting (availability + providers differ per country).
+- Test matrix: at least 3 more LG TVs across webOS versions (2020–2025); pairing, Wake-on-LAN, pointer, links.
+- Keys: no per-user TMDB/Groq keys in a shared app → our small server (see Before selling).
 
 ## Before selling (if it goes to the stores)
 - TMDB commercial agreement; JustWatch agreement for where-to-watch data used commercially.

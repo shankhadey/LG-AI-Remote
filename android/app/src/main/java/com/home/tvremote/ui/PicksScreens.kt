@@ -65,6 +65,7 @@ import androidx.core.content.ContextCompat
 import coil.compose.AsyncImage
 import com.home.tvremote.picks.Catalog
 import com.home.tvremote.picks.Pick
+import com.home.tvremote.picks.PICKS
 import com.home.tvremote.picks.PicksController
 import com.home.tvremote.picks.Step
 import com.home.tvremote.voice.VoiceInput
@@ -101,7 +102,7 @@ fun PicksScreen(pc: PicksController) {
                 Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
                     Column(horizontalAlignment = Alignment.CenterHorizontally) {
                         CircularProgressIndicator(color = Palette.text, strokeWidth = 2.dp)
-                        Text("Finding three picks…", color = Palette.muted, fontSize = 15.sp, modifier = Modifier.padding(top = 16.dp))
+                        Text("Finding picks…", color = Palette.muted, fontSize = 15.sp, modifier = Modifier.padding(top = 16.dp))
                     }
                 }
             }
@@ -258,7 +259,7 @@ private fun ResultsPicks(pc: PicksController) {
         }
         Row(Modifier.fillMaxWidth().padding(top = 10.dp, bottom = 6.dp), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
             Box(Modifier.weight(1f).height(50.dp).card(RoundedCornerShape(25.dp)).clickable { pc.more() }, contentAlignment = Alignment.Center) {
-                Text("Show 3 more", color = Palette.text, fontSize = 14.sp, fontWeight = FontWeight.SemiBold)
+                Text("Show $PICKS more", color = Palette.text, fontSize = 14.sp, fontWeight = FontWeight.SemiBold)
             }
             Box(Modifier.weight(1f).height(50.dp).card(RoundedCornerShape(25.dp)).clickable { pc.back() }, contentAlignment = Alignment.Center) {
                 Text("Different mood", color = Palette.text, fontSize = 14.sp, fontWeight = FontWeight.SemiBold)
@@ -270,18 +271,23 @@ private fun ResultsPicks(pc: PicksController) {
 
 @Composable
 private fun PickCard(pc: PicksController, p: Pick, i: Int) {
-    Row(Modifier.fillMaxWidth().padding(top = 12.dp).card(RoundedCornerShape(22.dp)).padding(12.dp)) {
-        Box(Modifier.width(76.dp).height(112.dp).clip(RoundedCornerShape(12.dp)).background(Color(android.graphics.Color.parseColor(pc.color(p.title.name))))) {
+    // Compact, so all five fit on a phone screen without scrolling.
+    Row(Modifier.fillMaxWidth().padding(top = 8.dp).card(RoundedCornerShape(18.dp)).padding(10.dp)) {
+        Box(Modifier.width(56.dp).height(84.dp).clip(RoundedCornerShape(9.dp)).background(Color(android.graphics.Color.parseColor(pc.color(p.title.name))))) {
             val url = pc.posterUrl(p.title)
             if (url != null) AsyncImage(model = url, contentDescription = null, contentScale = ContentScale.Crop, modifier = Modifier.fillMaxSize())
             else Text(p.title.name, color = Color.White, fontSize = 11.sp, lineHeight = 13.sp, fontWeight = FontWeight.Bold, maxLines = 4,
                 overflow = TextOverflow.Ellipsis, modifier = Modifier.align(Alignment.BottomStart).padding(6.dp))
         }
         Spacer(Modifier.width(12.dp))
-        Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(5.dp)) {
-            Text(p.title.name, color = Palette.text, fontSize = 16.sp, fontWeight = FontWeight.SemiBold, maxLines = 2, overflow = TextOverflow.Ellipsis)
-            Text(pc.meta(p.title), color = Palette.muted, fontSize = 12.sp)
-            Text(p.why, color = Palette.text, fontSize = 13.sp, lineHeight = 18.sp)
+        Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(3.dp)) {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Text(p.title.name, color = Palette.text, fontSize = 15.sp, fontWeight = FontWeight.SemiBold, maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.weight(1f, fill = false))
+                if (p.title.fresh) Text("NEW", color = Palette.onPrimary, fontSize = 9.sp, fontWeight = FontWeight.Bold,
+                    modifier = Modifier.padding(start = 6.dp).clip(RoundedCornerShape(4.dp)).background(Palette.primary).padding(horizontal = 4.dp, vertical = 1.dp))
+            }
+            Text(pc.meta(p.title), color = Palette.muted, fontSize = 11.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
+            Text(p.why, color = Palette.text, fontSize = 12.sp, lineHeight = 16.sp, maxLines = 2, overflow = TextOverflow.Ellipsis)
             Row(horizontalArrangement = Arrangement.spacedBy(6.dp), modifier = Modifier.padding(top = 2.dp)) {
                 SmallPrimary("Play", Icons.Rounded.PlayArrow) { pc.play(i) }
                 Ghost("Not now") { pc.notNow(i) }
