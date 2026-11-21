@@ -157,6 +157,7 @@ private fun TouchpadPicks(pc: PicksController) {
         Row(Modifier.padding(top = 10.dp, bottom = 12.dp, start = 4.dp)) {
             when {
                 listening -> Text(heard.ifEmpty { "Listening…" }, color = Palette.text, fontSize = 14.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                pc.pointingAt == "-" -> Text("Not on a button", color = Palette.faint, fontSize = 14.sp)
                 pc.pointingAt.isNotEmpty() -> {
                     Text("Pointing at: ", color = Palette.faint, fontSize = 14.sp)
                     Text(pc.pointingAt, color = Palette.text, fontSize = 14.sp, fontWeight = FontWeight.SemiBold, maxLines = 1, overflow = TextOverflow.Ellipsis)

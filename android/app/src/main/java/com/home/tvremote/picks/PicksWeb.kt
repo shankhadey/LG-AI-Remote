@@ -57,7 +57,7 @@ class PicksWeb(
             path == "/" || path == "/picks" -> { log("page requested by the TV"); Triple("200 OK", "text/html; charset=utf-8", PAGE) }
             path == "/e" -> { log(q["m"].orEmpty().take(160)); Triple("200 OK", "application/json", "{}") }
             path == "/s" -> Triple("200 OK", "application/json", state())
-            path == "/f" -> { focus(q["l"].orEmpty()); q["l"]?.takeIf { it.isNotEmpty() }?.let { log("pointing at $it") }; Triple("200 OK", "application/json", "{}") }
+            path == "/f" -> { focus(q["l"].orEmpty()); q["l"]?.takeIf { it.isNotEmpty() && it != "-" }?.let { log("pointing at $it") }; Triple("200 OK", "application/json", "{}") }
             path == "/a" -> { log("clicked " + q["do"].orEmpty() + " " + q["v"].orEmpty()); action(q["do"].orEmpty(), q["v"].orEmpty()); Triple("200 OK", "application/json", state()) }
             else -> Triple("404 Not Found", "text/plain", "Not found")
         }
@@ -113,10 +113,13 @@ var mx=-1,my=-1,seen={};function once(k,m){if(!seen[k]){seen[k]=1;note(m)}}
 function under(){return mx<0?null:document.elementFromPoint(mx,my)}
 function btnOf(e){while(e&&e.tagName!=='BUTTON')e=e.parentNode;return e}
 document.addEventListener('mousemove',function(e){mx=e.clientX;my=e.clientY;once('mm','pointer seen by the page at '+mx+','+my);hover()},true);
-function hover(clear){var b=btnOf(under());if(!b){if(clear){told='';req('/f?l=',function(){})}return}if(document.activeElement!==b)b.focus();tell(b)}
-document.addEventListener('mousedown',function(e){once('md','click seen by the page')},true);
+var blankT=0;
+// On blank space (for a moment, so crossing gaps doesn't flicker): drop the highlight and tell the phone.
+function hover(clear){var b=btnOf(under());clearTimeout(blankT);
+ if(!b){if(clear&&mx<0){told='';req('/f?l=',function(){})}else if(mx>=0)blankT=setTimeout(function(){if(btnOf(under()))return;var a=document.activeElement;if(a&&a.blur)a.blur();if(told!=='-'){told='-';req('/f?l=-',function(){})}},250);return}if(document.activeElement!==b)b.focus();tell(b)}
+document.addEventListener('mousedown',function(e){var b=btnOf(e.target);note('tap landed on '+(b?label(b):'blank space at '+e.clientX+','+e.clientY))},true);
 document.addEventListener('keydown',function(e){once('k'+e.keyCode,'key '+e.keyCode+' seen by the page');
- if(e.keyCode===13){var b=btnOf(under())||btnOf(document.activeElement);if(b){e.preventDefault();b.click()}}},true);
+ if(e.keyCode===13){var b=mx<0?btnOf(document.activeElement):btnOf(under());if(b){e.preventDefault();b.click()}}},true);
 function act(d,val){req('/a?do='+d+'&v='+encodeURIComponent(val||''),show)}
 function btn(id,cls,html,d,val){return '<button id="'+id+'" class="'+cls+'" data-d="'+d+'" data-v="'+esc(val)+'">'+html+'</button>'}
 function show(s){if(!s||s.v===v)return;v=s.v;cur=s;var f=document.activeElement&&document.activeElement.id,h='';
@@ -144,7 +147,7 @@ function show(s){if(!s||s.v===v)return;v=s.v;cur=s;var f=document.activeElement&
  document.getElementById('app').innerHTML=h;
  var bs=[].slice.call(document.querySelectorAll('button'));
  bs.forEach(function(b){b.onclick=function(){act(b.getAttribute('data-d'),b.getAttribute('data-v'))};b.onmouseover=function(){b.focus()};b.onfocus=function(){tell(b)}});
- var keep=f&&document.getElementById(f);(keep||bs[0])&&(keep||bs[0]).focus();told='';hover(true);}
+ var keep=f&&document.getElementById(f)||(mx<0?bs[0]:null);keep&&keep.focus();told='';hover(true);}
 // Arrow keys move between buttons (for remotes without a pointer).
 document.addEventListener('keydown',function(e){var bs=[].slice.call(document.querySelectorAll('button'));if(!bs.length)return;
  var a=document.activeElement,r=a&&a.getBoundingClientRect?a.getBoundingClientRect():null,best=null,bd=1e9,d={37:[-1,0],38:[0,-1],39:[1,0],40:[0,1]}[e.keyCode];

@@ -13,6 +13,13 @@ Things we decided to remember for later.
 - **Wake after a long time off** with Quick Start+ OFF (e.g. next morning). Worked right after switching off;
   some TVs drop Wi-Fi in deep standby. If it fails, turn Quick Start+ back on.
 
+## Picks: functional issues raised 21 Nov (next)
+1. Only series are recommended, no movies.
+2. 3 picks may be too few; explain how ranking works.
+3. Picks are all old (Seinfeld, Modern Family…); nothing new.
+4. Play opens the app, not the title.
+- Smaller APK: turn on R8 shrinking before sharing the app (11 MB on 18 Nov → 20 MB now; +3 MB is on-phone AI).
+
 ## Parked (low impact)
 - Diagnostics: also show attempts still in flight when Diagnostics is opened.
 
@@ -67,6 +74,9 @@ Things we decided to remember for later.
 - **iPhone version** for the other household phone (original ask).
 
 ## Done
+- v0.6.3: pointer on blank space (for 0.25 s) → phone says "Not on a button" and the TV drops the highlight; OK
+  clicks only what's under the pointer; every tap is logged with what it landed on (to explain the 3 of 6 taps
+  that selected nothing in v0.6.2).
 - v0.6.2: "Pointing at" now comes from the pointer's movement. The TV browser doesn't give the page focus until
   its first click, so focus-based reporting stayed silent after (re)opening the page. The label also clears when
   the TV screen changes under a still pointer.
