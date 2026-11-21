@@ -67,6 +67,9 @@ Things we decided to remember for later.
 - **iPhone version** for the other household phone (original ask).
 
 ## Done
+- v0.6.2: "Pointing at" now comes from the pointer's movement. The TV browser doesn't give the page focus until
+  its first click, so focus-based reporting stayed silent after (re)opening the page. The label also clears when
+  the TV screen changes under a still pointer.
 - v0.6.1: picker on the TV works with the touchpad (confirmed: who → mood → Play opened Disney+). Cause: v0.6.0 on the TV — page loaded and the pointer moved, but the page never reported a
   button under the pointer and OK (ENTER) clicked nothing. Now: tap sends a real pointer click while the picks
   page is up; the page clicks the button under the pointer on OK; Diagnostics records PAGE lines (loaded, pointer
