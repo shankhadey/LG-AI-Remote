@@ -383,7 +383,8 @@ class TvController(app: Application) : AndroidViewModel(app), TvActions {
     fun testNetflixLink(variant: String) {
         picks.store.netflixLink = variant
         event("LINK test $variant")
-        launch(TvApp("netflix", "Netflix", launchExtras = com.home.tvremote.picks.DeepLinks.netflix(com.home.tvremote.picks.DeepLinks.NETFLIX_TEST_ID, variant)))
+        val (id, _) = com.home.tvremote.picks.DeepLinks.NETFLIX_TESTS.getValue(variant)
+        launch(TvApp("netflix", "Netflix", launchExtras = com.home.tvremote.picks.DeepLinks.netflix(id, variant)))
     }
     override fun knownAppIds(): Set<String> = (apps.map { it.id } + usage.keys).toSet()
     override fun openOnTvBrowser(url: String) = enqueue {

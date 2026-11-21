@@ -478,7 +478,7 @@ private fun LinkDialog(tv: TvController, onClose: () -> Unit) {
         title = { Text("Open shows directly") },
         text = {
             Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
-                Text("Each button opens Stranger Things on Netflix a different way. Try 1, 2 and 3 (press Back on the TV between tries) and stop at the one that lands on the show itself, not Netflix's home screen. That one is used when you press Play.", fontSize = 14.sp)
+                Text("Each button opens a different show on Netflix, a different way. Press Home on the TV between tries. Note which ones land on that show's own page (not Netflix's home screen or the previous show). The one you tap last is used when you press Play.", fontSize = 14.sp)
                 for ((i, v) in com.home.tvremote.picks.DeepLinks.NETFLIX_VARIANTS.withIndex()) {
                     val selected = current == v
                     Row(
@@ -488,7 +488,7 @@ private fun LinkDialog(tv: TvController, onClose: () -> Unit) {
                             .padding(14.dp),
                         verticalAlignment = Alignment.CenterVertically,
                     ) {
-                        Text("Try ${i + 1}", color = if (selected) Color.White else Palette.text, fontWeight = FontWeight.SemiBold, modifier = Modifier.weight(1f))
+                        Text("Try ${i + 1} · ${com.home.tvremote.picks.DeepLinks.NETFLIX_TESTS.getValue(v).second}", color = if (selected) Color.White else Palette.text, fontWeight = FontWeight.SemiBold, modifier = Modifier.weight(1f))
                         if (selected) Text("in use", color = Color.White, fontSize = 12.sp)
                     }
                 }

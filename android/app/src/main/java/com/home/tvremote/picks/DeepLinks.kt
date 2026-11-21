@@ -17,8 +17,8 @@ object DeepLinks {
     /** Variants of the extra launch fields for Netflix, tried on the TV from the menu ("Test opening a show"). */
     val NETFLIX_VARIANTS = listOf("A", "B", "C")
 
-    /** A well-known Netflix title for the on-TV test: Stranger Things. */
-    const val NETFLIX_TEST_ID = "80057281"
+    /** A different well-known title per variant, so a test can't be fooled by Netflix reopening the last page. */
+    val NETFLIX_TESTS = mapOf("A" to ("80057281" to "Stranger Things"), "B" to ("81231974" to "Wednesday"), "C" to ("80025678" to "The Crown"))
 
     fun netflix(id: String, variant: String): JSONObject = when (variant) {
         "B" -> JSONObject().put("params", JSONObject().put("contentTarget", "https://www.netflix.com/watch/$id"))
