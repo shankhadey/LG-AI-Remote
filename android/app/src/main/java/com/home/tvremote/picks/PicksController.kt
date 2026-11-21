@@ -112,7 +112,8 @@ class PicksController(
 
     fun close() {
         job?.cancel()
-        session?.let { if (it.outcome == "open") { it.outcome = "abandoned"; store.saveSession(it) } }
+        // Closing without any picks shown is just looking (or changing settings), not giving up on the picks.
+        session?.let { if (it.outcome == "open") { it.outcome = if (it.shown == 0) "browsed" else "abandoned"; store.saveSession(it) } }
         session = null
         open = false
         if (web != null) { stopTvPage(); if (tv.foreground == "com.webos.app.browser") tv.goHome() }
@@ -337,12 +338,15 @@ class PicksController(
 
     fun color(name: String): String = listOf("#1F5F8B", "#3E6B48", "#7A3B2E", "#5B4B8A", "#2E4057", "#8A5A1F")[Math.floorMod(name.hashCode(), 6)]
 
+    /** Picks were shown and none was played (older versions also recorded a plain open/close as "abandoned"). */
+    private fun gaveUp(s: Session) = s.outcome == "abandoned" && s.shown > 0
+
     /** Measurement summary + last sessions, for Diagnostics. */
     fun diagnostics(): String = buildString {
         val all = store.sessions()
         val played = all.filter { it.playedAt != null }
         val secs = played.mapNotNull { it.secondsToPlay }.sorted()
-        appendLine("PICKS · ${all.size} sessions · ${played.size} played · ${all.count { it.outcome == "abandoned" }} gave up")
+        appendLine("PICKS · ${all.size} sessions · ${played.size} played · ${all.count { gaveUp(it) }} gave up")
         if (secs.isNotEmpty()) appendLine("Typical time to Play: ${secs[secs.size / 2]} s (fastest ${secs.first()} s, slowest ${secs.last()} s)")
         val counted = played.filter { it.outcome != "no-start" }
         if (counted.isNotEmpty()) {
@@ -364,7 +368,7 @@ class PicksController(
                 "quick-back" -> append(" · LEFT after ${s.leftAfterMin} min")
                 "watched" -> append(" · watched 30+ min")
                 "no-start" -> append(" · left within 2 min (not counted)")
-                "abandoned" -> append(" · gave up")
+                "abandoned", "browsed" -> append(if (gaveUp(s)) " · gave up" else " · closed before any picks")
             }
             appendLine()
         }

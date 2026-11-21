@@ -13,10 +13,6 @@ Things we decided to remember for later.
 - **Wake after a long time off** with Quick Start+ OFF (e.g. next morning). Worked right after switching off;
   some TVs drop Wi-Fi in deep standby. If it fails, turn Quick Start+ back on.
 
-## Next small fixes (ship with the next build)
-- Picks: opening and closing the picker with 0 picks shown shouldn't count as "gave up" (record as "browsed", or
-  don't save the session). Only "gave up" if picks were shown and none played.
-
 ## Parked (low impact)
 - Diagnostics: also show attempts still in flight when Diagnostics is opened.
 
@@ -71,6 +67,9 @@ Things we decided to remember for later.
 - **iPhone version** for the other household phone (original ask).
 
 ## Done
+- v0.5.5: Diagnostics logs each failed connect attempt during turn-on (to see whether the ~9 s between "network up"
+  and "connected" is the TV booting or the app). Closing the picker before any picks is "closed before any
+  picks", not "gave up". v0.5.4 turn-on confirmed working on the TV (network up 17.3 s, connected 26.1 s).
 - v0.5.4: turning off now closes the connection (the TV vanished without closing it, so a turn-on within ~20 s
   "connected" instantly on the dead socket and then dropped). The wake loop starts from a clean connection and a
   failed power check means "retry", not "on". Late events from an old socket can no longer kill a new one.

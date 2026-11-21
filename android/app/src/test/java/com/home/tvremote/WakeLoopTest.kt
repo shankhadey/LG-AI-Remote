@@ -44,6 +44,7 @@ class WakeLoopTest {
         assertTrue("up at $up s, connected at $secs s", secs - up < 2.5)   // was ~11 s later with the hand-off bug
         assertEquals(3, tv.connectAttempts)
         assertTrue(log.last().startsWith("WAKE connected after"))
+        assertEquals(2, log.count { it.contains("connect attempt") && it.contains("connection refused") })
         assertTrue("wake keeps being resent while waiting", tv.packets >= 4 * 7)
     }
 

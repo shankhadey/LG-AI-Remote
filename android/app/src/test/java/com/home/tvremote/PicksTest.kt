@@ -250,6 +250,13 @@ class PicksTest {
         assertTrue(pc.diagnostics().contains("Quick-backs"))
     }
 
+    @Test fun closingBeforeAnyPicksIsNotGivingUp() {
+        val pc = controller()
+        pc.openPicker(); pc.close()
+        assertEquals("browsed", pc.store.sessions().last().outcome)
+        assertTrue(pc.diagnostics(), pc.diagnostics().contains("0 gave up") && pc.diagnostics().contains("closed before any picks"))
+    }
+
     @Test fun leavingWithinTwoMinutesIsNotAQuickBack() {
         val tv = FakeTv()
         val pc = controller(tv)

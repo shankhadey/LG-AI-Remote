@@ -40,6 +40,7 @@ class WakeLoop(
         var lastErr: Throwable? = null
         var upLogged = false
         var stateFailures = 0
+        var attempts = 0
         log("WAKE start")
         while (now() - start < totalMs) {
             onTick(((now() - start) / 1000).toInt())
@@ -49,7 +50,16 @@ class WakeLoop(
             }
             if (reachable()) {
                 if (!upLogged) { log("WAKE TV network up after ${secs()} s"); upLogged = true }
-                if (runCatching { connectOnce() }.getOrDefault(false)) {
+                val tried = now()
+                val attempt = runCatching { connectOnce() }
+                if (attempt.isFailure || attempt.getOrNull() == false) {
+                    // Logged so Diagnostics shows whether the gap between "network up" and "connected" is the TV
+                    // (refusing / not answering while it boots) or the app.
+                    attempts++
+                    if (attempts <= 6) log("WAKE connect attempt $attempts failed at ${secs()} s after ${now() - tried} ms: " +
+                        (attempt.exceptionOrNull()?.let { it.message ?: it.javaClass.simpleName }?.take(90) ?: "not paired"))
+                }
+                if (attempt.getOrDefault(false)) {
                     // Right after "off" the TV answers for a few seconds while shutting down;
                     // only call it on once it reports itself awake.
                     val state = runCatching { powerState() }
