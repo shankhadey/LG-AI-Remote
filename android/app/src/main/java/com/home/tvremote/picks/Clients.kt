@@ -49,8 +49,12 @@ class Tmdb(private val key: String, private val base: String = "https://api.them
     }
 
     /** Titles on the user's services matching mood/language/length. */
-    /** [since] (yyyy-MM-dd): only films released, or series with episodes aired, since then. */
-    suspend fun discover(kind: Kind, providers: List<Int>, mood: Mood, language: String?, maxRuntime: Int?, page: Int = 1, since: String? = null): List<Title> {
+    /**
+     * [since] / [until] (yyyy-MM-dd): only films released, or series that first aired, in that window.
+     * (Series by "first aired", not "any episode aired": otherwise 20-year-old shows count as new.)
+     */
+    suspend fun discover(kind: Kind, providers: List<Int>, mood: Mood, language: String?, maxRuntime: Int?, page: Int = 1,
+                         since: String? = null, until: String? = null): List<Title> {
         val p = mutableMapOf(
             "watch_region" to region, "with_watch_providers" to providers.joinToString("|"),
             "with_watch_monetization_types" to "flatrate", "sort_by" to "popularity.desc",
@@ -59,13 +63,16 @@ class Tmdb(private val key: String, private val base: String = "https://api.them
         )
         val genres = if (kind == Kind.Movie) mood.movieGenres else mood.tvGenres
         if (genres.isNotEmpty()) p["with_genres"] = genres
-        if (mood.without.isNotEmpty()) p["without_genres"] = mood.without
+        val without = if (kind == Kind.Movie) mood.movieWithout else mood.tvWithout
+        if (without.isNotEmpty()) p["without_genres"] = without
         if (language != null) p["with_original_language"] = language
         if (maxRuntime != null) p["with_runtime.lte"] = maxRuntime.toString()
+        val dateField = if (kind == Kind.Movie) "primary_release_date" else "first_air_date"
         if (since != null) {
-            p[if (kind == Kind.Movie) "primary_release_date.gte" else "air_date.gte"] = since
-            p["vote_count.gte"] = "10"   // new titles haven't had time to collect votes
+            p["$dateField.gte"] = since
+            p["vote_count.gte"] = "15"   // new titles haven't had time to collect votes
         }
+        if (until != null) p["$dateField.lte"] = until
         val arr = get("/discover/${if (kind == Kind.Movie) "movie" else "tv"}", p).optJSONArray("results") ?: JSONArray()
         return (0 until arr.length()).map { parse(kind, arr.getJSONObject(it)) }
     }
@@ -112,6 +119,26 @@ class Tmdb(private val key: String, private val base: String = "https://api.them
     }
 
     /** TMDB's "recommendations" for a title: used for "Fans of X also loved it". */
+    /** TMDB's trending-this-week list: key → rank (0 = top). A "what people are watching now" signal. */
+    suspend fun trending(kind: Kind): Map<String, Int> {
+        val arr = runCatching { get("/trending/${if (kind == Kind.Movie) "movie" else "tv"}/week").optJSONArray("results") }.getOrNull() ?: return emptyMap()
+        return (0 until arr.length()).associate { "${if (kind == Kind.Movie) "movie" else "tv"}:${arr.getJSONObject(it).optInt("id")}" to it }
+    }
+
+    /** "Fans also liked" as full titles (for adding to the candidates, not just boosting). */
+    suspend fun recommendationTitles(key: String): List<Title> {
+        val (kind, id) = key.split(':').let { it[0] to it[1] }
+        val arr = runCatching { get("/$kind/$id/recommendations").optJSONArray("results") }.getOrNull() ?: return emptyList()
+        return (0 until arr.length()).map { parse(if (kind == "movie") Kind.Movie else Kind.Tv, arr.getJSONObject(it)) }
+    }
+
+    /** Genres of a title (for "what do their favourites have in common"). */
+    suspend fun genresOf(key: String): List<Int> {
+        val (kind, id) = key.split(':').let { it[0] to it[1] }
+        val g = runCatching { get("/$kind/$id").optJSONArray("genres") }.getOrNull() ?: return emptyList()
+        return (0 until g.length()).map { g.getJSONObject(it).optInt("id") }
+    }
+
     suspend fun recommendations(key: String): Set<String> {
         val (kind, id) = key.split(':').let { it[0] to it[1] }
         val arr = runCatching { get("/$kind/$id/recommendations").optJSONArray("results") }.getOrNull() ?: return emptySet()

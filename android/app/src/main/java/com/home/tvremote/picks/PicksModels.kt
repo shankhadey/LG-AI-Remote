@@ -2,14 +2,21 @@ package com.home.tvremote.picks
 
 import java.util.Calendar
 
-/** Moods offered as one-tap buttons. Each maps to TMDB genres (movie, tv) to include and exclude. */
-enum class Mood(val label: String, val hint: String, val movieGenres: String, val tvGenres: String, val without: String) {
-    New("New", "Out this year", "", "", "27"),
-    Light("Light & funny", "Easy, no thinking", "35", "35", "27|53|10752"),
-    Cozy("Cozy", "Warm, comforting", "10751|10749|16|35", "10751|16|35", "27|53|80|10752"),
-    Gripping("Gripping", "Can't look away", "53|80|9648|28", "80|9648|10759", "16|10751"),
-    MindBending("Mind-bending", "Twists, big ideas", "878|9648|14", "10765|9648", "10751"),
-    Any("Anything", "Surprise us", "", "", "27"),
+/** TV genres that are never picks: kids, news, reality, soap, talk. */
+private const val TV_JUNK = "10762|10763|10764|10766|10767"
+
+/**
+ * Moods offered as one-tap buttons: TMDB genres to include (any of) and exclude, separately for films and series.
+ * Kept narrow so each mood gives a clearly different set (live tests showed broad "Mystery" made
+ * Mind-bending return crime procedurals, and comedy pulled in mostly cartoons).
+ */
+enum class Mood(val label: String, val hint: String, val movieGenres: String, val tvGenres: String, val movieWithout: String, val tvWithout: String) {
+    New("New", "Out this year", "", "", "27|10770", TV_JUNK),
+    Light("Light & funny", "Easy, no thinking", "35", "35", "27|53|10752|10770", "80|$TV_JUNK"),
+    Cozy("Cozy", "Warm, comforting", "10751|10749|35", "35|10751", "27|53|80|10752|10770", "80|10765|10759|$TV_JUNK"),
+    Gripping("Gripping", "Can't look away", "53|80|9648", "80|9648", "27|16|10751|10770", "16|10751|35|$TV_JUNK"),
+    MindBending("Mind-bending", "Twists, big ideas", "878|14", "10765", "16|10751|10770", "16|10751|35|$TV_JUNK"),
+    Any("Anything", "Surprise us", "", "", "27|10770", TV_JUNK),
 }
 
 enum class Kind { Movie, Tv }
@@ -29,8 +36,10 @@ data class Title(
     val posterPath: String? = null,
     val runtimeMin: Int? = null,
     val service: String? = null,
-    /** Came out (or had new episodes) recently. */
+    /** Released / first aired within the last two years. */
     val fresh: Boolean = false,
+    /** Position in TMDB's trending-this-week list (0 = top), or -1. */
+    val trendRank: Int = -1,
 ) {
     val key get() = "${if (kind == Kind.Movie) "movie" else "tv"}:$id"
 }

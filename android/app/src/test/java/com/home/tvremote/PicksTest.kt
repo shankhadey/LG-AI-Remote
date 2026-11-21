@@ -192,7 +192,8 @@ class PicksTest {
         val discover = server.takeRequestsPaths().filter { it.startsWith("/3/discover") }
         assertTrue(discover.isNotEmpty())
         assertTrue(discover.toString(), discover.all { "2025-11-21" in it })   // 12 months back, every query
-        assertTrue(r.picks.all { it.title.fresh })
+        assertTrue(discover.toString(), discover.filter { "/tv" in it }.all { "first_air_date.gte" in it })   // first aired, not "any episode aired"
+        assertTrue(r.picks.isNotEmpty())
     }
 
     @Test fun otherMoodsAlsoFetchRecentTitlesAndBoostThem() = runBlocking {
@@ -398,6 +399,40 @@ class PicksTest {
         assertEquals(Step.Results, pc.step)
         assertEquals(listOf("Friends"), pc.picks.map { it.title.name })          // The Morning Show is on Apple TV+, not theirs
         assertEquals("With Jennifer Aniston", pc.summary)
+    }
+
+    @Test fun rankingPrefersProvenOverThinlyRatedNewAndPenalisesCartoons() {
+        val proven = Title(Kind.Movie, 1, "Proven", year = "2015", rating = 8.4, votes = 20000, popularity = 40.0, genres = listOf(53))
+        val thinNew = Title(Kind.Movie, 2, "Thin new", year = "2026", rating = 7.1, votes = 45, popularity = 120.0, genres = listOf(53), fresh = true)
+        assertTrue(Recommender.score(proven, emptyMap(), thisYear = 2026) > Recommender.score(thinNew, emptyMap(), thisYear = 2026))
+        val sitcom = Title(Kind.Tv, 3, "Sitcom", year = "2020", rating = 8.0, votes = 2000, popularity = 100.0, genres = listOf(35))
+        val cartoon = sitcom.copy(id = 4, genres = listOf(16, 35))
+        assertTrue(Recommender.score(sitcom, emptyMap()) > Recommender.score(cartoon, emptyMap()))
+        val likesCartoons = Recommender.Taste(setOf(16, 35))
+        assertTrue(Recommender.score(cartoon, emptyMap(), likesCartoons) > Recommender.score(sitcom, emptyMap()))
+        val oldProcedural = Title(Kind.Tv, 5, "Procedural", year = "2000", rating = 8.2, votes = 5000, popularity = 2000.0, genres = listOf(80))
+        val recentDrama = Title(Kind.Tv, 6, "Recent", year = "2025", rating = 8.2, votes = 1500, popularity = 60.0, genres = listOf(80))
+        assertTrue(Recommender.score(recentDrama, emptyMap(), thisYear = 2026) > Recommender.score(oldProcedural, emptyMap(), thisYear = 2026))
+    }
+
+    @Test fun lightAndFunnyMeansMainlyAComedy() = runBlocking {
+        server.dispatcher = object : Dispatcher() {
+            override fun dispatch(r: RecordedRequest): MockResponse {
+                val p = r.path ?: ""
+                fun json(o: Any) = MockResponse().setBody(o.toString())
+                return when {
+                    p.startsWith("/3/watch/providers/") -> json(JSONObject().put("results", org.json.JSONArray().put(JSONObject().put("provider_id", 8).put("provider_name", "Netflix"))))
+                    p.startsWith("/3/discover/tv") -> json(JSONObject().put("results", org.json.JSONArray()
+                        .put(JSONObject().put("id", 1).put("name", "Sitcom").put("genre_ids", org.json.JSONArray(listOf(35))).put("vote_average", 7.8).put("vote_count", 900).put("first_air_date", "2021-01-01").put("original_language", "en"))
+                        .put(JSONObject().put("id", 2).put("name", "Dark drama").put("genre_ids", org.json.JSONArray(listOf(18, 35))).put("vote_average", 8.6).put("vote_count", 3000).put("first_air_date", "2021-01-01").put("original_language", "en"))))
+                    else -> json(JSONObject())
+                }
+            }
+        }
+        server.start()
+        val r = Recommender(store(), Tmdb("k", server.url("/3").toString().trimEnd('/')), null)
+            .pick("Alex", "weekday-late", Ask(Mood.Light, kind = Kind.Tv), null, null, "late")
+        assertEquals(listOf("tv:1"), r.pool.map { it.key })
     }
 
     private fun MockWebServer.takeRequestsPaths(): List<String> = (0 until requestCount).mapNotNull { takeRequest().path }

@@ -70,6 +70,18 @@ Measure it: time from opening to Play, quick-backs, "Not now" count per session.
 - To test on the TV: Search 1/2 (Netflix search page with "The Crown" filled in).
 - Next: Prime Video and Disney+ title/search links (same 3-try test).
 
+## Ranking (v0.9.1, tuned on live TMDB — LiveRankingReport, run with TMDB_KEY set)
+- Candidates in parallel: mood on their services (popular + first released/aired in 2 years), plus "fans also
+  liked" of favourites/likes that fit the mood and are on their services (checked live).
+- Score = rating shrunk to 6.6 until ~300 votes + trending this week + small popularity + recency (only with
+  enough votes and ★7+) − old long-running series − cartoons unless favourites include animation + taste
+  (fans of favourites, shared genres). Titles under 80 votes (40 if new) dropped.
+- Moods: the mood's genre must be the title's main genre (first for Light/Cozy); kids/news/reality/talk/soap never.
+- Variety: re-ranked so the same main genre, two cartoons or the same franchise don't fill a set.
+- Results (36 sets): films 14%→26%, oldest pick 1989→1994, "new" titles that are really new, "Fans of…" 9→17,
+  each mood distinct; ~0.7 s per set before AI.
+- Known: TMDB genre tags are loose (Forrest Gump = comedy; BEEF = comedy first).
+
 ## Works on other people's LG TVs (before sharing)
 - Netflix link format: self-calibrating instead of the test menu — after a Netflix Play, ask once "Did it open
   <title>?"; No → next variant next time; remember per TV. Same for other apps as their formats are found.
