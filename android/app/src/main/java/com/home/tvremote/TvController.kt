@@ -91,6 +91,7 @@ class TvController(app: Application) : AndroidViewModel(app), TvActions {
     fun refresh() {
         if (checking || connecting || connected || waking) return
         val ip = prefs.getString("ip", null) ?: return
+        if (System.currentTimeMillis() - offAt < 20_000) { tvOff = true; return }
         checking = true
         viewModelScope.launch {
             try {
@@ -455,11 +456,23 @@ class TvController(app: Application) : AndroidViewModel(app), TvActions {
                     "Screen Off" -> { say("Turning the screen on"); ssap("ssap://com.webos.service.tvpower/power/turnOnScreen") }
                     "Active Standby", "Suspend", "Power Off" -> powerOn()
                     // "Active", or the TV answered but didn't say: it's on, so turn it off.
-                    else -> { say("Turning off"); ssap("ssap://system/turnOff"); tvOff = true; foregroundApp = null }
+                    else -> turnOff()
                 }
             } finally { powerBusy = false }
         }
     }
+
+    /** Turn off, then drop the connection: the TV goes away without closing it, which left a stale socket. */
+    private fun turnOff() {
+        say("Turning off"); tvOff = true; foregroundApp = null; offAt = System.currentTimeMillis()
+        enqueue {
+            runCatching { tv().request("ssap://system/turnOff") }
+            tv?.close(); connected = false
+        }
+    }
+
+    /** When the app last turned the TV off: for a few seconds after, the shutting-down TV still answers. */
+    @Volatile private var offAt = 0L
 
     /** Press-and-hold on the power button: always try to wake the TV. */
     fun forcePowerOn() { if (!waking) powerOn() }
@@ -488,6 +501,7 @@ class TvController(app: Application) : AndroidViewModel(app), TvActions {
         }
         waking = true
         wakeSeconds = 0
+        tv?.close(); connected = false
         if (homeOnWake) homeAfterWakeUntil = System.currentTimeMillis() + 90_000
         viewModelScope.launch {
             try {
@@ -498,6 +512,7 @@ class TvController(app: Application) : AndroidViewModel(app), TvActions {
                     // service is ready. The loop creates the connection itself (no hand-off).
                     connectOnce = { ip != null && run { withTimeout(2500) { ensureTv(ip).connect() }; true } },
                     powerState = { withTimeout(2000) { tv?.request("ssap://com.webos.service.tvpower/power/getPowerState")?.optString("state") } },
+                    reset = { tv?.close() },
                     now = System::currentTimeMillis,
                     log = ::event,
                     onTick = { wakeSeconds = it },
@@ -564,7 +579,7 @@ class TvController(app: Application) : AndroidViewModel(app), TvActions {
 
     fun run(cmd: Command) {
         when (cmd) {
-            is Command.Power -> if (cmd.on) powerOn() else { say("Turning off"); ssap("ssap://system/turnOff"); tvOff = true; foregroundApp = null }
+            is Command.Power -> if (cmd.on) powerOn() else turnOff()
             is Command.VolumeStep -> {
                 say(if (cmd.up) "Louder" else "Quieter")
                 enqueue { repeat(cmd.steps) { tv().request(if (cmd.up) "ssap://audio/volumeUp" else "ssap://audio/volumeDown"); delay(40) } }

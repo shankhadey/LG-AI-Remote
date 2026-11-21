@@ -40,9 +40,9 @@ class WakeLoopTest {
         val r = loop(tv, log).run()
         assertTrue(r is WakeLoop.Result.On)
         val secs = (r as WakeLoop.Result.On).seconds
-        assertTrue("connected at $secs s", secs in 17.0..19.5)   // was ~28 s with the hand-off bug
+        val up = Regex("network up after ([0-9.]+) s").find(log.joinToString())!!.groupValues[1].toDouble()
+        assertTrue("up at $up s, connected at $secs s", secs - up < 2.5)   // was ~11 s later with the hand-off bug
         assertEquals(3, tv.connectAttempts)
-        assertTrue(log.any { it.startsWith("WAKE TV network up after 17.") })
         assertTrue(log.last().startsWith("WAKE connected after"))
         assertTrue("wake keeps being resent while waiting", tv.packets >= 4 * 7)
     }
@@ -53,6 +53,36 @@ class WakeLoopTest {
         val r = loop(tv, log).run()
         assertTrue(r is WakeLoop.Result.On)
         assertEquals(2, log.count { it.contains("TV says Active Standby") })
+    }
+
+    @Test fun aStaleConnectionFromBeforeTurnOffIsNotMistakenForOn() = runTest {
+        // Seen on the real TV: connect "succeeded" instantly on the old socket, then the power check failed.
+        var stale = true
+        var resets = 0
+        val log = mutableListOf<String>()
+        val r = WakeLoop(
+            sendWake = { 4 },
+            reachable = { currentTime >= 18_000 },
+            connectOnce = { true },
+            powerState = { if (stale) error("Lost connection to the TV") else "Active" },
+            reset = { resets++; stale = false },
+            now = { currentTime },
+            log = { log += it },
+        ).run()
+        assertTrue(r is WakeLoop.Result.On)
+        assertEquals(1, resets)
+        assertTrue(log.any { it.contains("no answer") })
+        assertTrue(log.last().contains("state Active"))
+    }
+
+    @Test fun aTvThatNeverAnswersThePowerCheckStillCountsAsOnAfterThreeTries() = runTest {
+        val log = mutableListOf<String>()
+        val r = WakeLoop(
+            sendWake = { 4 }, reachable = { true }, connectOnce = { true },
+            powerState = { error("unsupported") }, now = { currentTime }, log = { log += it },
+        ).run()
+        assertTrue(r is WakeLoop.Result.On)
+        assertEquals(2, log.count { it.contains("no answer") })
     }
 
     @Test fun givesUpWhenTheTvNeverAnswers() = runTest {

@@ -15,8 +15,10 @@ class WakeLoop(
     private val reachable: suspend () -> Boolean,
     /** One short connection attempt; true when connected and paired. */
     private val connectOnce: suspend () -> Boolean,
-    /** The TV's power state once connected ("Active", "Active Standby", …), or null if it won't say. */
+    /** The TV's power state once connected ("Active", "Active Standby", …), or null if it won't say. Throws if the request fails. */
     private val powerState: suspend () -> String?,
+    /** Drop the connection so the next attempt starts fresh. */
+    private val reset: () -> Unit = {},
     private val now: () -> Long,
     private val log: (String) -> Unit = {},
     private val onTick: (Int) -> Unit = {},
@@ -37,6 +39,7 @@ class WakeLoop(
         var sent = 0
         var lastErr: Throwable? = null
         var upLogged = false
+        var stateFailures = 0
         log("WAKE start")
         while (now() - start < totalMs) {
             onTick(((now() - start) / 1000).toInt())
@@ -49,12 +52,21 @@ class WakeLoop(
                 if (runCatching { connectOnce() }.getOrDefault(false)) {
                     // Right after "off" the TV answers for a few seconds while shutting down;
                     // only call it on once it reports itself awake.
-                    val state = runCatching { powerState() }.getOrNull()
-                    if (state == null || state.isEmpty() || state == "Active") {
-                        log("WAKE connected after ${secs()} s (state ${state ?: "?"})")
-                        return Result.On(secs())
+                    val state = runCatching { powerState() }
+                    val s = state.getOrNull()
+                    when {
+                        // A failed request means the connection isn't really working yet (or is a stale one): retry.
+                        // After 3 in a row on fresh connections, assume this TV just won't answer that question.
+                        state.isFailure && ++stateFailures < 3 -> {
+                            log("WAKE connected but no answer (${state.exceptionOrNull()?.message?.take(80)}) at ${secs()} s, retrying")
+                            reset()
+                        }
+                        s == null || s.isEmpty() || s == "Active" || state.isFailure -> {
+                            log("WAKE connected after ${secs()} s (state ${s ?: "?"})")
+                            return Result.On(secs())
+                        }
+                        else -> log("WAKE connected but TV says $s (${secs()} s)")
                     }
-                    log("WAKE connected but TV says $state (${secs()} s)")
                 }
                 delay(retryMs)
             } else delay(pollMs)

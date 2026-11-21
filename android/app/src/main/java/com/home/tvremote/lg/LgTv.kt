@@ -90,16 +90,20 @@ class LgTv(
         throw TvException("Can't reach the TV at $ip. Is it on and on the same Wi-Fi? (${lastError?.message})")
     }
 
+    /** Bumped whenever a socket is opened or closed, so late events from an old socket are ignored. */
+    private val generation = AtomicInteger(0)
+
     private suspend fun open(url: String) {
         val opened = CompletableDeferred<Unit>()
         registered = CompletableDeferred()
+        val gen = generation.incrementAndGet()
         ws = client.newWebSocket(Request.Builder().url(url).build(), object : WebSocketListener() {
             override fun onOpen(webSocket: WebSocket, response: Response) { opened.complete(Unit) }
-            override fun onMessage(webSocket: WebSocket, text: String) = handle(text)
+            override fun onMessage(webSocket: WebSocket, text: String) { if (gen == generation.get()) handle(text) }
             override fun onFailure(webSocket: WebSocket, t: Throwable, response: Response?) {
-                opened.completeExceptionally(t); dropped(t.message ?: "connection failed")
+                opened.completeExceptionally(t); if (gen == generation.get()) dropped(t.message ?: "connection failed")
             }
-            override fun onClosed(webSocket: WebSocket, code: Int, reason: String) = dropped("closed")
+            override fun onClosed(webSocket: WebSocket, code: Int, reason: String) { if (gen == generation.get()) dropped("closed") }
         })
         withTimeout(5000) { opened.await() }
     }
@@ -265,9 +269,17 @@ class LgTv(
         if (!ok) throw TvException("Couldn't reach the TV's pointer — try again")
     }
 
+    /**
+     * Drops the connection on purpose (e.g. the TV was turned off). Without this, a socket to a TV that has
+     * switched off can look open for up to ~20 s, and a "connect" during that time would succeed instantly on it.
+     */
     fun close() {
+        generation.incrementAndGet()
         pointer?.cancel(); pointer = null
         ws?.cancel(); ws = null
+        pending.values.forEach { it.completeExceptionally(TvException("Connection closed")) }
+        pending.clear(); subscriptions.clear(); subUris.clear()
+        if (!registered.isCompleted) registered.completeExceptionally(TvException("Connection closed"))
     }
 }
 

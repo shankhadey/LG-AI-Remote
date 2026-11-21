@@ -67,6 +67,9 @@ Things we decided to remember for later.
 - **iPhone version** for the other household phone (original ask).
 
 ## Done
+- v0.5.4: turning off now closes the connection (the TV vanished without closing it, so a turn-on within ~20 s
+  "connected" instantly on the dead socket and then dropped). The wake loop starts from a clean connection and a
+  failed power check means "retry", not "on". Late events from an old socket can no longer kill a new one.
 - v0.5.3: turn-on fix. The wake loop now creates the TV connection itself (it used to hand off to a slow single
   connect when the app was opened with the TV off, adding ~11 s and briefly showing the Turn-on screen again).
   Stays on "Turning on…" until connected, then goes straight to the remote. WakeLoop tested on a virtual clock.
