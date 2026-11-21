@@ -149,7 +149,7 @@ private fun TouchpadPicks(pc: PicksController) {
     var heard by remember { mutableStateOf("") }
     var listening by remember { mutableStateOf(false) }
     val voice = remember {
-        VoiceInput(context, onPartial = { heard = it }, onResult = { g -> heard = ""; pc.ask(g.first()) },
+        VoiceInput(context, onPartial = { heard = it }, onResult = { g -> heard = ""; pc.askSpoken(g) },
             onError = { listening = false; heard = "" }, onEnd = { listening = false })
     }
     DisposableEffect(Unit) { onDispose { voice.release() } }
@@ -187,7 +187,7 @@ private fun ChoosePicks(pc: PicksController) {
     var text by remember { mutableStateOf("") }
     var listening by remember { mutableStateOf(false) }
     val voice = remember {
-        VoiceInput(context, onPartial = { text = it }, onResult = { g -> text = g.first(); pc.ask(g.first()) },
+        VoiceInput(context, onPartial = { text = it }, onResult = { g -> text = g.first(); pc.askSpoken(g) },
             onError = { listening = false }, onEnd = { listening = false })
     }
     DisposableEffect(Unit) { onDispose { voice.release() } }
@@ -250,7 +250,7 @@ private fun ChoosePicks(pc: PicksController) {
                 if (text.isEmpty()) Text(if (listening) "Listening…" else "Or just say it…", color = Palette.faint, fontSize = 15.sp)
                 BasicTextField(text, { text = it }, singleLine = true, textStyle = TextStyle(color = Palette.text, fontSize = 15.sp),
                     cursorBrush = SolidColor(Palette.accent), keyboardOptions = KeyboardOptions(imeAction = ImeAction.Go),
-                    keyboardActions = KeyboardActions(onGo = { pc.ask(text) }), modifier = Modifier.fillMaxWidth())
+                    keyboardActions = KeyboardActions(onGo = { pc.askSpoken(listOf(text)) }), modifier = Modifier.fillMaxWidth())
             }
             Box(Modifier.size(42.dp).clip(CircleShape).background(if (listening) Palette.danger else Palette.primary).clickable {
                 if (ContextCompat.checkSelfPermission(context, Manifest.permission.RECORD_AUDIO) == PackageManager.PERMISSION_GRANTED && voice.available) {

@@ -577,6 +577,8 @@ class TvController(app: Application) : AndroidViewModel(app), TvActions {
     var wakeSeconds by mutableStateOf(0)
     fun appEvent(msg: String) = event(msg)
 
+    init { picks.commandHandler = ::pickerSpeech }
+
     /** Wake-up timeline and other controller events, for Diagnostics. */
 
     private fun event(msg: String) {
@@ -646,9 +648,41 @@ class TvController(app: Application) : AndroidViewModel(app), TvActions {
     /** Voice gives several guesses; use the first one that's a real command (else the top guess). */
     fun handleSpoken(guesses: List<String>): String {
         val parser = CommandParser(apps)
+        if (guesses.size > 1) event("HEARD ${guesses.take(4).joinToString(" | ")}")
+        alternatives = guesses
         val pick = guesses.firstOrNull { g -> parser.parse(g).let { it != null && it !is Command.NoSuchApp } } ?: guesses.first()
         handle(pick, fromVoice = true)
         return pick
+    }
+
+    /** The recognizer's other guesses for what was just said ("open chrome" may also have been "open the crown"). */
+    @Volatile private var alternatives: List<String> = emptyList()
+
+    /** Title names to try for "open X": what was parsed first, then the same phrase from the other guesses. */
+    private fun titleCandidates(name: String): List<String> {
+        val parser = CommandParser(apps)
+        val others = alternatives.mapNotNull { g ->
+            when (val c = parser.parse(g)) {
+                is Command.NoSuchApp -> c.name; is Command.MaybeApp -> c.spoken
+                is Command.Search -> c.query.takeIf { c.title }
+                null -> g.removePrefix("open ").removePrefix("play ").removePrefix("watch ")
+                else -> null
+            }
+        }
+        return (listOf(name) + others).map { it.trim() }.filter { it.isNotEmpty() }.distinctBy { it.lowercase() }.take(4)
+    }
+
+    /** Picker voice: anything that isn't a request for recommendations runs as a normal command. */
+    private fun pickerSpeech(guesses: List<String>): Boolean {
+        alternatives = guesses
+        val parser = CommandParser(apps)
+        val cmd = guesses.firstNotNullOfOrNull { g -> parser.parse(g)?.takeIf { it !is Command.NoSuchApp } } ?: parser.parse(guesses.first())
+        if (cmd == null || cmd is Command.WhatToWatch) return false
+        event("PICKER voice “${guesses.first()}” → ${cmd::class.simpleName}")
+        val opens = cmd is Command.OpenApp || cmd is Command.MaybeApp || cmd is Command.NoSuchApp || (cmd is Command.Search && cmd.title)
+        if (opens) picks.close()
+        run(cmd)
+        return true
     }
 
     fun voiceHints(): List<String> = (apps.map { it.title } + CommandParser.KNOWN_APPS.map { it.title }).distinct() +
@@ -667,7 +701,12 @@ class TvController(app: Application) : AndroidViewModel(app), TvActions {
         }
         val parsed = CommandParser(apps).parse(t)
         if (parsed == null && fromVoice) {
-            // Rules didn't understand: let the AI try (a person, a description, a mood). Never a silent YouTube search.
+            picks.personIn(t)?.let { (person, kind) ->
+                say("Looking for ${person}…")
+                viewModelScope.launch { picks.showPerson(person, kind)?.let { say(it, error = true) } }
+                return true
+            }
+            // Rules didn't understand: let the AI try (a description, a mood). Never a silent YouTube search.
             say("Thinking…")
             viewModelScope.launch {
                 picks.interpret(t)?.let { say("$it. To search, say “search for …”", error = true) }
@@ -711,6 +750,9 @@ class TvController(app: Application) : AndroidViewModel(app), TvActions {
             is Command.NoSuchApp -> viewModelScope.launch {
                 // "open X" where X isn't an app: maybe it's a show or film, a person, or a description.
                 say("Looking for ${cmd.name}…")
+                // Misheard titles: try each of the recognizer's guesses for an exact title before settling.
+                val names = titleCandidates(cmd.name)
+                for (n in names.drop(1)) if (picks.findAndOpen(n, exactOnly = true) == com.home.tvremote.picks.PicksController.Found.Opened) return@launch
                 when (val r = picks.findAndOpen(cmd.name)) {
                     com.home.tvremote.picks.PicksController.Found.Opened -> {}
                     is com.home.tvremote.picks.PicksController.Found.Elsewhere -> say(picks.elsewhere(r), error = true)
@@ -720,7 +762,9 @@ class TvController(app: Application) : AndroidViewModel(app), TvActions {
             }
             is Command.MaybeApp -> viewModelScope.launch {
                 // Sounds a bit like an app, but an exact show or film title wins ("open Severance" isn't Settings).
-                if (picks.findAndOpen(cmd.spoken, exactOnly = true) != com.home.tvremote.picks.PicksController.Found.Opened) launch(cmd.app)
+                for (n in titleCandidates(cmd.spoken))
+                    if (picks.findAndOpen(n, exactOnly = true) == com.home.tvremote.picks.PicksController.Found.Opened) return@launch
+                launch(cmd.app)
             }
             is Command.SleepTimer -> startTimer(TimerKind.TurnOff, cmd.minutes)
             is Command.ScreenTimer -> startTimer(TimerKind.OnScreen, cmd.minutes)
@@ -736,9 +780,6 @@ class TvController(app: Application) : AndroidViewModel(app), TvActions {
             say("Searching YouTube for \"$query\"")
             val url = "https://www.youtube.com/tv?launch=voice&vq=" + URLEncoder.encode(query, "UTF-8")
             ssap("ssap://system.launcher/launch", JSONObject().put("id", target.id).put("params", JSONObject().put("contentTarget", url)))
-        } else if (target.id == "netflix") {
-            say("Searching Netflix for “$query”")
-            launch(target.copy(launchExtras = com.home.tvremote.picks.DeepLinks.netflixSearch(query, picks.store.netflixSearch)))
         } else {
             // No search link for this app yet: open it and type the words as soon as its search box is selected.
             launch(target)

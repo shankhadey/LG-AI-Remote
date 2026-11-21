@@ -70,6 +70,16 @@ Measure it: time from opening to Play, quick-backs, "Not now" count per session.
 - To test on the TV: Search 1/2 (Netflix search page with "The Crown" filled in).
 - Next: Prime Video and Disney+ title/search links (same 3-try test).
 
+## Test results 21 Nov (v0.9.2) → v0.9.3
+- Power with QS+: all passed (app on/off, TV-remote on/off noticed). Picks: "way better".
+- Netflix: Try 1 (api-global contentId) and Try 3 (https title contentId) open the show; search links (S1, S2) don't →
+  removed; Netflix without an ID now opens the app and auto-types like other apps.
+- Voice fixes: picker voice runs commands/titles first (was always "new picks"); "with <person>" handled without AI
+  (AI had labelled it a title and invented films); a named person beats the AI's title list; all recognizer guesses
+  tried for titles ("the crown" heard as "chrome"). HEARD/PICKER/VOICE lines in Diagnostics.
+- Connection drops whenever the app goes to the background; reconnects in ~0.2 s on return (fine).
+- Not yet tested: Prime / Disney+ auto-type, "play Barbie".
+
 ## Quick Start+ ON (21 Nov): wake from the app now ~5.6 s (was ~26 s)
 - v0.9.2: with QS+ an off TV stays reachable, so "reachable" ≠ "on". Bug: the app-open connect to a standby TV hung,
   then failed after turn-on had already connected, and flipped the screen back to "Turn on" (user saw ~5 min of

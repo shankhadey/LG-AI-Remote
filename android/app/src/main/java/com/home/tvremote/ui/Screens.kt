@@ -492,26 +492,12 @@ fun ListeningPanel(heard: String, level: Float, onDone: () -> Unit, onCancel: ()
 @Composable
 private fun LinkDialog(tv: TvController, onClose: () -> Unit) {
     var current by remember { mutableStateOf(tv.picks.store.netflixLink) }
-    var currentSearch by remember { mutableStateOf(tv.picks.store.netflixSearch) }
     AlertDialog(
         onDismissRequest = onClose,
         title = { Text("Open shows directly") },
         text = {
             Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
-                Text("Search 1 and 2 should open Netflix's search with “The Crown” already typed. Try 1–3 open a show's own page. Press Home on the TV between tries and note which ones work. The last one you tap in each group is used.", fontSize = 14.sp)
-                for ((i, v) in com.home.tvremote.picks.DeepLinks.NETFLIX_SEARCH_VARIANTS.withIndex()) {
-                    val selected = currentSearch == v
-                    Row(
-                        Modifier.fillMaxWidth().clip(RoundedCornerShape(12.dp))
-                            .background(if (selected) Palette.accent else Palette.surface2)
-                            .clickable { currentSearch = v; tv.testNetflixSearch(v) }
-                            .padding(14.dp),
-                        verticalAlignment = Alignment.CenterVertically,
-                    ) {
-                        Text("Search ${i + 1} · “The Crown”", color = if (selected) Color.White else Palette.text, fontWeight = FontWeight.SemiBold, modifier = Modifier.weight(1f))
-                        if (selected) Text("in use", color = Color.White, fontSize = 12.sp)
-                    }
-                }
+                Text("Each try opens a different show's own page on Netflix. Press Home on the TV between tries and note which ones land on that show. The last one you tap is used for Play.", fontSize = 14.sp)
                 for ((i, v) in com.home.tvremote.picks.DeepLinks.NETFLIX_VARIANTS.withIndex()) {
                     val selected = current == v
                     Row(

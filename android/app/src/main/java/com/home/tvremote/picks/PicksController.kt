@@ -156,6 +156,17 @@ class PicksController(
     // ---- asking ------------------------------------------------------------
     fun chooseMood(m: Mood) = run(Ask(mood = m), m.name, m.label)
     fun surprise() = run(Ask(mood = Mood.Any), "surprise", "Surprise us")
+    /** Set by the remote: handles what was said if it's a command or a title ("open The Crown"). True = handled. */
+    var commandHandler: ((List<String>) -> Boolean)? = null
+
+    /** Voice or typing in the picker: commands and titles first, then people ("with Jennifer Aniston"), then picks. */
+    fun askSpoken(guesses: List<String>) {
+        val text = guesses.firstOrNull()?.trim().orEmpty(); if (text.isEmpty()) return
+        if (commandHandler?.invoke(guesses) == true) return
+        personIn(text)?.let { (person, kind) -> scope.launch { showPerson(person, kind)?.let { tv.note(it, error = true) } }; return }
+        ask(text)
+    }
+
     fun ask(text: String) {
         val t = text.trim(); if (t.isEmpty()) return
         val s = store
@@ -282,9 +293,12 @@ class PicksController(
             if (id != null) {
                 tv.openTitle(appId, svc.name, DeepLinks.netflix(id, store.netflixLink))
                 remember(Opened(key, name, svc.name, appId, id,
-                    listOf("search") + DeepLinks.NETFLIX_VARIANTS.filter { it != store.netflixLink && it != "B" }.map { "format:$it" } + "type"))
+                    DeepLinks.NETFLIX_VARIANTS.filter { it != store.netflixLink && it != "B" }.map { "format:$it" } + "type"))
             } else {
-                tv.openTitle(appId, svc.name, DeepLinks.netflixSearch(name, store.netflixSearch))
+                // Netflix's search link didn't work on the TV (tested 21 Nov): type into its search box instead.
+                tv.openApp(appId, svc.name)
+                tv.typeWhenSearchOpens(name)
+                scope.launch { delay(4000); tv.toastOnTv("Select Search — the remote will type “$name”") }
                 remember(Opened(key, name, svc.name, appId, null, listOf("type")))
             }
             tv.note("Opening $name on Netflix")
@@ -309,9 +323,8 @@ class PicksController(
     fun fixLabel(): String? {
         val o = lastOpened ?: return null
         return when (val s = o.steps.getOrNull(fixStep) ?: return null) {
-            "search" -> "Not it? Search ${o.service} for it"
-            "type" -> "Type “${o.name}” in the search box"
-            else -> if (s.startsWith("format:")) "Still not it? Try another way" else null
+            "type" -> "Not it? Type “${o.name}” in ${o.service}'s search"
+            else -> if (s.startsWith("format:")) "Not it? Try another way" else null
         }
     }
 
@@ -320,7 +333,6 @@ class PicksController(
         val s = o.steps.getOrNull(fixStep) ?: return
         tv.log("FIX $s for ${o.name}")
         when {
-            s == "search" -> tv.openTitle(o.appId, o.service, DeepLinks.netflixSearch(o.name, store.netflixSearch))
             s.startsWith("format:") && o.netflixId != null -> tv.openTitle(o.appId, o.service, DeepLinks.netflix(o.netflixId, s.removePrefix("format:")))
             s == "type" -> {
                 if (tv.typeIntoSearch(o.name)) tv.note("Typed “${o.name}”")
@@ -390,6 +402,9 @@ class PicksController(
         val mine = Catalog.SERVICES.filter { it.name in store.services }
         suspend fun onMine(ts: List<Title>) = ts.take(10).map { runCatching { tmdb.enrich(it, mine) }.getOrDefault(it) }.filter { it.service != null }
         val titles = j.optJSONArray("titles")?.let { a -> (0 until a.length()).map { a.getString(it) } }.orEmpty().filter { it.isNotBlank() }
+        val personName = j.optString("person").takeIf { it.isNotBlank() && it != "null" }
+        // A named person wins: the model sometimes says "title" and invents films for "a movie with <actor>".
+        if (personName != null && j.optString("kind") != "description") return showPerson(personName, personIn(text)?.second)
         return when (j.optString("kind")) {
             "title" -> titles.firstOrNull()?.let { name ->
                 when (val r = findAndOpen(name)) {
@@ -414,6 +429,28 @@ class PicksController(
             "mood" -> { openPicker(); if (step == Step.Choose) ask(text); null }
             else -> "Didn't understand “$text”"
         }
+    }
+
+    /** "a movie with Jennifer Aniston", "shows starring Pedro Pascal" → (name, film/series/either). No AI needed. */
+    fun personIn(text: String): Pair<String, Kind?>? {
+        val m = Regex("(?:with|starring|featuring|directed by|by) ([a-z][a-z .'-]{3,40})$", RegexOption.IGNORE_CASE).find(text.trim()) ?: return null
+        val name = m.groupValues[1].trim().takeIf { it.split(' ').size in 2..4 } ?: return null
+        val kind = when { Regex("\\b(movie|film)s?\\b", RegexOption.IGNORE_CASE).containsMatchIn(text) -> Kind.Movie
+            Regex("\\b(shows?|series)\\b", RegexOption.IGNORE_CASE).containsMatchIn(text) -> Kind.Tv; else -> null }
+        return name to kind
+    }
+
+    /** A person's titles on the household's services, shown as picks. Returns a message when there are none. */
+    suspend fun showPerson(person: String, kind: Kind? = null): String? {
+        if (!store.isSetUp || store.tmdbKey.isBlank()) return "Set up picks first"
+        val tmdb = Tmdb(store.tmdbKey, tmdbBase)
+        val mine = Catalog.SERVICES.filter { it.name in store.services }
+        val credits = runCatching { tmdb.personCredits(person) }.getOrDefault(emptyList()).filter { kind == null || it.kind == kind }
+        val list = credits.take(10).map { runCatching { tmdb.enrich(it, mine) }.getOrDefault(it) }.filter { it.service != null }
+        tv.log("VOICE person “$person” (${kind ?: "any"}) → ${list.joinToString { it.name }.ifEmpty { "nothing on your services" }}")
+        if (list.isEmpty()) return "Nothing with $person on your services"
+        showList(list, "With ${person.split(' ').joinToString(" ") { w -> w.replaceFirstChar { it.uppercase() } }}") { "With $person." }
+        return null
     }
 
     fun elsewhere(r: Found.Elsewhere): String =

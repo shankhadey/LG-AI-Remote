@@ -248,7 +248,7 @@ class PicksTest {
         assertTrue(opened[0], opened[0].startsWith("title netflix") && "80057281" in opened[0] && "source_type=4" in opened[0])
         pc.openPicker(); pc.picks += Pick(Title(Kind.Tv, 8, "Unknown", service = "Netflix"), "why")
         pc.play(0); d.scheduler.advanceTimeBy(100)
-        assertTrue(opened[1], opened[1].startsWith("title netflix") && "search?q=Unknown" in opened[1])   // no ID: Netflix's search page
+        assertEquals("app netflix", opened[1])   // no ID: Netflix, then typing into its search
     }
 
     @Test fun netflixLinkVariantsDiffer() {
@@ -305,30 +305,28 @@ class PicksTest {
         override fun knownAppIds() = setOf("netflix", "com.disney.disneyplus-prod")
     }
 
-    @Test fun notItTriesSearchThenOtherFormatsThenTyping() {
+    @Test fun notItTriesTheOtherFormatThenTyping() {
         val tv = OpenLog(typed = true)
         val d = StandardTestDispatcher()
         val pc = PicksController(store(), tv, CoroutineScope(d), clock = { at(Calendar.TUESDAY, 21, 30) }, onDevice = null, netflixIdOf = { "80025678" })
         pc.openPicker(); pc.picks += Pick(Title(Kind.Tv, 7, "The Crown", service = "Netflix"), "why")
         pc.play(0); d.scheduler.advanceTimeBy(100)
         assertTrue(tv.calls.last(), "titles/movies/80025678" in tv.calls.last())               // format 1 first
-        assertEquals("Not it? Search Netflix for it", pc.fixLabel())
-        pc.tryNextFix(); assertTrue(tv.calls.last(), "search?q=The%20Crown" in tv.calls.last())
-        assertEquals("Still not it? Try another way", pc.fixLabel())
+        assertEquals("Not it? Try another way", pc.fixLabel())
         pc.tryNextFix(); assertTrue(tv.calls.last(), "www.netflix.com/title/80025678" in tv.calls.last())   // format 3
-        assertEquals("Type “The Crown” in the search box", pc.fixLabel())
+        assertEquals("Not it? Type “The Crown” in Netflix's search", pc.fixLabel())
         pc.tryNextFix(); assertEquals("type The Crown", tv.calls.last())
         pc.tryNextFix(); assertEquals("type The Crown", tv.calls.last())                       // can be tapped again
     }
 
-    @Test fun netflixWithoutAnIdOpensItsSearchPage() {
+    @Test fun netflixWithoutAnIdOpensTheAppAndTypesWhenSearchOpens() {
         val tv = OpenLog()
         val d = StandardTestDispatcher()
         val pc = PicksController(store(), tv, CoroutineScope(d), clock = { at(Calendar.TUESDAY, 21, 30) }, onDevice = null, netflixIdOf = { null })
         pc.openPicker(); pc.picks += Pick(Title(Kind.Movie, 9, "Glass Onion", service = "Netflix"), "why")
         pc.play(0); d.scheduler.advanceTimeBy(100)
-        assertTrue(tv.calls.last(), "search?q=Glass%20Onion" in tv.calls.last())
-        assertEquals("Type “Glass Onion” in the search box", pc.fixLabel())
+        assertEquals("app netflix", tv.calls.last())
+        assertEquals("Not it? Type “Glass Onion” in Netflix's search", pc.fixLabel())
     }
 
     @Test fun voiceFindsATitleOnTheirServices() = runBlocking {
@@ -433,6 +431,23 @@ class PicksTest {
         val r = Recommender(store(), Tmdb("k", server.url("/3").toString().trimEnd('/')), null)
             .pick("Alex", "weekday-late", Ask(Mood.Light, kind = Kind.Tv), null, null, "late")
         assertEquals(listOf("tv:1"), r.pool.map { it.key })
+    }
+
+    @Test fun peopleAreRecognisedWithoutAi() {
+        val pc = controller()
+        assertEquals("jennifer aniston" to Kind.Movie, pc.personIn("open a movie with jennifer aniston"))
+        assertEquals("pedro pascal" to Kind.Tv, pc.personIn("shows starring pedro pascal"))
+        assertNull(pc.personIn("something funny"))
+        assertNull(pc.personIn("play the crown"))
+    }
+
+    @Test fun aiNamingAPersonWinsOverAnInventedTitleList() = runBlocking {
+        fakeTmdbForVoice()
+        val ai = FakeEngine("On-phone", """{"kind":"title","titles":["Breakfast at Tiffany's"],"person":"Jennifer Aniston"}""")
+        val pc = PicksController(store().apply { services = listOf("Netflix") }, OpenLog(), CoroutineScope(StandardTestDispatcher()),
+            clock = { at(Calendar.TUESDAY, 21, 30) }, onDevice = ai, netflixIdOf = null, tmdbBase = server.url("/3").toString().trimEnd('/'))
+        assertNull(pc.interpret("something jennifer aniston is in"))
+        assertEquals(listOf("Friends"), pc.picks.map { it.title.name })
     }
 
     private fun MockWebServer.takeRequestsPaths(): List<String> = (0 until requestCount).mapNotNull { takeRequest().path }

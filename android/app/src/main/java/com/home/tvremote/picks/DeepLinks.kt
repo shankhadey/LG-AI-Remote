@@ -15,7 +15,7 @@ import java.util.concurrent.TimeUnit
  */
 object DeepLinks {
     /** Variants of the extra launch fields for Netflix, tried on the TV from the menu ("Test opening a show"). */
-    val NETFLIX_VARIANTS = listOf("A", "B", "C")
+    val NETFLIX_VARIANTS = listOf("A", "C")   // "B" (contentTarget …/watch/…) didn't work on our 2023 TV
 
     /** A different well-known title per variant, so a test can't be fooled by Netflix reopening the last page. */
     val NETFLIX_TESTS = mapOf("A" to ("80057281" to "Stranger Things"), "B" to ("81231974" to "Wednesday"), "C" to ("80025678" to "The Crown"))
