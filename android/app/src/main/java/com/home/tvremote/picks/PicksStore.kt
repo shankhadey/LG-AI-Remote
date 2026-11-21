@@ -95,6 +95,11 @@ class PicksStore(private val prefs: SharedPreferences) {
         get() = prefs.getString("netflixLink", "A") ?: "A"
         set(v) = prefs.edit().putString("netflixLink", v).apply()
 
+    /** Which Netflix search-link format this TV accepts. */
+    var netflixSearch: String
+        get() = prefs.getString("netflixSearch", "S1") ?: "S1"
+        set(v) = prefs.edit().putString("netflixSearch", v).apply()
+
     var showOnTv: Boolean
         get() = prefs.getBoolean("showOnTv", false)
         set(v) = prefs.edit().putBoolean("showOnTv", v).apply()

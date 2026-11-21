@@ -71,8 +71,8 @@ class CommandParserTest {
     @Test fun search() {
         check("search for stranger things on netflix", Command.Search("stranger things", netflix))
         check("find cooking videos", Command.Search("cooking videos", null))
-        check("play taylor swift on youtube", Command.Search("taylor swift", youtube))
-        check("watch the office", Command.Search("the office", null))
+        check("play taylor swift on youtube", Command.Search("taylor swift", youtube, title = true))
+        check("watch the office", Command.Search("the office", null, title = true))
         check("look up how to tie a tie", Command.Search("how to tie a tie", null))
     }
 
@@ -89,7 +89,7 @@ class CommandParserTest {
         check("mute the volume", Command.Mute(true))
         check("pause the movie", Command.Media("pause"))
         check("resume the show", Command.Media("play"))
-        check("play louder than words on youtube", Command.Search("louder than words", youtube))
+        check("play louder than words on youtube", Command.Search("louder than words", youtube, title = true))
     }
 
     @Test fun timers() {

@@ -75,6 +75,9 @@ class ScreenshotTest {
     }
 
     @Test fun remoteDark() { Palette.dark = true; val tv = remoteTv(); shot { RemoteScreen(tv) { true } } }
+    @Test fun remoteNotItLight() { Palette.dark = false; val tv = remoteTv().apply {
+        picks.lastOpened = com.home.tvremote.picks.PicksController.Opened("tv:1", "The Crown", "Netflix", "netflix", "80025678", listOf("search", "format:C", "type")) }
+        shot { RemoteScreen(tv) { true } } }
     @Test fun remoteLight() { Palette.dark = false; val tv = remoteTv(); shot { RemoteScreen(tv) { true } } }
     @Test fun liveTvDark() { Palette.dark = true; val tv = remoteTv().apply { foregroundApp = "com.webos.app.livetv" }; shot { RemoteScreen(tv) { true } } }
     @Test fun liveTvLight() { Palette.dark = false; val tv = remoteTv().apply { foregroundApp = "com.webos.app.livetv" }; shot { RemoteScreen(tv) { true } } }

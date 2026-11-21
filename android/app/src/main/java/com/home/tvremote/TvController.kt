@@ -378,6 +378,17 @@ class TvController(app: Application) : AndroidViewModel(app), TvActions {
     // ---- TvActions (for the picker) -------------------------------------------
     override fun openApp(appId: String, title: String) = launch(TvApp(appId, title))
     override fun openTitle(appId: String, title: String, extras: JSONObject) = launch(TvApp(appId, title, launchExtras = extras))
+    override fun typeIntoSearch(text: String): Boolean {
+        if (!tvKeyboardOpen) return false
+        typeOnTv(text); enterOnTv(); return true
+    }
+
+    /** "Test opening a show": Netflix's search page for The Crown, one format at a time. */
+    fun testNetflixSearch(variant: String) {
+        picks.store.netflixSearch = variant
+        event("LINK search test $variant")
+        launch(TvApp("netflix", "Netflix", launchExtras = com.home.tvremote.picks.DeepLinks.netflixSearch("The Crown", variant)))
+    }
 
     /** "Test opening a show": opens Stranger Things on Netflix with one link variant, and keeps it for Play. */
     fun testNetflixLink(variant: String) {
@@ -607,8 +618,17 @@ class TvController(app: Application) : AndroidViewModel(app), TvActions {
             is Command.ChannelNumber -> { say("Channel ${cmd.number}"); ssap("ssap://tv/openChannel", JSONObject().put("channelNumber", cmd.number)) }
             is Command.Input -> { say("HDMI ${cmd.hdmi}"); ssap("ssap://system.launcher/launch", JSONObject().put("id", "com.webos.app.hdmi${cmd.hdmi}")) }
             is Command.OpenApp -> launch(cmd.app)
-            is Command.Search -> search(cmd.query, cmd.app)
-            is Command.NoSuchApp -> say("There's no app called \"${cmd.name}\" on the TV", error = true)
+            is Command.Search -> if (!cmd.title) search(cmd.query, cmd.app) else viewModelScope.launch {
+                // "play / watch X": a show or film on their services first; otherwise search as before.
+                say("Looking for ${cmd.query}…")
+                val hint = cmd.app?.let { a -> com.home.tvremote.picks.Catalog.SERVICES.firstOrNull { s -> picks.appIdFor(s) == a.id }?.name }
+                if (cmd.app?.id?.startsWith("youtube") == true || !picks.openByName(cmd.query, hint)) search(cmd.query, cmd.app)
+            }
+            is Command.NoSuchApp -> viewModelScope.launch {
+                // "open X" where X isn't an app: maybe it's a show or film.
+                say("Looking for ${cmd.name}…")
+                if (!picks.openByName(cmd.name)) say("Couldn't find an app or a show called \"${cmd.name}\" on your services", error = true)
+            }
             is Command.SleepTimer -> startTimer(TimerKind.TurnOff, cmd.minutes)
             is Command.ScreenTimer -> startTimer(TimerKind.OnScreen, cmd.minutes)
             Command.CancelTimer -> if (TimerEngine.state != null) { TimerEngine.cancel(getApplication()); say("Timer cancelled") } else say("No timer is running")

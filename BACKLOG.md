@@ -54,6 +54,15 @@ Measure it: time from opening to Play, quick-backs, "Not now" count per session.
   also used as a soft negative signal. Picks summary + last 20 sessions in Diagnostics with Copy / Share.
   Limitation: can't see title changes inside an app, only which app is in front.
 
+## Opening titles (v0.8.1)
+- Voice: "open / play / watch <title>" (optionally "on <service>") → TMDB search → which of their services has
+  it → opened like Play. App names still win. Not on their services → YouTube search (play/watch) or a message.
+- "Not it?" bar on the remote for 3 min after opening: Netflix with ID → search page → other format → type it.
+  Netflix without ID opens Netflix search directly. Other apps → "type it" (needs the search box selected;
+  Enter only when the TV keyboard is open).
+- To test on the TV: Search 1/2 (Netflix search page with "The Crown" filled in).
+- Next: Prime Video and Disney+ title/search links (same 3-try test).
+
 ## Works on other people's LG TVs (before sharing)
 - Netflix link format: self-calibrating instead of the test menu — after a Netflix Play, ask once "Did it open
   <title>?"; No → next variant next time; remember per TV. Same for other apps as their formats are found.

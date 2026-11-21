@@ -165,6 +165,7 @@ fun RemoteScreen(tv: TvController, hasMicPermission: () -> Boolean) {
     Column(Modifier.fillMaxSize().padding(horizontal = 20.dp)) {
         Header(tv)
         WhatToWatchCard(tv.picks)
+        NotItBar(tv.picks)
         Text("MOST USED", color = Palette.faint, fontSize = 11.sp, fontWeight = FontWeight.SemiBold, letterSpacing = 1.sp,
             modifier = Modifier.padding(top = 18.dp, bottom = 10.dp))
         Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
@@ -322,6 +323,24 @@ private fun tileStyle(id: String, title: String): Triple<Color?, Color?, String>
 }
 
 /** Appears only while a text box is focused on the TV: typing goes straight onto the TV. */
+/** After a show is opened: "Not it?" walks through the fallbacks (search page, other formats, type it). */
+@Composable
+private fun NotItBar(pc: com.home.tvremote.picks.PicksController) {
+    val o = pc.lastOpened ?: return
+    val label = pc.fixLabel() ?: return
+    Row(Modifier.fillMaxWidth().padding(top = 12.dp).card(RoundedCornerShape(16.dp)).padding(start = 14.dp, end = 6.dp, top = 6.dp, bottom = 6.dp),
+        verticalAlignment = Alignment.CenterVertically) {
+        Column(Modifier.weight(1f)) {
+            Text("Opened ${o.name}", color = Palette.muted, fontSize = 12.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
+            Text(label, color = Palette.text, fontSize = 14.sp, fontWeight = FontWeight.SemiBold, maxLines = 1, overflow = TextOverflow.Ellipsis,
+                modifier = Modifier.clip(RoundedCornerShape(8.dp)).clickable { pc.tryNextFix() }.padding(vertical = 4.dp))
+        }
+        Box(Modifier.size(36.dp).clip(CircleShape).clickable { pc.dismissOpened() }, contentAlignment = Alignment.Center) {
+            Icon(Icons.Rounded.Close, "Dismiss", tint = Palette.faint, modifier = Modifier.size(18.dp))
+        }
+    }
+}
+
 @Composable
 private fun KeyboardBar(tv: TvController) {
     var text by remember { mutableStateOf("") }
@@ -473,12 +492,26 @@ fun ListeningPanel(heard: String, level: Float, onDone: () -> Unit, onCancel: ()
 @Composable
 private fun LinkDialog(tv: TvController, onClose: () -> Unit) {
     var current by remember { mutableStateOf(tv.picks.store.netflixLink) }
+    var currentSearch by remember { mutableStateOf(tv.picks.store.netflixSearch) }
     AlertDialog(
         onDismissRequest = onClose,
         title = { Text("Open shows directly") },
         text = {
             Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
-                Text("Each button opens a different show on Netflix, a different way. Press Home on the TV between tries. Note which ones land on that show's own page (not Netflix's home screen or the previous show). The one you tap last is used when you press Play.", fontSize = 14.sp)
+                Text("Search 1 and 2 should open Netflix's search with “The Crown” already typed. Try 1–3 open a show's own page. Press Home on the TV between tries and note which ones work. The last one you tap in each group is used.", fontSize = 14.sp)
+                for ((i, v) in com.home.tvremote.picks.DeepLinks.NETFLIX_SEARCH_VARIANTS.withIndex()) {
+                    val selected = currentSearch == v
+                    Row(
+                        Modifier.fillMaxWidth().clip(RoundedCornerShape(12.dp))
+                            .background(if (selected) Palette.accent else Palette.surface2)
+                            .clickable { currentSearch = v; tv.testNetflixSearch(v) }
+                            .padding(14.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                    ) {
+                        Text("Search ${i + 1} · “The Crown”", color = if (selected) Color.White else Palette.text, fontWeight = FontWeight.SemiBold, modifier = Modifier.weight(1f))
+                        if (selected) Text("in use", color = Color.White, fontSize = 12.sp)
+                    }
+                }
                 for ((i, v) in com.home.tvremote.picks.DeepLinks.NETFLIX_VARIANTS.withIndex()) {
                     val selected = current == v
                     Row(

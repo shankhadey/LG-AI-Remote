@@ -81,7 +81,7 @@ fun WhatToWatchCard(pc: PicksController) {
         Spacer(Modifier.width(12.dp))
         Column(Modifier.weight(1f)) {
             Text("What should we watch?", color = Palette.text, fontSize = 16.sp, fontWeight = FontWeight.SemiBold)
-            Text("3 picks in under a minute", color = Palette.muted, fontSize = 13.sp)
+            Text("5 picks in under a minute", color = Palette.muted, fontSize = 13.sp)
         }
         Icon(Icons.Rounded.ChevronRight, null, tint = Palette.faint)
     }

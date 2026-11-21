@@ -27,6 +27,8 @@ interface TvActions {
     fun note(message: String, error: Boolean = false)
     /** Open an app at a title (extra launch fields); falls back to just the app on TVs that don't support it. */
     fun openTitle(appId: String, title: String, extras: JSONObject) = openApp(appId, title)
+    /** Types into the TV's search box and presses Enter, only if a keyboard is open there. False if none is. */
+    fun typeIntoSearch(text: String): Boolean = false
     // The TV pointer, for the touchpad shown while the picker is on the TV.
     fun pointerMove(dx: Float, dy: Float) {}
     fun pointerTap() {}
@@ -51,6 +53,7 @@ class PicksController(
     private val makeRecommender: ((PicksStore, AiPicker) -> Recommender)? = null,
     /** Netflix title ID for a TMDB key; null turns deep links off (tests). */
     private val netflixIdOf: (suspend (String) -> String?)? = { Wikidata().netflixId(it) },
+    private val tmdbBase: String = "https://api.themoviedb.org/3",
 ) {
     /** Engines in the user's order: Groq and/or the on-phone model. Rules are the final fallback in the recommender. */
     fun aiChain(s: PicksStore = store): AiPicker {
@@ -64,7 +67,7 @@ class PicksController(
     }
 
     private fun recommender(): Recommender =
-        makeRecommender?.invoke(store, aiChain()) ?: Recommender(store, Tmdb(store.tmdbKey), aiChain())
+        makeRecommender?.invoke(store, aiChain()) ?: Recommender(store, Tmdb(store.tmdbKey, tmdbBase), aiChain())
 
     var open by mutableStateOf(false)
     var step by mutableStateOf(Step.Choose)
@@ -210,7 +213,7 @@ class PicksController(
         private set
     fun favouritesLater(person: String = who) { store.snoozeFavourites(person); favVersion++ }
     fun saveFavourites(person: String, list: List<Pair<String, String>>) { store.setFavourites(person, list); favVersion++ }
-    suspend fun searchTitles(q: String): List<Title> = runCatching { Tmdb(store.tmdbKey).search(q) }.getOrDefault(emptyList())
+    suspend fun searchTitles(q: String): List<Title> = runCatching { Tmdb(store.tmdbKey, tmdbBase).search(q) }.getOrDefault(emptyList())
 
     // ---- feedback ----------------------------------------------------------
     fun notNow(i: Int) = dismiss(i, never = false)
@@ -249,19 +252,106 @@ class PicksController(
             playedAt = System.currentTimeMillis(); outcome = "played"; store.saveSession(this)
         }
         pending = session; pendingStartedAt = null
-        val lookup = netflixIdOf
-        if (svc.name == "Netflix" && lookup != null) scope.launch {
-            // Straight to the title when Wikidata knows its Netflix ID; otherwise just the app (and "Look for").
-            val id = withTimeoutOrNull(3000) { runCatching { lookup(key) }.getOrNull() }
-            tv.log("LINK Netflix id for $name: ${id ?: "not found"}")
-            if (id != null) tv.openTitle(appId, svc.name, DeepLinks.netflix(id, store.netflixLink)) else tv.openApp(appId, svc.name)
-        } else tv.openApp(appId, svc.name)
-        // There's no reliable way to open a specific title in these apps from outside, so say what to look for.
-        scope.launch { delay(4000); tv.toastOnTv("Look for: $name") }
-        tv.note("Opening ${svc.name} — look for $name")
+        openIn(key, name, svc, appId)
         session = null
         open = false
         scope.launch { delay(30_000); stopTvPage() }
+    }
+
+    // ---- opening a title, and "Not it?" fallbacks --------------------------------
+    /** What was last opened, and the fallbacks still to try (shown on the remote as "Not it?"). */
+    data class Opened(val key: String, val name: String, val service: String, val appId: String, val netflixId: String?, val steps: List<String>)
+    var lastOpened by mutableStateOf<Opened?>(null)
+        internal set
+    var fixStep by mutableStateOf(0)
+        private set
+    private var openedJob: Job? = null
+
+    /**
+     * Opens [name] in the service's app: straight to the title where we can (Netflix with a known ID), Netflix's
+     * search page when the ID is unknown, otherwise the app with "Look for". Fallbacks, in order: search page,
+     * the other link formats, then typing the name into the app's search box.
+     */
+    private fun openIn(key: String, name: String, svc: Service, appId: String) {
+        val lookup = netflixIdOf
+        if (svc.name == "Netflix" && lookup != null) scope.launch {
+            val id = withTimeoutOrNull(3000) { runCatching { lookup(key) }.getOrNull() }
+            tv.log("LINK Netflix id for $name: ${id ?: "not found"}")
+            if (id != null) {
+                tv.openTitle(appId, svc.name, DeepLinks.netflix(id, store.netflixLink))
+                remember(Opened(key, name, svc.name, appId, id,
+                    listOf("search") + DeepLinks.NETFLIX_VARIANTS.filter { it != store.netflixLink && it != "B" }.map { "format:$it" } + "type"))
+            } else {
+                tv.openTitle(appId, svc.name, DeepLinks.netflixSearch(name, store.netflixSearch))
+                remember(Opened(key, name, svc.name, appId, null, listOf("type")))
+            }
+            tv.note("Opening $name on Netflix")
+        } else {
+            tv.openApp(appId, svc.name)
+            // There's no way (yet) to open a title in this app from outside, so say what to look for.
+            scope.launch { delay(4000); tv.toastOnTv("Look for: $name") }
+            tv.note("Opening ${svc.name} — look for $name")
+            remember(Opened(key, name, svc.name, appId, null, listOf("type")))
+        }
+    }
+
+    private fun remember(o: Opened) {
+        lastOpened = o; fixStep = 0
+        openedJob?.cancel(); openedJob = scope.launch { delay(3 * 60_000); lastOpened = null }
+    }
+
+    fun dismissOpened() { openedJob?.cancel(); lastOpened = null }
+
+    /** Label for the next fallback, e.g. "Not it? Search Netflix for it". */
+    fun fixLabel(): String? {
+        val o = lastOpened ?: return null
+        return when (val s = o.steps.getOrNull(fixStep) ?: return null) {
+            "search" -> "Not it? Search ${o.service} for it"
+            "type" -> "Type “${o.name}” in the search box"
+            else -> if (s.startsWith("format:")) "Still not it? Try another way" else null
+        }
+    }
+
+    fun tryNextFix() {
+        val o = lastOpened ?: return
+        val s = o.steps.getOrNull(fixStep) ?: return
+        tv.log("FIX $s for ${o.name}")
+        when {
+            s == "search" -> tv.openTitle(o.appId, o.service, DeepLinks.netflixSearch(o.name, store.netflixSearch))
+            s.startsWith("format:") && o.netflixId != null -> tv.openTitle(o.appId, o.service, DeepLinks.netflix(o.netflixId, s.removePrefix("format:")))
+            s == "type" -> {
+                if (tv.typeIntoSearch(o.name)) tv.note("Typed “${o.name}”")
+                else tv.note("Point at ${o.service}'s search box and tap it, then tap “Type” again", error = true)
+                return   // stays on "type" so it can be tapped again
+            }
+        }
+        fixStep = (fixStep + 1).coerceAtMost(o.steps.lastIndex)
+    }
+
+    /**
+     * Voice: "open / play / watch <title>" (optionally "on <service>"). Finds the title on TMDB, checks which of
+     * the household's services has it, and opens it like Play. False when nothing on their services matches.
+     */
+    suspend fun openByName(query: String, serviceHint: String? = null): Boolean {
+        if (store.tmdbKey.isBlank()) return false
+        val tmdb = Tmdb(store.tmdbKey, tmdbBase)
+        val mine = Catalog.SERVICES.filter { it.name in store.services }
+        val found = runCatching { tmdb.search(query) }.getOrDefault(emptyList()).take(5)
+        fun norm(x: String) = x.lowercase().replace(Regex("[^a-z0-9]"), "")
+        val ranked = found.sortedByDescending { if (norm(it.name) == norm(query)) 1 else 0 }
+        for (t in ranked) {
+            val e = runCatching { tmdb.enrich(t, mine) }.getOrDefault(t)
+            val svcName = e.service?.takeIf { serviceHint == null || it == serviceHint }
+                ?: serviceHint?.takeIf { norm(t.name) == norm(query) }   // they said where it is; trust them
+                ?: continue
+            val svc = Catalog.SERVICES.firstOrNull { it.name == svcName } ?: continue
+            val appId = appIdFor(svc) ?: continue
+            tv.log("VOICE “$query” → ${t.name} (${t.year}) on $svcName")
+            openIn(t.key, t.name, svc, appId)
+            return true
+        }
+        tv.log("VOICE “$query” → nothing on your services")
+        return false
     }
 
     /** Which app on this TV is the service: learned app IDs first, then well-known LG IDs. */

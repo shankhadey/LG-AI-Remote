@@ -247,7 +247,7 @@ class PicksTest {
         assertTrue(opened[0], opened[0].startsWith("title netflix") && "80057281" in opened[0] && "source_type=4" in opened[0])
         pc.openPicker(); pc.picks += Pick(Title(Kind.Tv, 8, "Unknown", service = "Netflix"), "why")
         pc.play(0); d.scheduler.advanceTimeBy(100)
-        assertEquals("app netflix", opened[1])
+        assertTrue(opened[1], opened[1].startsWith("title netflix") && "search?q=Unknown" in opened[1])   // no ID: Netflix's search page
     }
 
     @Test fun netflixLinkVariantsDiffer() {
@@ -296,6 +296,65 @@ class PicksTest {
         assertEquals("2016", r[0].year)
     }
 
+    private class OpenLog(val typed: Boolean = false) : TvActions by FakeTvShared {
+        val calls = mutableListOf<String>()
+        override fun openApp(appId: String, title: String) { calls += "app $appId" }
+        override fun openTitle(appId: String, title: String, extras: JSONObject) { calls += "link $extras" }
+        override fun typeIntoSearch(text: String): Boolean { calls += "type $text"; return typed }
+        override fun knownAppIds() = setOf("netflix", "com.disney.disneyplus-prod")
+    }
+
+    @Test fun notItTriesSearchThenOtherFormatsThenTyping() {
+        val tv = OpenLog(typed = true)
+        val d = StandardTestDispatcher()
+        val pc = PicksController(store(), tv, CoroutineScope(d), clock = { at(Calendar.TUESDAY, 21, 30) }, onDevice = null, netflixIdOf = { "80025678" })
+        pc.openPicker(); pc.picks += Pick(Title(Kind.Tv, 7, "The Crown", service = "Netflix"), "why")
+        pc.play(0); d.scheduler.advanceTimeBy(100)
+        assertTrue(tv.calls.last(), "titles/movies/80025678" in tv.calls.last())               // format 1 first
+        assertEquals("Not it? Search Netflix for it", pc.fixLabel())
+        pc.tryNextFix(); assertTrue(tv.calls.last(), "search?q=The%20Crown" in tv.calls.last())
+        assertEquals("Still not it? Try another way", pc.fixLabel())
+        pc.tryNextFix(); assertTrue(tv.calls.last(), "www.netflix.com/title/80025678" in tv.calls.last())   // format 3
+        assertEquals("Type “The Crown” in the search box", pc.fixLabel())
+        pc.tryNextFix(); assertEquals("type The Crown", tv.calls.last())
+        pc.tryNextFix(); assertEquals("type The Crown", tv.calls.last())                       // can be tapped again
+    }
+
+    @Test fun netflixWithoutAnIdOpensItsSearchPage() {
+        val tv = OpenLog()
+        val d = StandardTestDispatcher()
+        val pc = PicksController(store(), tv, CoroutineScope(d), clock = { at(Calendar.TUESDAY, 21, 30) }, onDevice = null, netflixIdOf = { null })
+        pc.openPicker(); pc.picks += Pick(Title(Kind.Movie, 9, "Glass Onion", service = "Netflix"), "why")
+        pc.play(0); d.scheduler.advanceTimeBy(100)
+        assertTrue(tv.calls.last(), "search?q=Glass%20Onion" in tv.calls.last())
+        assertEquals("Type “Glass Onion” in the search box", pc.fixLabel())
+    }
+
+    @Test fun voiceFindsATitleOnTheirServices() = runBlocking {
+        server.dispatcher = object : Dispatcher() {
+            override fun dispatch(r: RecordedRequest): MockResponse {
+                val p = r.path ?: ""
+                fun json(o: Any) = MockResponse().setBody(o.toString())
+                return when {
+                    p.startsWith("/3/search/multi") -> json(JSONObject().put("results", org.json.JSONArray()
+                        .put(JSONObject().put("media_type", "tv").put("id", 65494).put("name", "The Crown").put("first_air_date", "2016-11-04"))))
+                    p.contains("/watch/providers") -> json(JSONObject().put("results", JSONObject().put("US", JSONObject()
+                        .put("flatrate", org.json.JSONArray().put(JSONObject().put("provider_name", "Netflix"))))))
+                    else -> json(JSONObject())
+                }
+            }
+        }
+        server.start()
+        val tv = OpenLog()
+        val d = StandardTestDispatcher()
+        val pc = PicksController(store(), tv, CoroutineScope(d), clock = { at(Calendar.TUESDAY, 21, 30) }, onDevice = null,
+            netflixIdOf = { "80025678" }, tmdbBase = server.url("/3").toString().trimEnd('/'))
+        assertTrue(pc.openByName("the crown"))
+        d.scheduler.advanceTimeBy(100)
+        assertTrue(tv.calls.toString(), tv.calls.any { "80025678" in it })
+        assertEquals("The Crown", pc.lastOpened?.name)
+    }
+
     private fun MockWebServer.takeRequestsPaths(): List<String> = (0 until requestCount).mapNotNull { takeRequest().path }
 
     // ---------------- AI fallback chain ----------------
@@ -329,6 +388,8 @@ class PicksTest {
     }
 
     // ---------------- quick-backs ----------------
+    private object FakeTvShared : TvActions by FakeTv()
+
     private class FakeTv : TvActions {
         val opened = mutableListOf<String>()
         override fun openApp(appId: String, title: String) { opened += appId }

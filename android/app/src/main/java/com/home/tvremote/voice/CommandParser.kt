@@ -13,7 +13,8 @@ sealed interface Command {
     data class ChannelNumber(val number: String) : Command
     data class Input(val hdmi: Int) : Command
     data class OpenApp(val app: TvApp) : Command
-    data class Search(val query: String, val app: TvApp?) : Command
+    /** [title]: "play / watch / put on X" — X is probably a show or film, so look it up before searching. */
+    data class Search(val query: String, val app: TvApp?, val title: Boolean = false) : Command
     /** "open X" where X isn't an app on the TV. */
     data class NoSuchApp(val name: String) : Command
     /** Turn the TV off after [minutes], with pop-up reminders. */
@@ -144,7 +145,8 @@ class CommandParser(tvApps: List<TvApp>) {
                 // "on" was part of the title, e.g. "search for game on" — keep everything as the query
                 return Command.Search(t.substringAfter(' ').removePrefix("for ").trim(), null)
             }
-            return Command.Search(query, app)
+            val wantsTitle = Regex("^(play|watch|put on|show me) ").containsMatchIn(t)
+            return Command.Search(query, app, title = wantsTitle)
         }
 
         // Apps: "open netflix", "launch prime video", or just "netflix"

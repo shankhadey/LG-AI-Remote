@@ -20,6 +20,16 @@ object DeepLinks {
     /** A different well-known title per variant, so a test can't be fooled by Netflix reopening the last page. */
     val NETFLIX_TESTS = mapOf("A" to ("80057281" to "Stranger Things"), "B" to ("81231974" to "Wednesday"), "C" to ("80025678" to "The Crown"))
 
+    /** Netflix's search page with the words filled in (for titles without a known ID, and as the first fallback). */
+    val NETFLIX_SEARCH_VARIANTS = listOf("S1", "S2")
+    fun netflixSearch(query: String, variant: String): JSONObject {
+        val q = java.net.URLEncoder.encode(query, "UTF-8").replace("+", "%20")
+        return when (variant) {
+            "S2" -> JSONObject().put("params", JSONObject().put("contentTarget", "https://www.netflix.com/search?q=$q"))
+            else -> JSONObject().put("contentId", "m=https://www.netflix.com/search?q=$q&source_type=4")
+        }
+    }
+
     fun netflix(id: String, variant: String): JSONObject = when (variant) {
         "B" -> JSONObject().put("params", JSONObject().put("contentTarget", "https://www.netflix.com/watch/$id"))
         "C" -> JSONObject().put("contentId", "m=https://www.netflix.com/title/$id&source_type=4")
