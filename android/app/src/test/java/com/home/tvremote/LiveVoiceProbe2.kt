@@ -28,7 +28,7 @@ class LiveVoiceProbe2 {
             people = listOf("A", "B"); languages = listOf("en"); tmdbKey = key!!
             services = listOf("Netflix", "Prime Video", "Disney+", "Apple TV+", "Hulu", "hoichoi", "ZEE5")
         }
-        val pc = PicksController(s, tv, CoroutineScope(StandardTestDispatcher()), onDevice = null, titleIdsOf = null)
+        val pc = PicksController(s, tv, CoroutineScope(StandardTestDispatcher()), onDevice = null, titleIdsOf = null, directLinks = false)
         for (q in listOf("show me some adam sandler movies", "some Adam Sandler movies", "adam sandler films", "movies by christopher nolan",
                 "pedro pascal shows", "show me some funny movies", "show me something scary", "the office", "movies with jennifer aniston and adam sandler"))
             println("PROBE resolve '$q' -> ${pc.resolvePerson(q)}")

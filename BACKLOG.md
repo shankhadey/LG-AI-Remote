@@ -75,6 +75,7 @@ Measure it: time from opening to Play, quick-backs, "Not now" count per session.
 - Prime: contentId = amzn1.dv.gti.… (P1, reported working on a 2024 LG on 17 Nov 2026); P2/P3 = primevideo URL as
   contentId / contentTarget. Disney+: no format confirmed anywhere — D1 contentTarget title page + contentId,
   D2 URL as contentId, D3 /video/<id>. "Test opening a show" now has Netflix / Prime Video / Disney+ tabs.
+- v1.2.1: if Wikidata never recorded a title's TMDB ID, it's found by the Wikidata item TMDB points to (external_ids).
 - Coverage limits: Wikidata has Prime GTIs mostly for films (none for The Boys, Reacher, Fleabag); Disney+ covers many
   films and big series (Mandalorian, Andor). No ID → app opens and we try typing (which may not work, see v1.1.1).
 - Better coverage later: a licensed source (JustWatch partner API, or the services' own feeds). JustWatch's public site

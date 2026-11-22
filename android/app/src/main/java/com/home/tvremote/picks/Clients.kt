@@ -155,6 +155,12 @@ class Tmdb(private val key: String, private val base: String = "https://api.them
         return (0 until arr.length()).map { parse(if (kind == "movie") Kind.Movie else Kind.Tv, arr.getJSONObject(it)) }
     }
 
+    /** The title's Wikidata item ("Q48796994"), as TMDB records it; null if unknown. */
+    suspend fun wikidataId(key: String): String? {
+        val (kind, id) = key.split(':').takeIf { it.size == 2 } ?: return null
+        return runCatching { get("/$kind/$id/external_ids").optString("wikidata_id") }.getOrNull()?.takeIf { it.matches(Regex("Q[0-9]+")) }
+    }
+
     /** Genres of a title (for "what do their favourites have in common"). */
     suspend fun genresOf(key: String): List<Int> {
         val (kind, id) = key.split(':').let { it[0] to it[1] }

@@ -93,14 +93,25 @@ class Wikidata(private val base: String = "https://query.wikidata.org/sparql") {
 
     suspend fun netflixId(key: String): String? = ids(key)?.netflix
 
-    suspend fun ids(key: String): TitleIds? = withContext(Dispatchers.IO) {
-        val (kind, id) = key.split(':').takeIf { it.size == 2 } ?: return@withContext null
-        if (id.toIntOrNull() == null) return@withContext null
+    /**
+     * Finds the Wikidata item by its TMDB ID; if Wikidata never recorded that TMDB ID, by the item TMDB itself
+     * points to ([wikidataIdOf], TMDB's external IDs). Returns null when no item is found either way.
+     */
+    suspend fun ids(key: String, wikidataIdOf: (suspend () -> String?)? = null): TitleIds? {
+        val (kind, id) = key.split(':').takeIf { it.size == 2 } ?: return null
+        if (id.toIntOrNull() == null) return null
         val movie = kind == "movie"
         val tmdbProp = if (movie) "P4947" else "P4983"          // TMDB movie ID / TMDB TV series ID
+        query(movie, "?i wdt:$tmdbProp \"$id\" .")?.let { return it }
+        val qid = wikidataIdOf?.let { runCatching { it() }.getOrNull() }?.takeIf { it.matches(Regex("Q[0-9]+")) } ?: return null
+        return query(movie, "VALUES ?i { wd:$qid }")
+    }
+
+    /** The IDs on the item matched by [match]; null when no item matched. */
+    private suspend fun query(movie: Boolean, match: String): TitleIds? = withContext(Dispatchers.IO) {
         val disneyProp = if (movie) "P7595" else "P7596"        // Disney+ movie ID / Disney+ series ID
         // P1874 = Netflix ID, P14462 = Prime Video GTI
-        val query = """SELECT (SAMPLE(?n) AS ?nf) (SAMPLE(?p) AS ?pv) (SAMPLE(?d) AS ?dp) WHERE { ?i wdt:$tmdbProp "$id" .
+        val query = """SELECT (SAMPLE(?i) AS ?item) (SAMPLE(?n) AS ?nf) (SAMPLE(?p) AS ?pv) (SAMPLE(?d) AS ?dp) WHERE { $match
             OPTIONAL { ?i wdt:P1874 ?n } OPTIONAL { ?i wdt:P14462 ?p } OPTIONAL { ?i wdt:$disneyProp ?d } }"""
         val url = base.toHttpUrl().newBuilder().addQueryParameter("format", "json").addQueryParameter("query", query).build()
         val req = Request.Builder().url(url).header("User-Agent", "TVRemoteApp/1.2 (Android)").header("Accept", "application/sparql-results+json").build()
@@ -108,6 +119,7 @@ class Wikidata(private val base: String = "https://query.wikidata.org/sparql") {
             if (!r.isSuccessful) return@use null
             val b = JSONObject(r.body?.string().orEmpty()).optJSONObject("results")?.optJSONArray("bindings")?.optJSONObject(0) ?: return@use null
             fun v(name: String) = b.optJSONObject(name)?.optString("value")?.takeIf { it.isNotEmpty() }
+            if (v("item") == null) return@use null   // no item matched
             TitleIds(
                 netflix = v("nf")?.takeIf { it.all(Char::isDigit) },
                 prime = v("pv")?.takeIf { it.startsWith("amzn1.dv.gti.") },

@@ -55,7 +55,9 @@ class PicksController(
     private val onDevice: AiEngine? = OnDeviceAi,
     private val makeRecommender: ((PicksStore, AiPicker) -> Recommender)? = null,
     /** A title's IDs in Netflix / Prime Video / Disney+ for a TMDB key; null turns direct links off (tests). */
-    private val titleIdsOf: (suspend (String) -> TitleIds?)? = { Wikidata().ids(it) },
+    private val titleIdsOf: (suspend (String) -> TitleIds?)? = null,
+    /** Direct links on (the phone); tests pass false, or their own [titleIdsOf]. */
+    private val directLinks: Boolean = true,
     private val tmdbBase: String = "https://api.themoviedb.org/3",
 ) {
     /** Engines in the user's order: Groq and/or the on-phone model. Rules are the final fallback in the recommender. */
@@ -331,7 +333,7 @@ class PicksController(
         val t = picks.firstOrNull { it.title.key == key }?.title
         nowShowing = name to t?.takeIf { it.kind == Kind.Movie }?.let { endsAt(it)?.removePrefix("ends ") }
         nowShowingApp = appId
-        val lookup = titleIdsOf
+        val lookup = titleIdsOf ?: if (directLinks) { k: String -> Wikidata().ids(k) { Tmdb(store.tmdbKey, tmdbBase).wikidataId(k) } } else null
         if (svc.name in DeepLinks.DIRECT && lookup != null) scope.launch {
             val id = withTimeoutOrNull(3000) { runCatching { lookup(key) }.getOrNull() }?.forService(svc.name)
             tv.log("LINK ${svc.name} id for $name: ${id ?: "not found"}")
