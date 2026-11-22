@@ -132,8 +132,8 @@ class SimulatedLgTv {
             }.start()
             return 4
         }
-        override fun lgTv(ip: String, clientKey: String?, onClientKey: (String) -> Unit, onDisconnect: () -> Unit) =
-            LgTv(ip, clientKey, onClientKey = onClientKey, onDisconnect = onDisconnect, urls = listOf(url), resubscribeDelayMs = 100)
+        override fun driver(brand: String, ip: String, clientKey: String?, onClientKey: (String) -> Unit, onDisconnect: () -> Unit) =
+            com.home.tvremote.tv.LgDriver(LgTv(ip, clientKey, onClientKey = onClientKey, onDisconnect = onDisconnect, urls = listOf(url), resubscribeDelayMs = 100))
         override suspend fun lookupName(context: Context, ip: String): String? = "LG OLED65B3PUA (simulated)"
     }
 }

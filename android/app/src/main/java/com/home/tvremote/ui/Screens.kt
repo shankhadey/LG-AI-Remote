@@ -217,7 +217,7 @@ fun RemoteScreen(tv: TvController, hasMicPermission: () -> Boolean) {
             MicButton { mic() }
             // Channel buttons only make sense on Live TV (antenna/cable); streaming apps never show them.
             if (tv.isLiveTv) Rocker("CH", Icons.Rounded.KeyboardArrowDown, Icons.Rounded.KeyboardArrowUp,
-                { tv.ssap("ssap://tv/channelDown") }, { tv.ssap("ssap://tv/channelUp") }, Modifier.weight(1f))
+                { tv.channel(false) }, { tv.channel(true) }, Modifier.weight(1f))
         }
     }
     if (tv.picks.open) { PicksScreen(tv.picks); return }

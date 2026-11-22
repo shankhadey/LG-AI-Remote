@@ -12,6 +12,8 @@ import androidx.lifecycle.viewModelScope
 import com.home.tvremote.lg.Discovery
 import com.home.tvremote.lg.FoundTv
 import com.home.tvremote.lg.LgTv
+import com.home.tvremote.tv.LgDriver
+import com.home.tvremote.tv.TvDriver
 import com.home.tvremote.lg.WakeLoop
 import com.home.tvremote.lg.WakeOnLan
 import com.home.tvremote.voice.Command
@@ -37,6 +39,8 @@ enum class Screen { Setup, Pairing, Remote }
 
 class TvController(app: Application) : AndroidViewModel(app), TvActions {
     private val prefs = app.getSharedPreferences("tv", Context.MODE_PRIVATE)
+    /** "LG" or "Samsung": chosen at setup (found by discovery), kept with the TV. */
+    val brand: String get() = prefs.getString("brand", "LG") ?: "LG"
     /** Wake-up timeline and other events for Diagnostics. Declared early: init code below logs to it. */
     private val events = java.util.concurrent.ConcurrentLinkedDeque<String>(
         // Kept across app restarts, so Diagnostics shows what happened before the app was reopened.
@@ -72,7 +76,7 @@ class TvController(app: Application) : AndroidViewModel(app), TvActions {
     var showHelp by mutableStateOf(false)
     private var feedbackJob: Job? = null
 
-    private var tv: LgTv? = null
+    private var tv: TvDriver? = null
     // All TV commands run in order through this queue so fast taps don't reorder.
     private val queue = Channel<suspend () -> Unit>(Channel.UNLIMITED)
 
@@ -178,8 +182,8 @@ class TvController(app: Application) : AndroidViewModel(app), TvActions {
 
     // ---- connection -------------------------------------------------------
     /** The TV connection object, created on first need (also from the wake loop, which used to skip this). */
-    private fun ensureTv(ip: String): LgTv = tv ?: net.lgTv(
-        ip, prefs.getString("clientKey", null),
+    private fun ensureTv(ip: String): TvDriver = tv ?: net.driver(
+        brand, ip, prefs.getString("clientKey", null),
         onClientKey = { prefs.edit().putString("clientKey", it).apply() },
         onDisconnect = {
             connected = false
@@ -202,12 +206,12 @@ class TvController(app: Application) : AndroidViewModel(app), TvActions {
                 if (epoch != connEpoch && connected) return@launch   // a newer attempt (e.g. turning on) already won
                 connected = true
                 // Ask the TV, don't guess: with Quick Start+ the app can connect to a TV that is in standby.
-                val state = runCatching { withTimeout(3000) { t.request("ssap://com.webos.service.tvpower/power/getPowerState").optString("state") } }.getOrNull()
+                val state = runCatching { withTimeout(3000) { t.powerState() } }.getOrNull()
                 event("CONNECT ok in ${System.currentTimeMillis() - t0} ms, TV says ${state ?: "?"}")
                 tvOff = state in STANDBY_STATES
                 screen = Screen.Remote
                 if (firstTime || pairing) {
-                    runCatching { t.request("ssap://system.notifications/createToast", JSONObject().put("message", "Phone remote connected")) }
+                    runCatching { t.toast("Phone remote connected") }
                     say("Connected to $tvName")
                 }
                 afterConnect(t)
@@ -225,15 +229,14 @@ class TvController(app: Application) : AndroidViewModel(app), TvActions {
         }
     }
 
-    private suspend fun afterConnect(t: LgTv) {
+    private suspend fun afterConnect(t: TvDriver) {
         // Tell us when the TV turns on or off by any remote (with Quick Start+ the connection survives standby).
         runCatching {
-            t.subscribe("ssap://com.webos.service.tvpower/power/getPowerState") { p ->
-                val st = p.optString("state").takeIf { it.isNotEmpty() } ?: return@subscribe
+            t.onPower { st ->
                 val off = st in STANDBY_STATES
                 if (off != tvOff && !waking) {
                     event("POWER TV says $st")
-                    if (!off && System.currentTimeMillis() - offAt < 3000) return@subscribe   // still shutting down
+                    if (!off && System.currentTimeMillis() - offAt < 3000) return@onPower   // still shutting down
                     tvOff = off
                 }
             }
@@ -242,47 +245,34 @@ class TvController(app: Application) : AndroidViewModel(app), TvActions {
             // In the background so it never delays a button press.
             prefs.getString("ip", null)?.let { ip ->
                 val n = net.lookupName(getApplication(), ip)
-                    ?: runCatching { t.request("ssap://system/getSystemInfo").optString("modelName") }.getOrNull()
-                        ?.takeIf { it.isNotBlank() }?.let { "LG $it" }
+                    ?: runCatching { t.modelName() }.getOrNull()
+                        ?.takeIf { it.isNotBlank() }?.let { "${t.brand} $it" }
                 if (n != null && n != tvName) { tvName = n; prefs.edit().putString("name", n).apply() }
             }
         }
         runCatching {
-            val lp = runCatching { t.request("ssap://com.webos.applicationManager/listLaunchPoints").optJSONArray("launchPoints") }
-                .getOrElse {
-                    // Newer firmware doesn't let this kind of pairing read the app list: show the common apps instead.
-                    if (apps.isEmpty()) apps.addAll(CommandParser.KNOWN_APPS.filter { a -> !a.id.startsWith("com.webos") })
-                    null
-                }
-            if (lp != null) {
-                apps.clear()
-                for (i in 0 until lp.length()) {
-                    val a = lp.getJSONObject(i)
-                    apps += TvApp(a.optString("id"), a.optString("title"), a.optString("largeIcon").ifEmpty { a.optString("icon") }.ifEmpty { null })
-                }
-            }
+            val list = runCatching { t.installedApps() }.getOrNull()
+            if (list == null) {
+                // Newer LG firmware doesn't let this kind of pairing read the app list: show the common apps instead.
+                if (apps.isEmpty()) apps.addAll(CommandParser.knownApps(t.brand).filter { a -> !a.id.startsWith("com.webos") })
+            } else { apps.clear(); apps.addAll(list) }
         }
         runCatching {
             // What's on screen: drives the status line, Live TV channel buttons and "Most used".
-            t.subscribe("ssap://com.webos.applicationManager/getForegroundAppInfo") { p ->
-                p.optString("appId").takeIf { it.isNotEmpty() }?.let { onForeground(it) }
-            }
+            t.onForeground { onForeground(it) }
         }
-        runCatching { onForeground(t.request("ssap://com.webos.applicationManager/getForegroundAppInfo").optString("appId")) }
+        runCatching { t.foregroundApp()?.let { onForeground(it) } }
         runCatching {
             // Play state of the app on screen, where the TV shares it (sharpens tap-to-pause).
-            t.subscribe("ssap://com.webos.media/getForegroundAppInfo") { p ->
-                val list = p.optJSONArray("foregroundAppInfo")
-                val items = (0 until (list?.length() ?: 0)).map { list!!.getJSONObject(it) }
-                val item = items.firstOrNull { it.optString("appId") == foregroundApp } ?: items.firstOrNull()
-                mediaState = item?.optString("playState")?.takeIf { it == "playing" || it == "paused" }
+            t.onMedia { items ->
+                val item = items.firstOrNull { it.first == foregroundApp } ?: items.firstOrNull()
+                mediaState = item?.second?.takeIf { it == "playing" || it == "paused" }
             }
         }
         runCatching {
             // Tell us when a text box is focused on the TV, so typing/voice goes straight into it.
-            t.subscribe("ssap://com.webos.service.ime/registerRemoteKeyboard") { p ->
-                p.optJSONObject("currentWidget")?.let {
-                    val open = it.optBoolean("focus", false)
+            t.onKeyboard { open ->
+                run {
                     val wasOpen = tvKeyboardOpen
                     tvKeyboardOpen = open
                     // A search box was just selected and something is waiting to be typed: type it and search.
@@ -298,9 +288,8 @@ class TvController(app: Application) : AndroidViewModel(app), TvActions {
         // Refresh on every connect and MERGE: Wake-on-LAN only works on the interface the TV actually
         // uses (Wi-Fi vs cable), and an older version saved only the wired address and never re-checked.
         runCatching {
-            val info = t.request("ssap://com.webos.service.connectionmanager/getinfo")
-            val fresh = listOf("wifiInfo", "wiredInfo").mapNotNull { info.optJSONObject(it)?.optString("macAddress")?.takeIf { m -> m.length >= 12 } }
-            if (fresh.isEmpty()) Log.w("TvRemote", "TV reported no MAC addresses: ${info.keys().asSequence().toList()}")
+            val fresh = t.macAddresses()
+            if (fresh.isEmpty()) Log.w("TvRemote", "TV reported no MAC addresses")
             val merged = mergeMacs(prefs.getString("mac", null).orEmpty().split(',') + fresh)
             if (merged.isNotEmpty()) { prefs.edit().putString("mac", merged.joinToString(",")).apply(); macKnown = true }
         }.onFailure { Log.w("TvRemote", "Couldn't read TV MAC: ${it.message}") }
@@ -329,12 +318,12 @@ class TvController(app: Application) : AndroidViewModel(app), TvActions {
     /** Top 4 apps by how often they were opened, topped up with common ones. */
     fun mostUsed(): List<TvApp> {
         val learned = usage.entries.sortedByDescending { it.value }.map { TvApp(it.key, appTitle(it.key)) }
-        val defaults = CommandParser.KNOWN_APPS.filter { !it.id.startsWith("com.webos") }
+        val defaults = CommandParser.knownApps(brand).filter { !it.id.startsWith("com.webos") }
         return (learned + defaults).distinctBy { it.id }.take(4)
     }
 
     fun appTitle(id: String): String =
-        CommandParser.KNOWN_APPS.firstOrNull { it.id == id }?.title
+        (CommandParser.knownApps(brand) + CommandParser.KNOWN_APPS).firstOrNull { it.id == id }?.title
             ?: apps.firstOrNull { it.id == id && it.title.isNotBlank() }?.title
             ?: when {
                 id == "com.wbd.stream" -> "Max"
@@ -360,7 +349,7 @@ class TvController(app: Application) : AndroidViewModel(app), TvActions {
     /** The big "Turn on" button: send the wake signal immediately; the loop notices if the TV was already on. */
     fun turnOn() = powerOn()
 
-    private suspend fun tv(): LgTv {
+    private suspend fun tv(): TvDriver {
         val t = tv ?: throw IllegalStateException("No TV set up")
         if (!t.isConnected) { t.connect(); connected = true; afterConnect(t) }
         return t
@@ -370,8 +359,8 @@ class TvController(app: Application) : AndroidViewModel(app), TvActions {
 
     // ---- direct controls --------------------------------------------------
     fun button(name: String) = enqueue { tv().button(name) }
-    fun ssap(uri: String, payload: JSONObject? = null) = enqueue { tv().request(uri, payload) }
-    fun volume(up: Boolean) = ssap(if (up) "ssap://audio/volumeUp" else "ssap://audio/volumeDown")
+    fun volume(up: Boolean) = enqueue { tv().volume(up) }
+    fun channel(up: Boolean) = enqueue { tv().channel(up) }
     fun move(dx: Float, dy: Float) { lastPointAt = System.currentTimeMillis(); enqueue { tv().move(dx, dy) } }
 
     /** "playing" / "paused" when the TV reports it for the app on screen; null when it doesn't say. */
@@ -402,7 +391,7 @@ class TvController(app: Application) : AndroidViewModel(app), TvActions {
         assumePlaying = !pause
         mediaState = mediaState?.let { if (pause) "paused" else "playing" }
         say(if (pause) "Paused" else "Playing")
-        ssap(if (pause) "ssap://media.controls/pause" else "ssap://media.controls/play")
+        enqueue { tv().media(if (pause) "pause" else "play") }
     }
     /**
      * What a touchpad tap sends. Some LG firmware ignores the pointer "click" message, so this is
@@ -413,7 +402,7 @@ class TvController(app: Application) : AndroidViewModel(app), TvActions {
     fun sendTap(method: String) = enqueue {
         when (method) {
             "ok" -> tv().button("ENTER")
-            "enter" -> tv().request("ssap://com.webos.service.ime/sendEnterKey")
+            "enter" -> tv().sendEnter()
             else -> tv().click()
         }
     }
@@ -450,11 +439,10 @@ class TvController(app: Application) : AndroidViewModel(app), TvActions {
         // Runs beside the command queue (not in it) so checking the result never holds up other buttons.
         viewModelScope.launch {
             val t = runCatching { tv() }.getOrElse { showError(it); return@launch }
-            val payload = JSONObject().put("id", app.id)
-            app.launchExtras?.let { x -> x.keys().forEach { k -> payload.put(k, x.get(k)) }; event("LINK opening ${app.title} with $x") }
-            val first = runCatching { t.request("ssap://system.launcher/launch", payload) }
+            app.launchExtras?.let { x -> event("LINK opening ${app.title} with $x") }
+            val first = runCatching { t.launch(app.id, app.launchExtras) }
             if (first.isSuccess && waitForForeground(t, app.id)) return@launch
-            val second = runCatching { t.request("ssap://com.webos.applicationManager/launch", JSONObject().put("id", app.id)) }
+            val second = runCatching { t.launch(app.id, alternative = true) }
             if (second.isSuccess && waitForForeground(t, app.id)) return@launch
             val hung = listOf(first, second).all { it.exceptionOrNull()?.message == "The TV didn't respond" }
             if (hung) {
@@ -468,10 +456,10 @@ class TvController(app: Application) : AndroidViewModel(app), TvActions {
     }
 
     /** Polls the foreground app for a few seconds. Unknown (no permission) counts as success. */
-    private suspend fun waitForForeground(t: LgTv, appId: String): Boolean {
+    private suspend fun waitForForeground(t: TvDriver, appId: String): Boolean {
         repeat(8) {
             delay(500)
-            val fg = runCatching { t.request("ssap://com.webos.applicationManager/getForegroundAppInfo").optString("appId") }
+            val fg = runCatching { t.foregroundApp() }
             if (fg.isFailure) return true
             if (fg.getOrNull() == appId) return true
         }
@@ -506,12 +494,10 @@ class TvController(app: Application) : AndroidViewModel(app), TvActions {
     }
     override fun knownAppIds(): Set<String> = (apps.map { it.id } + usage.keys).toSet()
     override fun openOnTvBrowser(url: String) = enqueue {
-        val t = tv()
-        val ok = runCatching { t.request("ssap://system.launcher/open", JSONObject().put("target", url)) }.isSuccess ||
-            runCatching { t.request("ssap://system.launcher/launch", JSONObject().put("id", "com.webos.app.browser").put("params", JSONObject().put("target", url))) }.isSuccess
+        val ok = tv().openUrl(url)
         if (!ok) say("The TV didn't open the picks page (details in Diagnostics)", error = true)
     }
-    override fun toastOnTv(message: String) = ssap("ssap://system.notifications/createToast", JSONObject().put("message", message))
+    override fun toastOnTv(message: String) = enqueue { tv().toast(message) }
     override fun goHome() = button("HOME")
     override val foreground: String? get() = foregroundApp
     override fun phoneIp(): String? = Discovery.phoneWifiIp(getApplication())
@@ -546,8 +532,8 @@ class TvController(app: Application) : AndroidViewModel(app), TvActions {
 
 
     fun toggleMute() = enqueue {
-        val muted = tv().request("ssap://audio/getStatus").optBoolean("mute")
-        tv().request("ssap://audio/setMute", JSONObject().put("mute", !muted))
+        val muted = tv().isMuted()
+        tv().setMute(!muted)
         say(if (muted) "Sound on" else "Muted")
     }
 
@@ -591,10 +577,10 @@ class TvController(app: Application) : AndroidViewModel(app), TvActions {
                     runCatching { withTimeout(6000) { t.connect() }; connected = true }
                 }
                 val state = if (t?.isConnected == true) withTimeoutOrNull(3000) {
-                    runCatching { t.request("ssap://com.webos.service.tvpower/power/getPowerState").optString("state") }.getOrNull()
+                    runCatching { t.powerState() }.getOrNull()
                 } else null
                 when (state) {
-                    "Screen Off" -> { say("Turning the screen on"); ssap("ssap://com.webos.service.tvpower/power/turnOnScreen") }
+                    "Screen Off" -> { say("Turning the screen on"); enqueue { tv().turnOnScreen() } }
                     "Active Standby", "Suspend", "Power Off" -> powerOn()
                     // "Active", or the TV answered but didn't say: it's on, so turn it off.
                     else -> turnOff()
@@ -607,7 +593,7 @@ class TvController(app: Application) : AndroidViewModel(app), TvActions {
     private fun turnOff() {
         say("Turning off"); tvOff = true; foregroundApp = null; offAt = System.currentTimeMillis(); connEpoch++
         enqueue {
-            runCatching { tv().request("ssap://system/turnOff") }
+            runCatching { tv().turnOff() }
             tv?.close(); connected = false
         }
     }
@@ -658,7 +644,7 @@ class TvController(app: Application) : AndroidViewModel(app), TvActions {
                     // Short attempts: just after waking, the TV accepts connections before its control
                     // service is ready. The loop creates the connection itself (no hand-off).
                     connectOnce = { ip != null && run { withTimeout(2500) { ensureTv(ip).connect() }; true } },
-                    powerState = { withTimeout(2000) { tv?.request("ssap://com.webos.service.tvpower/power/getPowerState")?.optString("state") } },
+                    powerState = { withTimeout(2000) { tv?.powerState() } },
                     reset = { tv?.close() },
                     now = System::currentTimeMillis,
                     log = ::event,
@@ -686,8 +672,8 @@ class TvController(app: Application) : AndroidViewModel(app), TvActions {
     }
 
     /** Live typing into a focused TV text box. */
-    fun typeOnTv(text: String) = ssap("ssap://com.webos.service.ime/insertText", JSONObject().put("text", text).put("replace", true))
-    fun enterOnTv() = ssap("ssap://com.webos.service.ime/sendEnterKey")
+    fun typeOnTv(text: String) = enqueue { tv().typeText(text) }
+    fun enterOnTv() = enqueue { tv().sendEnter() }
 
     // ---- voice / search bar -------------------------------------------------
     /** Handles anything said or typed. Returns false if it wasn't understood. */
@@ -734,7 +720,7 @@ class TvController(app: Application) : AndroidViewModel(app), TvActions {
         return true
     }
 
-    fun voiceHints(): List<String> = (apps.map { it.title } + CommandParser.KNOWN_APPS.map { it.title }).distinct() +
+    fun voiceHints(): List<String> = (apps.map { it.title } + CommandParser.knownApps(brand).map { it.title }).distinct() +
         listOf("open", "volume", "mute", "pause", "play", "HDMI", "channel", "search", "turn off")
 
     fun handle(text: String, fromVoice: Boolean = false): Boolean {
@@ -769,16 +755,16 @@ class TvController(app: Application) : AndroidViewModel(app), TvActions {
             is Command.Power -> if (cmd.on) powerOn() else turnOff()
             is Command.VolumeStep -> {
                 say(if (cmd.up) "Louder" else "Quieter")
-                enqueue { repeat(cmd.steps) { tv().request(if (cmd.up) "ssap://audio/volumeUp" else "ssap://audio/volumeDown"); delay(40) } }
+                enqueue { repeat(cmd.steps) { tv().volume(cmd.up); delay(40) } }
             }
-            is Command.VolumeSet -> { say("Volume ${cmd.level}"); ssap("ssap://audio/setVolume", JSONObject().put("volume", cmd.level)) }
-            is Command.Mute -> { say(if (cmd.mute) "Muted" else "Sound on"); ssap("ssap://audio/setMute", JSONObject().put("mute", cmd.mute)) }
-            is Command.Media -> { if (cmd.action == "pause") assumePlaying = false else if (cmd.action == "play") assumePlaying = true; say(cmd.action.replaceFirstChar { it.uppercase() }.replace("Forward", " forward")); ssap("ssap://media.controls/${cmd.action}") }
+            is Command.VolumeSet -> { say("Volume ${cmd.level}"); enqueue { tv().setVolume(cmd.level) } }
+            is Command.Mute -> { say(if (cmd.mute) "Muted" else "Sound on"); enqueue { tv().setMute(cmd.mute) } }
+            is Command.Media -> { if (cmd.action == "pause") assumePlaying = false else if (cmd.action == "play") assumePlaying = true; say(cmd.action.replaceFirstChar { it.uppercase() }.replace("Forward", " forward")); enqueue { tv().media(cmd.action) } }
             is Command.Button -> button(cmd.name)
             is Command.Seek -> seek(cmd.seconds)
-            is Command.ChannelStep -> { say(if (cmd.up) "Channel up" else "Channel down"); ssap(if (cmd.up) "ssap://tv/channelUp" else "ssap://tv/channelDown") }
-            is Command.ChannelNumber -> { say("Channel ${cmd.number}"); ssap("ssap://tv/openChannel", JSONObject().put("channelNumber", cmd.number)) }
-            is Command.Input -> { say("HDMI ${cmd.hdmi}"); ssap("ssap://system.launcher/launch", JSONObject().put("id", "com.webos.app.hdmi${cmd.hdmi}")) }
+            is Command.ChannelStep -> { say(if (cmd.up) "Channel up" else "Channel down"); channel(cmd.up) }
+            is Command.ChannelNumber -> { say("Channel ${cmd.number}"); enqueue { tv().openChannel(cmd.number) } }
+            is Command.Input -> { say("HDMI ${cmd.hdmi}"); enqueue { tv().openInput(cmd.hdmi) } }
             is Command.OpenApp -> launch(cmd.app)
             is Command.Search -> if (!cmd.title || cmd.app?.id?.startsWith("youtube") == true) search(cmd.query, cmd.app) else viewModelScope.launch {
                 // "play / watch X": a show or film on their services first.
@@ -838,7 +824,7 @@ class TvController(app: Application) : AndroidViewModel(app), TvActions {
         if (target.id.startsWith("youtube")) {
             say("Searching YouTube for \"$query\"")
             val url = "https://www.youtube.com/tv?launch=voice&vq=" + URLEncoder.encode(query, "UTF-8")
-            ssap("ssap://system.launcher/launch", JSONObject().put("id", target.id).put("params", JSONObject().put("contentTarget", url)))
+            enqueue { tv().launch(target.id, JSONObject().put("params", JSONObject().put("contentTarget", url))) }
         } else {
             // No search link for this app yet: open it and type the words as soon as its search box is selected.
             launch(target)
@@ -864,14 +850,17 @@ class TvController(app: Application) : AndroidViewModel(app), TvActions {
     interface Net {
         suspend fun reachable(ip: String, timeoutMs: Int): Boolean
         suspend fun wake(context: Context, macs: List<String>, ip: String?): Int
-        fun lgTv(ip: String, clientKey: String?, onClientKey: (String) -> Unit, onDisconnect: () -> Unit): LgTv
+        fun driver(brand: String, ip: String, clientKey: String?, onClientKey: (String) -> Unit, onDisconnect: () -> Unit): TvDriver
         suspend fun lookupName(context: Context, ip: String): String?
     }
     object RealNet : Net {
         override suspend fun reachable(ip: String, timeoutMs: Int) = WakeOnLan.reachable(ip, timeoutMs)
         override suspend fun wake(context: Context, macs: List<String>, ip: String?) = WakeOnLan.send(context, macs, ip)
-        override fun lgTv(ip: String, clientKey: String?, onClientKey: (String) -> Unit, onDisconnect: () -> Unit) =
-            LgTv(ip, clientKey, onClientKey = onClientKey, onDisconnect = onDisconnect)
+        override fun driver(brand: String, ip: String, clientKey: String?, onClientKey: (String) -> Unit, onDisconnect: () -> Unit): TvDriver =
+            when (brand) {
+                "Samsung" -> com.home.tvremote.samsung.SamsungDriver(ip, clientKey, onClientKey = onClientKey, onDisconnect = onDisconnect)
+                else -> LgDriver(LgTv(ip, clientKey, onClientKey = onClientKey, onDisconnect = onDisconnect))
+            }
         override suspend fun lookupName(context: Context, ip: String) = Discovery.lookupName(context, ip)
     }
 

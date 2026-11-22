@@ -221,6 +221,10 @@ class CommandParser(tvApps: List<TvApp>) {
             TvApp("com.webos.app.browser", "Web Browser"),
         )
 
+        /** Common app IDs for the brand, used when the TV doesn't share its installed-app list. */
+        fun knownApps(brand: String): List<TvApp> =
+            if (brand == "Samsung") com.home.tvremote.samsung.SamsungApps.COMMON else KNOWN_APPS
+
         fun distance(a: String, b: String): Int {
             val dp = IntArray(b.length + 1) { it }
             for (i in 1..a.length) {
