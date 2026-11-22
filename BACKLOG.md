@@ -70,6 +70,27 @@ Measure it: time from opening to Play, quick-backs, "Not now" count per session.
 - To test on the TV: Search 1/2 (Netflix search page with "The Crown" filled in).
 - Next: Prime Video and Disney+ title/search links (same 3-try test).
 
+## v1.1.1 — auto-type didn't work in Prime, Disney+, Netflix (reported 22 Nov)
+- Likely cause: auto-type waits for the TV to say "a text box is focused" (webOS system keyboard). Netflix, Prime and
+  Disney+ draw their own letter grid instead of using the TV's keyboard, so that signal may never come → nothing typed.
+- v1.1.1 logs "KEYBOARD opened/closed" and "TYPE waiting…" in Diagnostics to confirm. Quick check without diagnostics:
+  when the app's search box is selected, does the phone show its "type on TV" bar? No bar = the app doesn't use the TV keyboard.
+- If confirmed: drop "type into search" for those apps and replace it with direct links (Prime, Disney+), the route
+  that already works for Netflix. Keep auto-type for apps that do use the TV keyboard (YouTube? browser).
+
+## iOS app (backlog)
+- Needs: a Mac with Xcode (or a macOS build machine such as GitHub Actions), an Apple Developer account ($99/yr),
+  an iPhone to test on, TestFlight to install builds.
+- Code: the Android code is Kotlin and can't run on iPhone as is. Options: (a) rewrite in Swift/SwiftUI;
+  (b) Kotlin Multiplatform: share TV drivers, picks ranking, TMDB, voice parsing; write only the screens in SwiftUI.
+  (b) keeps one copy of the hard parts and the simulated-TV tests. Recommended.
+- Apple approvals to ask for early: the multicast networking entitlement (needed for SSDP discovery and Wake-on-LAN
+  broadcast; Apple reviews the request) and the Local Network permission text.
+- Differences: no Gemini Nano (use Apple's on-device model on iPhones with Apple Intelligence, else Groq); speech via
+  Apple's recognizer; iOS suspends apps in the background, so the sleep timer, the timer page and the picks page on
+  the TV need a rethink (Live Activity / notifications, or a small server).
+- I can't build iOS in this Linux cloud session: it needs the user's Mac attached, or a macOS CI runner.
+
 ## v1.1.0 — Samsung TVs (built 22 Nov, no real Samsung TV yet)
 - Done: one TvDriver interface per brand. LG moved behind it unchanged (all LG simulator tests pass as before); new SamsungDriver
   (Tizen remote websocket 8002/8001 with Allow + token, REST 8001 for model / MAC / power / app in front, keys, typing via

@@ -279,6 +279,9 @@ class TvController(app: Application) : AndroidViewModel(app), TvActions {
                 run {
                     val wasOpen = tvKeyboardOpen
                     tvKeyboardOpen = open
+                    // Logged so Diagnostics shows whether an app's search box uses the TV's keyboard at all
+                    // (apps that draw their own letter grid never report it, so auto-type can't work there).
+                    if (open != wasOpen) event("KEYBOARD ${if (open) "opened" else "closed"} on the TV (in front: ${foregroundApp ?: "?"})")
                     // A search box was just selected and something is waiting to be typed: type it and search.
                     val waiting = autoType
                     if (open && !wasOpen && waiting != null && System.currentTimeMillis() < autoTypeUntil) {
@@ -475,7 +478,10 @@ class TvController(app: Application) : AndroidViewModel(app), TvActions {
     override fun openTitle(appId: String, title: String, extras: JSONObject) = launch(TvApp(appId, title, launchExtras = extras))
     @Volatile private var autoType: String? = null
     @Volatile private var autoTypeUntil = 0L
-    override fun typeWhenSearchOpens(text: String) { autoType = text; autoTypeUntil = System.currentTimeMillis() + 120_000 }
+    override fun typeWhenSearchOpens(text: String) {
+        autoType = text; autoTypeUntil = System.currentTimeMillis() + 120_000
+        event("TYPE waiting for a search box to type “$text” (2 min)")
+    }
 
     override fun typeIntoSearch(text: String): Boolean {
         if (!tvKeyboardOpen) return false
