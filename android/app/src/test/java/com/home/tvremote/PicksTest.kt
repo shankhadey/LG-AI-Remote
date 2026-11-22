@@ -239,7 +239,7 @@ class PicksTest {
         }
         val d = StandardTestDispatcher()
         val pc = PicksController(store(), tv, CoroutineScope(d), clock = { at(Calendar.TUESDAY, 21, 30) }, onDevice = null,
-            netflixIdOf = { if (it == "tv:7") "80057281" else null })
+            titleIdsOf = { if (it == "tv:7") com.home.tvremote.picks.TitleIds(netflix = "80057281") else null })
         pc.openPicker()
         pc.picks += Pick(Title(Kind.Tv, 7, "Stranger Things", service = "Netflix"), "why")
         pc.picks += Pick(Title(Kind.Tv, 8, "Unknown", service = "Netflix"), "why")
@@ -275,7 +275,7 @@ class PicksTest {
         assertEquals(listOf("tv:1" to "A", "movie:2" to "B"), s.apply { setFavourites("Alex", listOf("tv:1" to "A", "movie:2" to "B")) }.favourites("Alex"))
         s.setFavourites("Sam", listOf("tv:1" to "A", "tv:9" to "C"))
         assertEquals(3, s.favourites(Catalog.TOGETHER).size)               // everyone's, without duplicates
-        val pc = PicksController(s, FakeTv(), CoroutineScope(StandardTestDispatcher()), clock = { at(Calendar.TUESDAY, 21, 30) }, onDevice = null, netflixIdOf = null)
+        val pc = PicksController(s, FakeTv(), CoroutineScope(StandardTestDispatcher()), clock = { at(Calendar.TUESDAY, 21, 30) }, onDevice = null, titleIdsOf = null)
         assertTrue(pc.wantsFavourites("Alex"))
         assertFalse(pc.wantsFavourites(Catalog.TOGETHER))
         pc.saveFavourites("Alex", s.favourites("Alex") + ("tv:5" to "D"))
@@ -300,7 +300,7 @@ class PicksTest {
     private class OpenLog(val typed: Boolean = false) : TvActions by FakeTvShared {
         val calls = mutableListOf<String>()
         override fun openApp(appId: String, title: String) { calls += "app $appId" }
-        override fun openTitle(appId: String, title: String, extras: JSONObject) { calls += "link $extras" }
+        override fun openTitle(appId: String, title: String, extras: JSONObject) { calls += "link $appId $extras" }
         override fun typeIntoSearch(text: String): Boolean { calls += "type $text"; return typed }
         override fun knownAppIds() = setOf("netflix", "com.disney.disneyplus-prod")
     }
@@ -308,7 +308,7 @@ class PicksTest {
     @Test fun notItTriesTheOtherFormatThenTyping() {
         val tv = OpenLog(typed = true)
         val d = StandardTestDispatcher()
-        val pc = PicksController(store(), tv, CoroutineScope(d), clock = { at(Calendar.TUESDAY, 21, 30) }, onDevice = null, netflixIdOf = { "80025678" })
+        val pc = PicksController(store(), tv, CoroutineScope(d), clock = { at(Calendar.TUESDAY, 21, 30) }, onDevice = null, titleIdsOf = { com.home.tvremote.picks.TitleIds(netflix = "80025678") })
         pc.openPicker(); pc.picks += Pick(Title(Kind.Tv, 7, "The Crown", service = "Netflix"), "why")
         pc.play(0); d.scheduler.advanceTimeBy(100)
         assertTrue(tv.calls.last(), "titles/movies/80025678" in tv.calls.last())               // format 1 first
@@ -319,10 +319,64 @@ class PicksTest {
         pc.tryNextFix(); assertEquals("type The Crown", tv.calls.last())                       // can be tapped again
     }
 
+    @Test fun wikidataFindsNetflixPrimeAndDisneyIdsInOneQuery() = runBlocking {
+        server.dispatcher = object : Dispatcher() {
+            override fun dispatch(r: RecordedRequest): MockResponse {
+                val q = r.requestUrl?.queryParameter("query").orEmpty()
+                assertTrue(q, "P14462" in q && "P7595" in q && "P1874" in q)   // movie: Disney+ movie ID property
+                val b = JSONObject().put("pv", JSONObject().put("value", "amzn1.dv.gti.84aa074e-d217-477f-9242-3e62c961c14b"))
+                    .put("dp", JSONObject().put("value", "38HCX4uW3BlA"))
+                return MockResponse().setBody(JSONObject().put("results", JSONObject().put("bindings", org.json.JSONArray().put(b))).toString())
+            }
+        }
+        server.start()
+        val ids = com.home.tvremote.picks.Wikidata(server.url("/sparql").toString()).ids("movie:550")!!
+        assertNull(ids.netflix)
+        assertEquals("amzn1.dv.gti.84aa074e-d217-477f-9242-3e62c961c14b", ids.prime)
+        assertEquals("38HCX4uW3BlA", ids.disney)
+    }
+
+    @Test fun primeOpensTheTitleByItsGti_thenOtherFormats_thenTyping() {
+        val tv = OpenLog(typed = true)
+        val d = StandardTestDispatcher()
+        val gti = "amzn1.dv.gti.6aa9f790-371c-d77c-e4a2-2539f0bbcc92"
+        val pc = PicksController(store(), tv, CoroutineScope(d), clock = { at(Calendar.TUESDAY, 21, 30) }, onDevice = null,
+            titleIdsOf = { com.home.tvremote.picks.TitleIds(prime = gti) })
+        pc.openPicker(); pc.picks += Pick(Title(Kind.Movie, 137, "Groundhog Day", service = "Prime Video"), "why")
+        pc.play(0); d.scheduler.advanceTimeBy(100)
+        assertTrue(tv.calls.last(), tv.calls.last().startsWith("link amazon") && "\"contentId\":\"$gti\"" in tv.calls.last())
+        pc.tryNextFix(); assertTrue(tv.calls.last(), "app.primevideo.com/detail?gti=$gti" in tv.calls.last() && "contentTarget" !in tv.calls.last())
+        pc.tryNextFix(); assertTrue(tv.calls.last(), "contentTarget" in tv.calls.last())
+        assertEquals("Not it? Type “Groundhog Day” in Prime Video's search", pc.fixLabel())
+    }
+
+    @Test fun disneyOpensTheTitlePage_seriesAndMoviesDiffer() {
+        val tv = OpenLog(typed = true)
+        val d = StandardTestDispatcher()
+        val pc = PicksController(store(), tv, CoroutineScope(d), clock = { at(Calendar.TUESDAY, 21, 30) }, onDevice = null,
+            titleIdsOf = { if (it == "tv:82856") com.home.tvremote.picks.TitleIds(disney = "3jLIGMDYINqD") else com.home.tvremote.picks.TitleIds(disney = "4uKGzAJi3ROz") })
+        pc.openPicker(); pc.picks += Pick(Title(Kind.Tv, 82856, "The Mandalorian", service = "Disney+"), "why")
+        pc.play(0); d.scheduler.advanceTimeBy(100)
+        assertTrue(tv.calls.last(), tv.calls.last().startsWith("link com.disney.disneyplus-prod") && "series/the-mandalorian/3jLIGMDYINqD" in tv.calls.last())
+        pc.openPicker(); pc.picks += Pick(Title(Kind.Movie, 109445, "Frozen", service = "Disney+"), "why")
+        pc.play(0); d.scheduler.advanceTimeBy(100)
+        assertTrue(tv.calls.last(), "movies/frozen/4uKGzAJi3ROz" in tv.calls.last())
+    }
+
+    @Test fun primeWithoutAnId_opensTheAppAndTypes() {
+        val tv = OpenLog()
+        val d = StandardTestDispatcher()
+        val pc = PicksController(store(), tv, CoroutineScope(d), clock = { at(Calendar.TUESDAY, 21, 30) }, onDevice = null,
+            titleIdsOf = { com.home.tvremote.picks.TitleIds(netflix = "1") })   // known on Netflix only
+        pc.openPicker(); pc.picks += Pick(Title(Kind.Tv, 76479, "The Boys", service = "Prime Video"), "why")
+        pc.play(0); d.scheduler.advanceTimeBy(100)
+        assertEquals("app amazon", tv.calls.last())
+    }
+
     @Test fun netflixWithoutAnIdOpensTheAppAndTypesWhenSearchOpens() {
         val tv = OpenLog()
         val d = StandardTestDispatcher()
-        val pc = PicksController(store(), tv, CoroutineScope(d), clock = { at(Calendar.TUESDAY, 21, 30) }, onDevice = null, netflixIdOf = { null })
+        val pc = PicksController(store(), tv, CoroutineScope(d), clock = { at(Calendar.TUESDAY, 21, 30) }, onDevice = null, titleIdsOf = { null })
         pc.openPicker(); pc.picks += Pick(Title(Kind.Movie, 9, "Glass Onion", service = "Netflix"), "why")
         pc.play(0); d.scheduler.advanceTimeBy(100)
         assertEquals("app netflix", tv.calls.last())
@@ -347,7 +401,7 @@ class PicksTest {
         val tv = OpenLog()
         val d = StandardTestDispatcher()
         val pc = PicksController(store(), tv, CoroutineScope(d), clock = { at(Calendar.TUESDAY, 21, 30) }, onDevice = null,
-            netflixIdOf = { "80025678" }, tmdbBase = server.url("/3").toString().trimEnd('/'))
+            titleIdsOf = { com.home.tvremote.picks.TitleIds(netflix = "80025678") }, tmdbBase = server.url("/3").toString().trimEnd('/'))
         assertTrue(pc.openByName("the crown"))
         d.scheduler.advanceTimeBy(100)
         assertTrue(tv.calls.toString(), tv.calls.any { "80025678" in it })
@@ -383,7 +437,7 @@ class PicksTest {
     @Test fun titleOnAServiceTheyDontHaveSaysWhere() = runBlocking {
         fakeTmdbForVoice()
         val pc = PicksController(store(), OpenLog(), CoroutineScope(StandardTestDispatcher()), clock = { at(Calendar.TUESDAY, 21, 30) }, onDevice = null,
-            netflixIdOf = null, tmdbBase = server.url("/3").toString().trimEnd('/'))
+            titleIdsOf = null, tmdbBase = server.url("/3").toString().trimEnd('/'))
         val r = pc.findAndOpen("barbie")
         assertTrue(r.toString(), r is PicksController.Found.Elsewhere)
         assertEquals("Barbie is on Max, which isn't one of your services — add Max in Picks settings if you have it", pc.elsewhere(r as PicksController.Found.Elsewhere))
@@ -394,7 +448,7 @@ class PicksTest {
         val ai = FakeEngine("On-phone", """{"kind":"person","titles":[],"person":"Jennifer Aniston"}""")
         val s = store().apply { services = listOf("Netflix", "Hulu") }
         val pc = PicksController(s, OpenLog(), CoroutineScope(StandardTestDispatcher()), clock = { at(Calendar.TUESDAY, 21, 30) }, onDevice = ai,
-            netflixIdOf = null, tmdbBase = server.url("/3").toString().trimEnd('/'))
+            titleIdsOf = null, tmdbBase = server.url("/3").toString().trimEnd('/'))
         assertNull(pc.interpret("that show with jennifer aniston"))
         assertEquals(Step.Results, pc.step)
         assertEquals(listOf("Friends"), pc.picks.map { it.title.name })          // The Morning Show is on Apple TV+, not theirs
@@ -447,7 +501,7 @@ class PicksTest {
         fakeTmdbForVoice()
         val ai = FakeEngine("On-phone", """{"kind":"title","titles":["Breakfast at Tiffany's"],"person":"Jennifer Aniston"}""")
         val pc = PicksController(store().apply { services = listOf("Netflix") }, OpenLog(), CoroutineScope(StandardTestDispatcher()),
-            clock = { at(Calendar.TUESDAY, 21, 30) }, onDevice = ai, netflixIdOf = null, tmdbBase = server.url("/3").toString().trimEnd('/'))
+            clock = { at(Calendar.TUESDAY, 21, 30) }, onDevice = ai, titleIdsOf = null, tmdbBase = server.url("/3").toString().trimEnd('/'))
         assertNull(pc.interpret("something jennifer aniston is in"))
         assertEquals(listOf("Friends"), pc.picks.map { it.title.name })
     }
@@ -457,7 +511,7 @@ class PicksTest {
         val ai = FakeEngine("On-phone", """{"picks":[{"id":"tv:6","why":"Warm, witty and short."}]}""")
         val d = StandardTestDispatcher()
         val pc = PicksController(store(), FakeTv(), CoroutineScope(d), clock = { at(Calendar.TUESDAY, 21, 30) }, onDevice = ai,
-            netflixIdOf = null, tmdbBase = server.url("/3").toString().trimEnd('/'))
+            titleIdsOf = null, tmdbBase = server.url("/3").toString().trimEnd('/'))
         pc.openPicker(); pc.chooseMood(Mood.Light)
         // Real network calls (MockWebServer) inside the test dispatcher: run until the set is shown.
         var n = 0; while (pc.step != Step.Results && n++ < 200) { d.scheduler.advanceUntilIdle(); Thread.sleep(20) }
@@ -478,20 +532,20 @@ class PicksTest {
     @Test fun theMovieAndYearsAreIgnoredWhenLookingUpTitles() = runBlocking {
         fakeTmdbForVoice()
         val pc = PicksController(store(), OpenLog(), CoroutineScope(StandardTestDispatcher()), clock = { at(Calendar.TUESDAY, 21, 30) }, onDevice = null,
-            netflixIdOf = null, tmdbBase = server.url("/3").toString().trimEnd('/'))
+            titleIdsOf = null, tmdbBase = server.url("/3").toString().trimEnd('/'))
         assertTrue(pc.findAndOpen("barbie the movie") is PicksController.Found.Elsewhere)
         assertTrue(pc.findAndOpen("Barbie (2023)") is PicksController.Found.Elsewhere)
     }
 
     @Test fun maxIsRecognisedByItsLgAppId() {
         val tv = object : TvActions by FakeTvShared { override fun knownAppIds() = setOf("com.wbd.stream") }
-        val pc = PicksController(store(), tv, CoroutineScope(StandardTestDispatcher()), onDevice = null, netflixIdOf = null)
+        val pc = PicksController(store(), tv, CoroutineScope(StandardTestDispatcher()), onDevice = null, titleIdsOf = null)
         assertEquals("com.wbd.stream", pc.appIdFor(Catalog.SERVICES.first { it.name == "Max" }))
     }
 
     @Test fun peopleInEverydayPhrasing() = runBlocking {
         fakeTmdbForVoice()
-        val pc = PicksController(store(), OpenLog(), CoroutineScope(StandardTestDispatcher()), onDevice = null, netflixIdOf = null,
+        val pc = PicksController(store(), OpenLog(), CoroutineScope(StandardTestDispatcher()), onDevice = null, titleIdsOf = null,
             tmdbBase = server.url("/3").toString().trimEnd('/'))
         assertEquals("Jennifer Aniston" to Kind.Movie, pc.resolvePerson("show me some jennifer aniston movies"))
         assertEquals("Jennifer Aniston" to Kind.Tv, pc.resolvePerson("jennifer aniston shows"))
@@ -503,7 +557,7 @@ class PicksTest {
         val s = store()
         val now = System.currentTimeMillis()
         s.saveSession(Session(openedAt = now - 1000, who = "Alex", playedKey = "tv:1", playedName = "Severance", playedAt = now - 900, outcome = "watched"))
-        val pc = PicksController(s, FakeTv(), CoroutineScope(StandardTestDispatcher()), onDevice = null, netflixIdOf = null)
+        val pc = PicksController(s, FakeTv(), CoroutineScope(StandardTestDispatcher()), onDevice = null, titleIdsOf = null)
         pc.openPicker(); pc.selectWho("Alex")
         assertEquals("Severance", pc.keep?.playedName)
         pc.dismissKeep()
@@ -560,7 +614,7 @@ class PicksTest {
     }
 
     private fun controller(tv: FakeTv = FakeTv()) =
-        PicksController(store(), tv, CoroutineScope(StandardTestDispatcher()), clock = { at(Calendar.TUESDAY, 21, 30) }, onDevice = null, netflixIdOf = null)
+        PicksController(store(), tv, CoroutineScope(StandardTestDispatcher()), clock = { at(Calendar.TUESDAY, 21, 30) }, onDevice = null, titleIdsOf = null)
 
     @Test fun quickBackIsRecordedAndLongWatchIsLiked() {
         val tv = FakeTv()
@@ -660,7 +714,7 @@ class PicksTest {
             override fun pointerMove(dx: Float, dy: Float) { moves += "move" }
             override fun pointerTap() { moves += "tap" }
         }
-        val pc = PicksController(store(), tv, CoroutineScope(StandardTestDispatcher()), clock = { at(Calendar.TUESDAY, 21, 30) }, onDevice = null, netflixIdOf = null)
+        val pc = PicksController(store(), tv, CoroutineScope(StandardTestDispatcher()), clock = { at(Calendar.TUESDAY, 21, 30) }, onDevice = null, titleIdsOf = null)
         pc.openPicker(); pc.changeShowOnTv(true)
         assertTrue(pc.tvPageOn)
         pc.move(3f, 4f); pc.tap()

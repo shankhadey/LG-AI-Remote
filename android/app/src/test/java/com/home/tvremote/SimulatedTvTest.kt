@@ -118,6 +118,21 @@ class SimulatedTvTest {
         assertEquals("netflix", sim.foreground)
     }
 
+    @Test fun primeAndDisneyLinksAreSentAsTheTvExpects() {
+        val tv = openApp()
+        eventually("connects", tv) { tv.connected }
+        val gti = "amzn1.dv.gti.6aa9f790-371c-d77c-e4a2-2539f0bbcc92"
+        onMain { tv.openTitle("amazon", "Prime Video", DeepLinks.prime(gti, "P1")) }
+        eventually("launches Prime with the GTI as contentId", tv) {
+            sim.sent("system.launcher/launch").any { it.optJSONObject("payload")?.let { p -> p.optString("id") == "amazon" && p.optString("contentId") == gti } == true }
+        }
+        onMain { tv.openTitle("com.disney.disneyplus-prod", "Disney+", DeepLinks.disney("4uKGzAJi3ROz", true, "Frozen", "D1")) }
+        eventually("launches Disney+ with the title page", tv) {
+            sim.sent("system.launcher/launch").any { it.optJSONObject("payload")?.optJSONObject("params")?.optString("contentTarget") == "https://www.disneyplus.com/movies/frozen/4uKGzAJi3ROz" }
+        }
+        assertEquals("com.disney.disneyplus-prod", sim.foreground)
+    }
+
     @Test fun titleIsTypedWhenTheSearchBoxIsSelected() {
         val tv = openApp()
         eventually("connects and listens to the keyboard", tv) { tv.connected && sim.uris().any { it.endsWith("registerRemoteKeyboard") } }

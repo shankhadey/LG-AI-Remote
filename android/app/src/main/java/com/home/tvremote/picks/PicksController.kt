@@ -54,8 +54,8 @@ class PicksController(
     /** On-phone model engine; injectable so tests don't need Android's AI service. */
     private val onDevice: AiEngine? = OnDeviceAi,
     private val makeRecommender: ((PicksStore, AiPicker) -> Recommender)? = null,
-    /** Netflix title ID for a TMDB key; null turns deep links off (tests). */
-    private val netflixIdOf: (suspend (String) -> String?)? = { Wikidata().netflixId(it) },
+    /** A title's IDs in Netflix / Prime Video / Disney+ for a TMDB key; null turns direct links off (tests). */
+    private val titleIdsOf: (suspend (String) -> TitleIds?)? = { Wikidata().ids(it) },
     private val tmdbBase: String = "https://api.themoviedb.org/3",
 ) {
     /** Engines in the user's order: Groq and/or the on-phone model. Rules are the final fallback in the recommender. */
@@ -315,7 +315,7 @@ class PicksController(
 
     // ---- opening a title, and "Not it?" fallbacks --------------------------------
     /** What was last opened, and the fallbacks still to try (shown on the remote as "Not it?"). */
-    data class Opened(val key: String, val name: String, val service: String, val appId: String, val netflixId: String?, val steps: List<String>)
+    data class Opened(val key: String, val name: String, val service: String, val appId: String, val titleId: String?, val steps: List<String>)
     var lastOpened by mutableStateOf<Opened?>(null)
         internal set
     var fixStep by mutableStateOf(0)
@@ -323,38 +323,34 @@ class PicksController(
     private var openedJob: Job? = null
 
     /**
-     * Opens [name] in the service's app: straight to the title where we can (Netflix with a known ID), Netflix's
-     * search page when the ID is unknown, otherwise the app with "Look for". Fallbacks, in order: search page,
-     * the other link formats, then typing the name into the app's search box.
+     * Opens [name] in the service's app: straight to the title where we know its ID there (Netflix, Prime Video,
+     * Disney+, IDs from Wikidata), otherwise the app, typing the name once its search box is selected.
+     * "Not it?" fallbacks: the service's other link formats, then typing the name.
      */
     private fun openIn(key: String, name: String, svc: Service, appId: String) {
         val t = picks.firstOrNull { it.title.key == key }?.title
         nowShowing = name to t?.takeIf { it.kind == Kind.Movie }?.let { endsAt(it)?.removePrefix("ends ") }
         nowShowingApp = appId
-        val lookup = netflixIdOf
-        if (svc.name == "Netflix" && lookup != null) scope.launch {
-            val id = withTimeoutOrNull(3000) { runCatching { lookup(key) }.getOrNull() }
-            tv.log("LINK Netflix id for $name: ${id ?: "not found"}")
+        val lookup = titleIdsOf
+        if (svc.name in DeepLinks.DIRECT && lookup != null) scope.launch {
+            val id = withTimeoutOrNull(3000) { runCatching { lookup(key) }.getOrNull() }?.forService(svc.name)
+            tv.log("LINK ${svc.name} id for $name: ${id ?: "not found"}")
             if (id != null) {
-                tv.openTitle(appId, svc.name, DeepLinks.netflix(id, store.netflixLink))
-                remember(Opened(key, name, svc.name, appId, id,
-                    DeepLinks.NETFLIX_VARIANTS.filter { it != store.netflixLink && it != "B" }.map { "format:$it" } + "type"))
-            } else {
-                // Netflix's search link didn't work on the TV (tested 21 Nov): type into its search box instead.
-                tv.openApp(appId, svc.name)
-                tv.typeWhenSearchOpens(name)
-                scope.launch { delay(4000); tv.toastOnTv("Select Search — the remote will type “$name”") }
-                remember(Opened(key, name, svc.name, appId, null, listOf("type")))
-            }
-            tv.note("Opening $name on Netflix")
-        } else {
-            // No direct link for this app yet: open it, and type the name as soon as its search box is selected.
-            tv.openApp(appId, svc.name)
-            tv.typeWhenSearchOpens(name)
-            scope.launch { delay(4000); tv.toastOnTv("Select Search — the remote will type “$name”") }
-            tv.note("Opening ${svc.name}. Select its search box and “$name” is typed for you.")
-            remember(Opened(key, name, svc.name, appId, null, listOf("type")))
-        }
+                val v = store.linkVariant(svc.name)
+                tv.openTitle(appId, svc.name, DeepLinks.forService(svc.name, id, key, name, v))
+                remember(Opened(key, name, svc.name, appId, id, DeepLinks.variants(svc.name).filter { it != v }.map { "format:$it" } + "type"))
+                tv.note("Opening $name on ${svc.name}")
+            } else openAndType(key, name, svc, appId)
+        } else openAndType(key, name, svc, appId)
+    }
+
+    /** No direct link: open the app, and type the name as soon as its search box is selected. */
+    private fun openAndType(key: String, name: String, svc: Service, appId: String) {
+        tv.openApp(appId, svc.name)
+        tv.typeWhenSearchOpens(name)
+        scope.launch { delay(4000); tv.toastOnTv("Select Search — the remote will type “$name”") }
+        tv.note("Opening ${svc.name}. Select its search box and “$name” is typed for you.")
+        remember(Opened(key, name, svc.name, appId, null, listOf("type")))
     }
 
     private fun remember(o: Opened) {
@@ -378,7 +374,8 @@ class PicksController(
         val s = o.steps.getOrNull(fixStep) ?: return
         tv.log("FIX $s for ${o.name}")
         when {
-            s.startsWith("format:") && o.netflixId != null -> tv.openTitle(o.appId, o.service, DeepLinks.netflix(o.netflixId, s.removePrefix("format:")))
+            s.startsWith("format:") && o.titleId != null ->
+                tv.openTitle(o.appId, o.service, DeepLinks.forService(o.service, o.titleId, o.key, o.name, s.removePrefix("format:")))
             s == "type" -> {
                 if (tv.typeIntoSearch(o.name)) tv.note("Typed “${o.name}”")
                 else { tv.typeWhenSearchOpens(o.name); tv.note("Select ${o.service}'s search box: “${o.name}” is typed as soon as it opens") }

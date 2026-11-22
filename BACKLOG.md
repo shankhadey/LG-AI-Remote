@@ -70,6 +70,16 @@ Measure it: time from opening to Play, quick-backs, "Not now" count per session.
 - To test on the TV: Search 1/2 (Netflix search page with "The Crown" filled in).
 - Next: Prime Video and Disney+ title/search links (same 3-try test).
 
+## v1.2.0 — Prime Video and Disney+ open straight to the title (built 22 Nov, untested on the TV)
+- IDs from Wikidata in one query per title: Netflix (P1874), Prime Video GTI (P14462), Disney+ movie/series (P7595/P7596).
+- Prime: contentId = amzn1.dv.gti.… (P1, reported working on a 2024 LG on 17 Nov 2026); P2/P3 = primevideo URL as
+  contentId / contentTarget. Disney+: no format confirmed anywhere — D1 contentTarget title page + contentId,
+  D2 URL as contentId, D3 /video/<id>. "Test opening a show" now has Netflix / Prime Video / Disney+ tabs.
+- Coverage limits: Wikidata has Prime GTIs mostly for films (none for The Boys, Reacher, Fleabag); Disney+ covers many
+  films and big series (Mandalorian, Andor). No ID → app opens and we try typing (which may not work, see v1.1.1).
+- Better coverage later: a licensed source (JustWatch partner API, or the services' own feeds). JustWatch's public site
+  API has all links but its terms don't allow it in a commercial app.
+
 ## v1.1.1 — auto-type didn't work in Prime, Disney+, Netflix (reported 22 Nov)
 - Likely cause: auto-type waits for the TV to say "a text box is focused" (webOS system keyboard). Netflix, Prime and
   Disney+ draw their own letter grid instead of using the TV's keyboard, so that signal may never come → nothing typed.

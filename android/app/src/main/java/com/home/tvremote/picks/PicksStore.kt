@@ -96,6 +96,13 @@ class PicksStore(private val prefs: SharedPreferences) {
         set(v) = prefs.edit().putString("netflixLink", v).apply()
 
     /** Which Netflix search-link format this TV accepts. */
+    /** The link format ("try") used for each service; Netflix keeps its original setting. */
+    fun linkVariant(service: String): String = when (service) {
+        "Netflix" -> netflixLink
+        else -> prefs.getString("link_$service", null) ?: com.home.tvremote.picks.DeepLinks.variants(service).first()
+    }
+    fun setLinkVariant(service: String, v: String) { if (service == "Netflix") netflixLink = v else prefs.edit().putString("link_$service", v).apply() }
+
     var netflixSearch: String
         get() = prefs.getString("netflixSearch", "S1") ?: "S1"
         set(v) = prefs.edit().putString("netflixSearch", v).apply()

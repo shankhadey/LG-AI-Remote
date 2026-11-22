@@ -591,26 +591,36 @@ fun ListeningPanel(heard: String, level: Float, onDone: () -> Unit, onCancel: ()
 // ============================================================ Dialogs (opened from the TV name)
 
 /** Lets the user find which tap method their TV responds to, by trying each on a real tile. */
-/** Finds which way of opening a title this TV's Netflix app accepts. The one tried last is used for Play. */
+/** Finds which way of opening a title each app on this TV accepts (Netflix, Prime Video, Disney+). The one tried last is used. */
 @Composable
 private fun LinkDialog(tv: TvController, onClose: () -> Unit) {
-    var current by remember { mutableStateOf(tv.picks.store.netflixLink) }
+    val dl = com.home.tvremote.picks.DeepLinks
+    var service by remember { mutableStateOf("Netflix") }
+    var current by remember(service) { mutableStateOf(tv.picks.store.linkVariant(service)) }
     AlertDialog(
         onDismissRequest = onClose,
         title = { Text("Open shows directly") },
         text = {
             Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
-                Text("Each try opens a different show's own page on Netflix. Press Home on the TV between tries and note which ones land on that show. The last one you tap is used for Play.", fontSize = 14.sp)
-                for ((i, v) in com.home.tvremote.picks.DeepLinks.NETFLIX_VARIANTS.withIndex()) {
+                Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                    for (sv in dl.DIRECT) {
+                        val on = sv == service
+                        Text(sv, color = if (on) Color.White else Palette.text, fontSize = 13.sp, fontWeight = FontWeight.SemiBold,
+                            modifier = Modifier.clip(RoundedCornerShape(50)).background(if (on) Palette.accent else Palette.surface2)
+                                .clickable { service = sv }.padding(horizontal = 12.dp, vertical = 8.dp))
+                    }
+                }
+                Text("Each try opens a different title's own page in $service. Press Home on the TV between tries and note which ones land on that title. The last one you tap is used.", fontSize = 14.sp)
+                for ((i, v) in dl.variants(service).withIndex()) {
                     val selected = current == v
                     Row(
                         Modifier.fillMaxWidth().clip(RoundedCornerShape(12.dp))
                             .background(if (selected) Palette.accent else Palette.surface2)
-                            .clickable { current = v; tv.testNetflixLink(v) }
+                            .clickable { current = v; tv.testLink(service, v) }
                             .padding(14.dp),
                         verticalAlignment = Alignment.CenterVertically,
                     ) {
-                        Text("Try ${i + 1} · ${com.home.tvremote.picks.DeepLinks.NETFLIX_TESTS.getValue(v).second}", color = if (selected) Color.White else Palette.text, fontWeight = FontWeight.SemiBold, modifier = Modifier.weight(1f))
+                        Text("Try ${i + 1} · ${dl.tests(service).getValue(v).second}", color = if (selected) Color.White else Palette.text, fontWeight = FontWeight.SemiBold, modifier = Modifier.weight(1f))
                         if (selected) Text("in use", color = Color.White, fontSize = 12.sp)
                     }
                 }

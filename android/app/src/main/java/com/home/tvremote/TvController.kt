@@ -495,13 +495,17 @@ class TvController(app: Application) : AndroidViewModel(app), TvActions {
         launch(TvApp("netflix", "Netflix", launchExtras = com.home.tvremote.picks.DeepLinks.netflixSearch("The Crown", variant)))
     }
 
-    /** "Test opening a show": opens Stranger Things on Netflix with one link variant, and keeps it for Play. */
-    fun testNetflixLink(variant: String) {
-        picks.store.netflixLink = variant
-        event("LINK test $variant")
-        val (id, _) = com.home.tvremote.picks.DeepLinks.NETFLIX_TESTS.getValue(variant)
-        launch(TvApp("netflix", "Netflix", launchExtras = com.home.tvremote.picks.DeepLinks.netflix(id, variant)))
+    /** "Test opening a show": opens a well-known title in [service] with one link format, and keeps that format. */
+    fun testLink(service: String, variant: String) {
+        val dl = com.home.tvremote.picks.DeepLinks
+        picks.store.setLinkVariant(service, variant)
+        event("LINK test $service $variant")
+        val (id, name) = dl.tests(service).getValue(variant)
+        val appId = com.home.tvremote.picks.Catalog.SERVICES.firstOrNull { it.name == service }?.let { picks.appIdFor(it) }
+            ?: when (service) { "Prime Video" -> "amazon"; "Disney+" -> "com.disney.disneyplus-prod"; else -> "netflix" }
+        launch(TvApp(appId, service, launchExtras = dl.forService(service, id, "movie:0", name, variant)))
     }
+    fun testNetflixLink(variant: String) = testLink("Netflix", variant)
     override fun knownAppIds(): Set<String> = (apps.map { it.id } + usage.keys).toSet()
     override fun openOnTvBrowser(url: String) = enqueue {
         val ok = tv().openUrl(url)
