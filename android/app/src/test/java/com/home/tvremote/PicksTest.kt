@@ -537,6 +537,38 @@ class PicksTest {
         assertNull(pc.personIn("play the crown"))
     }
 
+    @Test fun aTitleTheySaidWins_andThePersonPicksWhichOne() = runBlocking {
+        // 22 Nov: "The Odyssey Christopher Nolan" → AI {"kind":"title|person"} → the app listed Nolan's other films.
+        server.dispatcher = object : Dispatcher() {
+            override fun dispatch(r: RecordedRequest): MockResponse {
+                val p = r.path ?: ""
+                fun json(o: Any) = MockResponse().setBody(o.toString())
+                return when {
+                    p.startsWith("/3/search/multi") -> json(JSONObject().put("results", org.json.JSONArray()
+                        .put(JSONObject().put("media_type", "tv").put("id", 9687).put("name", "The Odyssey").put("first_air_date", "1997-05-18"))
+                        .put(JSONObject().put("media_type", "movie").put("id", 1698863).put("title", "The Odyssey").put("release_date", "2026-07-03"))
+                        .put(JSONObject().put("media_type", "movie").put("id", 1368337).put("title", "The Odyssey").put("release_date", "2026-07-15"))))
+                    p.startsWith("/3/search/person") -> json(JSONObject().put("results", org.json.JSONArray().put(JSONObject().put("id", 525).put("name", "Christopher Nolan"))))
+                    p.startsWith("/3/person/525/combined_credits") -> json(JSONObject().put("cast", org.json.JSONArray()).put("crew", org.json.JSONArray()
+                        .put(JSONObject().put("media_type", "movie").put("id", 1368337).put("title", "The Odyssey").put("job", "Director").put("vote_count", 900).put("popularity", 400.0))))
+                    p.startsWith("/3/movie/1368337/watch/providers") -> json(JSONObject().put("results", JSONObject().put("US", JSONObject()
+                        .put("buy", org.json.JSONArray().put(JSONObject().put("provider_name", "Amazon Video"))))))
+                    else -> json(JSONObject())
+                }
+            }
+        }
+        server.start()
+        val ai = FakeEngine("On-phone", """{"kind":"title|person","titles":["The Odyssey"],"person":"Christopher Nolan"}""")
+        val log = OpenLog()
+        val pc = PicksController(store().apply { services = listOf("Netflix", "Prime Video") }, log, CoroutineScope(StandardTestDispatcher()),
+            clock = { at(Calendar.TUESDAY, 21, 30) }, onDevice = ai, titleIdsOf = null, directLinks = false, tmdbBase = server.url("/3").toString().trimEnd('/'))
+        val msg = pc.interpret("The Odyssey Christopher Nolan")
+        assertEquals("The Odyssey isn't on a subscription service in the United States (only to rent or buy)", msg)
+        assertTrue("not Nolan's other films", pc.picks.isEmpty())
+        assertTrue(pc.saidIn("odyssey christopher nolan", "The Odyssey"))
+        assertFalse(pc.saidIn("something jennifer aniston is in", "Breakfast at Tiffany's"))
+    }
+
     @Test fun aiNamingAPersonWinsOverAnInventedTitleList() = runBlocking {
         fakeTmdbForVoice()
         val ai = FakeEngine("On-phone", """{"kind":"title","titles":["Breakfast at Tiffany's"],"person":"Jennifer Aniston"}""")

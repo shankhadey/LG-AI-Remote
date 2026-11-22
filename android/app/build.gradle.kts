@@ -24,8 +24,8 @@ android {
         applicationId = "com.home.tvremote"
         minSdk = 26
         targetSdk = 35
-        versionCode = 61
-        versionName = "1.5.0"
+        versionCode = 62
+        versionName = "1.5.1"
     }
     signingConfigs {
         if (keystoreProps.getProperty("storeFile") != null) create("upload") {

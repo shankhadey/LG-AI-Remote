@@ -10,7 +10,10 @@ data class Country(
     val speech: String,               // speech recognizer locale for English (pt-BR when the app is in Portuguese)
     val languages: List<String>,      // content languages suggested at setup (ISO 639-1)
     val clock24: Boolean,
-)
+) {
+    /** For sentences: "in the United States", "in Brazil". */
+    val inName: String get() = if (code == "US" || code == "GB") "the $name" else name
+}
 
 object Regions {
     val ALL = listOf(

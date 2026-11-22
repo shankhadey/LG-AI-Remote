@@ -414,7 +414,9 @@ class PicksController(
      * "open / play / watch <title>" (optionally "on <service>"): TMDB search, which of the household's services has
      * it, then open it like Play. [exactOnly]: only a title whose name matches exactly (used before a loose app match).
      */
-    suspend fun findAndOpen(rawQuery: String, serviceHint: String? = null, exactOnly: Boolean = false): Found {
+    suspend fun findAndOpen(rawQuery: String, serviceHint: String? = null, exactOnly: Boolean = false,
+                            /** Titles to prefer among same-named ones, e.g. a person's films ("The Odyssey" + Nolan). */
+                            preferKeys: Set<String> = emptySet()): Found {
         if (store.tmdbKey.isBlank()) return Found.Nothing
         // "barbie the movie" → "barbie"; "Barbie (2023)" → "Barbie", preferring the 2023 one.
         val year = Regex("\\((\\d{4})\\)|\\b(19|20)\\d{2}$").find(rawQuery)?.value?.filter { it.isDigit() }
@@ -425,7 +427,8 @@ class PicksController(
         val found = runCatching { tmdb.search(query) }.getOrDefault(emptyList()).take(5)
         // An exact name match means they meant that title: only it, or "it's on …". (Otherwise "play Barbie" opened
         // "Barbie: Dreamhouse Adventures" because that one happened to be on their services.)
-        val exact = found.filter { norm(it.name) == norm(query) }.sortedByDescending { if (year != null && it.year == year) 1 else 0 }
+        val exact = found.filter { norm(it.name) == norm(query) }
+            .sortedWith(compareByDescending<Title> { it.key in preferKeys }.thenByDescending { year != null && it.year == year })
         val ranked = if (exact.isNotEmpty() || exactOnly) exact else found
         var noApp: Found.NoApp? = null
         for (t in ranked) {
@@ -452,6 +455,13 @@ class PicksController(
 
     private fun norm(x: String) = x.lowercase().trim().removePrefix("the ").replace("&", "and").replace(Regex("[^a-z0-9]"), "")
 
+    /** Whether the words of [title] (ignoring "the", "a", "of"…) are all in what was said. */
+    internal fun saidIn(text: String, title: String): Boolean {
+        fun words(s: String) = s.lowercase().replace(Regex("[^a-z0-9 ]"), " ").split(' ').filter { it.length > 1 && it !in setOf("the", "a", "an", "of", "and") }
+        val w = words(title); val spoken = words(text).toSet()
+        return w.isNotEmpty() && w.all { it in spoken }
+    }
+
     /**
      * Last resort for what rules didn't understand: the AI says if it's a title, a person, a description or a mood.
      * Titles open directly; several matches (a person's films, a description) are shown as picks. Returns a message
@@ -467,10 +477,24 @@ class PicksController(
         val titles = j.optJSONArray("titles")?.let { a -> (0 until a.length()).map { a.getString(it) } }.orEmpty().filter { it.isNotBlank() }
         val personName = j.optJSONArray("person")?.let { a -> (0 until a.length()).joinToString(" and ") { a.getString(it) } }?.takeIf { it.isNotBlank() }
             ?: j.optString("person").takeIf { it.isNotBlank() && it != "null" }
-        // A named person wins: the model sometimes says "title" and invents films for "a movie with <actor>".
-        if (personName != null && j.optString("kind") != "description") return showPerson(personName, personIn(text)?.second
+        // The model sometimes answers "title|person" (echoing the format): take the first.
+        val kind = j.optString("kind").substringBefore('|').trim()
+        // A title they actually SAID wins (22 Nov: "The Odyssey Christopher Nolan" showed Nolan's other films);
+        // the person only picks which "The Odyssey". Titles they didn't say are the model's inventions for
+        // "a movie with <actor>", so then the person wins.
+        val said = titles.firstOrNull { saidIn(text, it) }
+        if (said != null && kind != "description") {
+            val prefer = personName?.let { p -> runCatching { tmdb.personCredits(p) }.getOrDefault(emptyList()).map { it.key }.toSet() }.orEmpty()
+            when (val r = findAndOpen(said, preferKeys = prefer)) {
+                Found.Opened -> return null
+                is Found.Elsewhere -> return elsewhere(r)
+                is Found.NoApp -> return noAppMessage(r)
+                Found.Nothing -> if (personName == null) return "Couldn't find “$said”"
+            }
+        }
+        if (personName != null && kind != "description") return showPerson(personName, personIn(text)?.second
             ?: if (Regex("\\b(movie|film)s?\\b", RegexOption.IGNORE_CASE).containsMatchIn(text)) Kind.Movie else null)
-        return when (j.optString("kind")) {
+        return when (kind) {
             "title" -> titles.firstOrNull()?.let { name ->
                 when (val r = findAndOpen(name)) {
                     Found.Opened -> null
@@ -560,7 +584,7 @@ class PicksController(
         val known = r.services.mapNotNull { n -> Catalog.SERVICES.firstOrNull { s -> s.tmdbNames.any { it.equals(n, true) } }?.name }.distinct()
         val others = r.services.filter { n -> !n.contains("Channel", true) && !n.contains("Roku", true) && Catalog.SERVICES.none { s -> s.tmdbNames.any { it.equals(n, true) } } }
         val names = (known.ifEmpty { others }).distinct().take(2)   // a streaming service we know beats cable channels (TNT…)
-        return if (names.isEmpty()) "${r.name} isn't on a subscription service in ${com.home.tvremote.i18n.Regions.of(store.country).name} (only to rent or buy)"
+        return if (names.isEmpty()) "${r.name} isn't on a subscription service in ${com.home.tvremote.i18n.Regions.of(store.country).inName} (only to rent or buy)"
         else "${r.name} is on ${names.joinToString(" and ")}, which isn't one of your services" +
             (known.firstOrNull()?.let { " — add $it in Picks settings if you have it" } ?: "")
     }

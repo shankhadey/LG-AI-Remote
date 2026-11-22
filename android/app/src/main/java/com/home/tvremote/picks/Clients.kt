@@ -290,7 +290,7 @@ person: they want something with an actor or director; give the name.
 description: they described a show or film; list up to 5 real titles that best match, best first.
 mood: they want a recommendation by mood or genre.
 other: anything else.
-What they said may be in English or Portuguese; give titles as officially listed (either language is fine).""",
+Use exactly one kind. What they said may be in English or Portuguese; give titles in the language they used.""",
             text,
         ).takeIf { it.has("kind") }
     }
