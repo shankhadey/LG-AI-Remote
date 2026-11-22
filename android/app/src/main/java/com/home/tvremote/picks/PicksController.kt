@@ -711,7 +711,9 @@ class PicksController(
         appendLine("Settings: ${store.people.size} people · ${store.services.size} services · languages ${store.languages.joinToString()} · on TV ${if (showOnTv) "on" else "off"}")
         appendLine("AI order: ${order.joinToString(" → ")} · on-phone: ${if (onDevice == OnDeviceAi) OnDeviceAi.describe() else "n/a"} · last picks by ${Recommender.lastEngine ?: "—"}")
         val fmt = java.text.SimpleDateFormat("EEE d MMM h:mm a", java.util.Locale.US)
-        for (s in all.takeLast(20).reversed()) {
+        val since = store.diagnosticsSince
+        if (since > 0) appendLine("Sessions since ${fmt.format(java.util.Date(since))}:")
+        for (s in all.filter { it.openedAt >= since }.takeLast(20).reversed()) {
             append("${fmt.format(java.util.Date(s.openedAt))} · ${s.who} · ${s.slot} · ${s.how} · ${s.language} · ${s.shown} shown" + if (s.engine.isNotEmpty()) " by ${s.engine}" else "")
             if (s.notNow > 0) append(" · ${s.notNow} not now"); if (s.never > 0) append(" · ${s.never} never")
             if (s.playedAt != null) append(" → ${s.playedName} (${s.service}) after ${s.secondsToPlay} s")

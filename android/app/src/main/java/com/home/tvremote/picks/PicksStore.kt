@@ -100,6 +100,11 @@ class PicksStore(private val prefs: SharedPreferences) {
         get() = prefs.getString("netflixSearch", "S1") ?: "S1"
         set(v) = prefs.edit().putString("netflixSearch", v).apply()
 
+    /** Diagnostics list picker sessions from this moment ("Start fresh"). */
+    var diagnosticsSince: Long
+        get() = prefs.getLong("diagSince", 0)
+        set(v) = prefs.edit().putLong("diagSince", v).apply()
+
     var showOnTv: Boolean
         get() = prefs.getBoolean("showOnTv", false)
         set(v) = prefs.edit().putBoolean("showOnTv", v).apply()

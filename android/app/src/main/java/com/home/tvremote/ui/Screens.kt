@@ -675,7 +675,7 @@ private fun RenameDialog(tv: TvController, onClose: () -> Unit) {
 
 @Composable
 private fun DiagnosticsDialog(tv: TvController, onClose: () -> Unit) {
-    val text = remember { tv.diagnostics() }
+    var text by remember { mutableStateOf(tv.diagnostics()) }
     val clipboard = LocalClipboardManager.current
     val context = LocalContext.current
     AlertDialog(
@@ -698,7 +698,13 @@ private fun DiagnosticsDialog(tv: TvController, onClose: () -> Unit) {
                 }) { Text("Share") }
             }
         },
-        dismissButton = { TextButton(onClick = onClose) { Text("Close") } },
+        dismissButton = {
+            Row {
+                // Before a test: empty the log so the next Share is only that session.
+                TextButton(onClick = { tv.clearDiagnostics(); text = tv.diagnostics(); tv.say("Diagnostics cleared — test, then Share") }) { Text("Start fresh") }
+                TextButton(onClick = onClose) { Text("Close") }
+            }
+        },
         containerColor = Palette.surface, titleContentColor = Palette.text, textContentColor = Palette.muted,
     )
 }

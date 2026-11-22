@@ -523,6 +523,14 @@ class TvController(app: Application) : AndroidViewModel(app), TvActions {
     override fun log(message: String) = event(message)
     override fun pointerScroll(dy: Float) = scroll(dy)
 
+    /** "Start fresh": empty the log, so the next Share holds only what happens from now. */
+    fun clearDiagnostics() {
+        events.clear(); prefs.edit().putString("events", "").apply()
+        tv?.history?.clear()
+        picks.store.diagnosticsSince = System.currentTimeMillis()
+        event("Diagnostics started fresh")
+    }
+
     fun diagnostics(): String = buildString {
         appendLine("App ${com.home.tvremote.BuildConfig.VERSION_NAME} · TV ${prefs.getString("ip", "?")} · connected=$connected")
         appendLine("MACs saved: ${prefs.getString("mac", null)?.split(',')?.size ?: 0}")
