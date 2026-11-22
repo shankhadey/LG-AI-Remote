@@ -175,6 +175,10 @@ fun RemoteScreen(tv: TvController, hasMicPermission: () -> Boolean) {
         if (hasMicPermission()) listen() else micPermission.launch(Manifest.permission.RECORD_AUDIO)
     }
     if (tv.showSettings) { SettingsScreen(tv); return }
+    if (tv.tvOff && tv.turnOnFailures > 0 && !tv.waking) {
+        TurnOnHelpScreen(tv.brand, tv.turnOnFailures, onTryAgain = { tv.turnOn() }, onClose = { tv.closeTurnOnHelp() })
+        return
+    }
     if (tv.tvOff) {
         OffScreen(tv, onMic = ::mic)
         if (listening) ListeningPanel(heard, level, onDone = { voice.finish() }, onCancel = { voice.stop(); listening = false })
@@ -812,8 +816,22 @@ private fun MacDialog(tv: TvController, onClose: () -> Unit) {
 @Composable
 fun SetupScreen(tv: TvController) {
     var manualIp by remember { mutableStateOf("") }
+    var typeIp by remember { mutableStateOf(false) }
+    var details by remember { mutableStateOf(false) }
     LaunchedEffect(Unit) { if (tv.found.isEmpty()) tv.scan() }
-    BackHandler(enabled = tv.canCancelSetup) { tv.cancelSetup() }
+    BackHandler(enabled = tv.canCancelSetup || typeIp) { if (typeIp) typeIp = false else tv.cancelSetup() }
+    if (details) AlertDialog(onDismissRequest = { details = false }, title = { Text("Details") },
+        text = { Text(tv.scanReport.orEmpty(), fontSize = 13.sp) }, confirmButton = { TextButton(onClick = { details = false }) { Text("Close") } },
+        containerColor = Palette.surface, titleContentColor = Palette.text, textContentColor = Palette.muted)
+    // Searched and found nothing: plain checks first; typing the IP and the technical details are a tap away.
+    if (!tv.scanning && tv.found.isEmpty() && tv.scanReport != null && !typeIp) {
+        Box {
+            NothingFoundScreen(onSearch = { tv.scan() }, onEnterIp = { typeIp = true }, onDetails = { details = true })
+            if (tv.canCancelSetup) Box(Modifier.padding(start = 12.dp, top = 12.dp).size(40.dp).clip(CircleShape).clickable { tv.cancelSetup() },
+                contentAlignment = Alignment.Center) { Icon(Icons.AutoMirrored.Rounded.ArrowBack, tr("Back"), tint = Palette.text) }
+        }
+        return
+    }
     Column(Modifier.fillMaxSize().padding(horizontal = 20.dp, vertical = 24.dp), verticalArrangement = Arrangement.spacedBy(14.dp)) {
         if (tv.canCancelSetup) Box(Modifier.size(40.dp).clip(CircleShape).clickable { tv.cancelSetup() }, contentAlignment = Alignment.Center) {
             Icon(Icons.AutoMirrored.Rounded.ArrowBack, tr("Back"), tint = Palette.text)
@@ -833,7 +851,6 @@ fun SetupScreen(tv: TvController) {
                 }
             }
         }
-        tv.scanReport?.let { if (!tv.scanning && tv.found.isEmpty()) Text(it, color = Palette.muted, fontSize = 14.sp) }
         Spacer(Modifier.height(8.dp))
         Text("Or enter its IP address (TV Settings › Network › Wi-Fi › Advanced)", color = Palette.muted, fontSize = 13.sp)
         Row(verticalAlignment = Alignment.CenterVertically) {

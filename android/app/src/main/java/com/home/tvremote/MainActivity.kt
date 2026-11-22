@@ -38,7 +38,7 @@ class MainActivity : ComponentActivity() {
             MaterialTheme(colorScheme = scheme) {
                 Box(Modifier.fillMaxSize().background(Palette.bg).safeDrawingPadding().imePadding()) {
                     when (tv.screen) {
-                        Screen.Setup -> SetupScreen(tv)
+                        Screen.Setup -> if (tv.showWelcome) com.home.tvremote.ui.WelcomeScreen { tv.welcomeDone() } else SetupScreen(tv)
                         Screen.Pairing -> PairingScreen(tv)
                         Screen.Remote -> RemoteScreen(tv, hasMicPermission = {
                             checkSelfPermission(Manifest.permission.RECORD_AUDIO) == PackageManager.PERMISSION_GRANTED

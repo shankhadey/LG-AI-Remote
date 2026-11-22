@@ -30,6 +30,8 @@ class SimulatedLgTv {
     /** A TV in standby accepts the connection but never answers pairing (seen with Quick Start+). */
     @Volatile var hangPairingWhenOff = true
     @Volatile var wakeDelayMs = 300L
+    /** False: the TV ignores Wake-on-LAN ("Turn on via Wi-Fi" off, or the router drops it). */
+    @Volatile var wakeWorks = true
 
     // ---- what the app sent ----
     val requests = CopyOnWriteArrayList<JSONObject>()
@@ -133,7 +135,7 @@ class SimulatedLgTv {
     val net = object : TvController.Net {
         override suspend fun reachable(ip: String, timeoutMs: Int) = power == "Active" || (power == "Active Standby" && quickStart)
         override suspend fun wake(context: Context, macs: List<String>, ip: String?): Int {
-            if (power != "Active") Thread {
+            if (power != "Active" && wakeWorks) Thread {
                 Thread.sleep(wakeDelayMs)
                 if (power != "Active") { if (power == "Off") power = "Active Standby"; turnedOnByRemote() }
             }.start()

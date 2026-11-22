@@ -7,6 +7,8 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
@@ -15,7 +17,6 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.rounded.CheckCircle
 import androidx.compose.material.icons.rounded.Mic
 import androidx.compose.material.icons.rounded.PowerSettingsNew
 import androidx.compose.material.icons.rounded.Tv
@@ -34,8 +35,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 
 /*
- * Onboarding proposals (22 Nov) — designs for approval, not yet wired into the app.
- * 1. Welcome: what the app is, one action.  2. After pairing: switch on "Turn on via Wi-Fi", test it.
+ * Onboarding (approved 22 Nov). 1. Welcome, first launch only. 2. Turn-on help, only when turning on fails.
  * 3. Nothing found: a checklist instead of a technical report.
  */
 
@@ -73,32 +73,40 @@ private fun Point(icon: ImageVector, title: String, body: String) {
     }
 }
 
-/** Right after pairing: the one TV setting that makes "turn on from the phone" work. */
+/**
+ * "Turn on" failed: the TV never answered. Shown only then (most TVs work out of the box): the one TV setting that
+ * makes it work, Try again; after a second failure, the other causes too.
+ */
 @Composable
-fun TurnOnSetupScreen(brand: String, tvName: String, onTest: () -> Unit, onSkip: () -> Unit) {
+fun TurnOnHelpScreen(brand: String, failures: Int, onTryAgain: () -> Unit, onClose: () -> Unit) {
     val path = if (brand == "Samsung") "Settings › General › Network › Expert Settings › Power On with Mobile"
         else "Settings › General › Devices › External Devices › TV On With Mobile › Turn on via Wi-Fi"
-    Column(Modifier.fillMaxSize().background(Palette.bg).padding(horizontal = 24.dp, vertical = 28.dp)) {
-        Row(verticalAlignment = Alignment.CenterVertically) {
-            Icon(Icons.Rounded.CheckCircle, null, tint = Palette.success, modifier = Modifier.size(22.dp))
-            RawText(tvName, color = Palette.muted, fontSize = 14.sp, modifier = Modifier.padding(start = 8.dp))
-            Text(" connected", color = Palette.muted, fontSize = 14.sp)
-        }
-        Text("One more thing", color = Palette.text, fontSize = 30.sp, fontWeight = FontWeight.Bold, modifier = Modifier.padding(top = 28.dp))
-        Text("To turn the TV on from your phone, switch on one setting on the TV. It takes a minute, and you only do it once.",
+    androidx.activity.compose.BackHandler(onBack = onClose)
+    Column(Modifier.fillMaxSize().background(Palette.bg).verticalScroll(rememberScrollState()).padding(horizontal = 24.dp, vertical = 28.dp)) {
+        Text("The TV didn't turn on", color = Palette.text, fontSize = 30.sp, fontWeight = FontWeight.Bold, lineHeight = 36.sp)
+        Text("Your phone can turn the TV on once one setting is switched on, on the TV. You only do this once.",
             color = Palette.muted, fontSize = 15.sp, lineHeight = 21.sp, modifier = Modifier.padding(top = 8.dp))
-        Column(Modifier.fillMaxWidth().padding(top = 24.dp).card(RoundedCornerShape(18.dp)).padding(18.dp)) {
+        Column(Modifier.fillMaxWidth().padding(top = 22.dp).card(RoundedCornerShape(18.dp)).padding(18.dp)) {
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Icon(Icons.Rounded.PowerSettingsNew, null, tint = Palette.text, modifier = Modifier.size(20.dp))
-                Text("On the TV, with its remote", color = Palette.text, fontSize = 15.sp, fontWeight = FontWeight.SemiBold, modifier = Modifier.padding(start = 10.dp))
+                Text("Turn the TV on, then go to", color = Palette.text, fontSize = 15.sp, fontWeight = FontWeight.SemiBold, modifier = Modifier.padding(start = 10.dp))
             }
             Text(path, color = Palette.text, fontSize = 15.sp, lineHeight = 22.sp, modifier = Modifier.padding(top = 10.dp))
-            Text("Turn it on. Menu names vary a little by TV year.", color = Palette.faint, fontSize = 13.sp, modifier = Modifier.padding(top = 8.dp))
+            Text("Switch it on. Menu names vary a little by TV year.", color = Palette.faint, fontSize = 13.sp, modifier = Modifier.padding(top = 8.dp))
         }
-        Spacer(Modifier.weight(1f))
-        PrimaryButton("Test it: turn the TV off and on", onClick = onTest)
-        Text("Later", color = Palette.muted, fontSize = 15.sp, fontWeight = FontWeight.SemiBold, textAlign = TextAlign.Center,
-            modifier = Modifier.fillMaxWidth().padding(top = 6.dp).clip(RoundedCornerShape(12.dp)).clickable(onClick = onSkip).padding(12.dp))
+        if (failures >= 2) Column(Modifier.fillMaxWidth().padding(top = 14.dp).card(RoundedCornerShape(18.dp)).padding(18.dp),
+            verticalArrangement = Arrangement.spacedBy(10.dp)) {
+            Text("Still not turning on?", color = Palette.text, fontSize = 15.sp, fontWeight = FontWeight.SemiBold)
+            Text("TVs on Wi-Fi can switch Wi-Fi off in standby. A network cable to the TV is the most reliable fix.", color = Palette.muted, fontSize = 14.sp, lineHeight = 19.sp)
+            Text("Some routers and mesh systems don't pass the wake-up signal on to the TV.", color = Palette.muted, fontSize = 14.sp, lineHeight = 19.sp)
+            Text("Check the TV's MAC address in Settings › Turn on from the phone.", color = Palette.muted, fontSize = 14.sp, lineHeight = 19.sp)
+        }
+        Spacer(Modifier.weight(1f).height(24.dp))
+        PrimaryButton("Try again", onClick = onTryAgain)
+        Text("Close", color = Palette.muted, fontSize = 15.sp, fontWeight = FontWeight.SemiBold, textAlign = TextAlign.Center,
+            modifier = Modifier.fillMaxWidth().padding(top = 6.dp).clip(RoundedCornerShape(12.dp)).clickable(onClick = onClose).padding(12.dp))
+        Text("Turning it on with the TV's remote always works; the app follows.", color = Palette.faint, fontSize = 13.sp, textAlign = TextAlign.Center,
+            modifier = Modifier.fillMaxWidth().padding(top = 4.dp))
     }
 }
 

@@ -17,9 +17,13 @@ class I18nTest {
     /** User-visible string literals in the screens and messages, with names replaced by "X". */
     private fun visibleStrings(): Set<String> {
         val src = File("src/main/java/com/home/tvremote")
-        val files = listOf("ui/Screens.kt", "ui/PicksScreens.kt", "ui/Touchpad.kt", "TvController.kt", "picks/PicksController.kt", "timer/TimerService.kt")
+        val files = listOf("ui/Screens.kt", "ui/PicksScreens.kt", "ui/Touchpad.kt", "TvController.kt", "picks/PicksController.kt", "timer/TimerService.kt", "ui/Onboarding.kt")
         val call = Regex("""\b(?:Text|SettingRow|Section|Label|Chip|say|note|toastOnTv|tr|PrimaryButton|SecondaryButton|Pill|ChoiceDialog|PicksException|I18n\.t)\(\s*(?:if \([^)]*\) )?"((?:[^"\\]|\\.)*)"""")
         val out = mutableSetOf<String>()
+        val pair = Regex("""\b(?:Point|Check)\([^"]*"((?:[^"\\]|\\.)*)"\s*,\s*"((?:[^"\\]|\\.)*)"""")
+        for (f in files) for (m in pair.findAll(File(src, f).readText())) { out += m.groupValues[1].replace("\\\"", "\""); out += m.groupValues[2].replace("\\\"", "\"") }
+        val path = Regex("""val path = if \([^)]*\) "([^"]*)"\s*else "([^"]*)"""")
+        for (f in files) for (m in path.findAll(File(src, f).readText())) { out += m.groupValues[1]; out += m.groupValues[2] }
         for (f in files) for (m in call.findAll(File(src, f).readText())) {
             val s = m.groupValues[1].replace(Regex("""\$\{[^}]*\}"""), "X").replace(Regex("""\$[a-zA-Z_][a-zA-Z0-9_]*(?:\.[a-zA-Z_][a-zA-Z0-9_]*)*"""), "X").replace("\\\"", "\"")
             if ("\${" in m.groupValues[1].substringAfterLast("}")) continue   // a quote inside a template: not a whole string

@@ -203,13 +203,19 @@ class ScreenshotTest {
     }
 
     @Test fun pairing() { shot { PairingScreen(controller()) } }
-    // Onboarding proposals (not wired yet)
-    @Test fun proposalWelcomeDark() { Palette.dark = true; shot { com.home.tvremote.ui.WelcomeScreen {} } }
-    @Test fun proposalWelcomeLight() { Palette.dark = false; shot { com.home.tvremote.ui.WelcomeScreen {} } }
-    @Test fun proposalTurnOnDark() { Palette.dark = true; shot { com.home.tvremote.ui.TurnOnSetupScreen("LG", "LG 43UQ7500PSF", {}, {}) } }
-    @Test fun proposalTurnOnLight() { Palette.dark = false; shot { com.home.tvremote.ui.TurnOnSetupScreen("LG", "LG 43UQ7500PSF", {}, {}) } }
-    @Test fun proposalNothingFoundDark() { Palette.dark = true; shot { com.home.tvremote.ui.NothingFoundScreen({}, {}, {}) } }
-    @Test fun proposalNothingFoundLight() { Palette.dark = false; shot { com.home.tvremote.ui.NothingFoundScreen({}, {}, {}) } }
+    // Onboarding: welcome (first launch), turn-on help (only after a failed turn-on), nothing found
+    @Test fun welcomeDark() { Palette.dark = true; shot { com.home.tvremote.ui.WelcomeScreen {} } }
+    @Test fun welcomeLight() { Palette.dark = false; shot { com.home.tvremote.ui.WelcomeScreen {} } }
+    @Test fun turnOnHelpFirstLight() { Palette.dark = false; val tv = remoteTv().apply { connected = false; tvOff = true; turnOnFailures = 1 }; shot { RemoteScreen(tv) { true } } }
+    @Test fun turnOnHelpSecondDark() { Palette.dark = true; val tv = remoteTv().apply { connected = false; tvOff = true; turnOnFailures = 2 }; shot { RemoteScreen(tv) { true } } }
+    @Test fun nothingFoundLight() {
+        Palette.dark = false
+        val tv = controller().apply { scanning = true; scanReport = "This phone is 192.168.29.12. Checked 254 addresses (192.168.29.1 – 192.168.29.254) and none answered like an LG or Samsung TV." }
+        shot { tv.scanning = false; SetupScreen(tv) }
+    }
+    @Test fun ptWelcomeLight() = pt { Palette.dark = false; shot { com.home.tvremote.ui.WelcomeScreen {} } }
+    @Test fun ptTurnOnHelpSecondLight() = pt { Palette.dark = false; val tv = ptTv().apply { connected = false; tvOff = true; turnOnFailures = 2 }; shot { RemoteScreen(tv) { true } } }
+    @Test fun ptNothingFoundLight() = pt { Palette.dark = false; shot { com.home.tvremote.ui.NothingFoundScreen({}, {}, {}) } }
 
     // First run, as a new user sees it (no TV saved)
     @Test fun firstRunSearching() { val tv = controller().apply { scanning = true }; shot { SetupScreen(tv) } }

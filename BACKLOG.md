@@ -70,11 +70,14 @@ Measure it: time from opening to Play, quick-backs, "Not now" count per session.
 - To test on the TV: Search 1/2 (Netflix search page with "The Crown" filled in).
 - Next: Prime Video and Disney+ title/search links (same 3-try test).
 
-## Onboarding (first run) — gaps seen 22 Nov, before family testing in India
+## v1.4.0 — onboarding (approved 22 Nov)
+- Welcome screen on first launch only (never for people who already have a TV): what the app does, "Find my TV".
+- Turn-on help only when "Turn on" fails (brother's vivo + LG connected fine without it): the LG / Samsung menu path,
+  Try again; after a 2nd failure, the other causes (Wi-Fi off in standby → cable, router/mesh, MAC). Clears itself
+  when the TV comes on any other way.
+- "No TV found yet": three plain checks, Search again; typing the IP and the technical details are a tap away.
 - v1.3.3: found TVs listed as "LG 43UQ7500PSF", not the raw "[LG] webOS TV 43UQ7500PSF".
-- Proposed (needs design approval): a first screen saying what the app does; after pairing, check "Turn on via Wi-Fi"
-  and say how to enable it (today the user only finds out when turning on fails); on "nothing found", a short
-  checklist (TV on? same Wi-Fi, not guest? router "client isolation" off?) instead of the technical report.
+- Brazilian LG / Samsung menu names for "Turn on via Wi-Fi" are best guesses — confirm on a Brazilian TV.
 
 ## v1.3.2 — results of testing 1.2.1 (22 Nov)
 - Passed on the TV: power (incl. power right after connecting), LG refactor (remote, voice, timers, picks, picks page).

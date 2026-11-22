@@ -207,6 +207,33 @@ object I18n {
             "Double-tap to go back 10 seconds" to "Toque duas vezes para voltar 10 segundos", "Double-tap to skip 10 seconds" to "Toque duas vezes para avançar 10 segundos",
             "Fix" to "Corrigir", "Couldn't find anything with both" to "Nada encontrado com os dois juntos",
             "Use a different TV?" to "Usar outra TV?", "Find TVs" to "Procurar TVs",
+            // onboarding: welcome, turn-on help, nothing found
+            "Your phone is the remote" to "Seu celular é o controle", "Find my TV" to "Encontrar minha TV",
+            "Controls your LG or Samsung TV over Wi-Fi" to "Controla sua TV LG ou Samsung pelo Wi-Fi",
+            "Point, tap, type and turn it on or off." to "Aponte, toque, digite e ligue ou desligue a TV.",
+            "Just say it" to "É só falar", "“Open Netflix”, “volume 20”, “turn off in 30 minutes”." to "“Abrir a Netflix”, “volume 20”, “desligar em 30 minutos”.",
+            "Knows what to watch" to "Sabe o que assistir", "Five picks from your services, in seconds." to "Cinco sugestões dos seus serviços, em segundos.",
+            "The TV and this phone need to be on the same Wi-Fi." to "A TV e o celular precisam estar no mesmo Wi-Fi.",
+            "The TV didn't turn on" to "A TV não ligou",
+            "Your phone can turn the TV on once one setting is switched on, on the TV. You only do this once." to
+                "O celular consegue ligar a TV depois que você ativa um ajuste na própria TV. Isso só precisa ser feito uma vez.",
+            "Turn the TV on, then go to" to "Ligue a TV e vá em",
+            "Settings › General › Devices › External Devices › TV On With Mobile › Turn on via Wi-Fi" to
+                "Configurações › Geral › Dispositivos › Dispositivos externos › Ligar TV com o celular › Ligar via Wi-Fi",
+            "Settings › General › Network › Expert Settings › Power On with Mobile" to "Configurações › Geral › Rede › Configurações avançadas › Ligar com o celular",
+            "Switch it on. Menu names vary a little by TV year." to "Ative essa opção. Os nomes dos menus mudam um pouco conforme o ano da TV.",
+            "Still not turning on?" to "Ainda não liga?",
+            "TVs on Wi-Fi can switch Wi-Fi off in standby. A network cable to the TV is the most reliable fix." to
+                "TVs no Wi-Fi podem desligar o Wi-Fi em standby. Um cabo de rede na TV é a solução mais confiável.",
+            "Some routers and mesh systems don't pass the wake-up signal on to the TV." to "Alguns roteadores e sistemas mesh não repassam o sinal para ligar a TV.",
+            "Check the TV's MAC address in Settings › Turn on from the phone." to "Confira o endereço MAC da TV em Ajustes › Ligar pelo celular.",
+            "Try again" to "Tentar de novo", "Turning it on with the TV's remote always works; the app follows." to "Ligar pelo controle da TV sempre funciona, e o app acompanha.",
+            "No TV found yet" to "Nenhuma TV encontrada", "Check these, then search again:" to "Confira estes pontos e procure de novo:",
+            "The TV is on" to "A TV está ligada", "Not in standby: the picture is showing." to "Fora do standby, com imagem na tela.",
+            "Same Wi-Fi" to "Mesmo Wi-Fi", "This phone and the TV are on the same network, not a guest network." to "O celular e a TV estão na mesma rede, e não numa rede de visitantes.",
+            "Devices can see each other" to "Os aparelhos se enxergam na rede",
+            "Some routers block this (\"AP isolation\" or \"client isolation\"). Turning it off helps." to "Alguns roteadores bloqueiam isso (\"isolamento de AP\" ou \"de clientes\"). Desativar ajuda.",
+            "Enter the TV's IP address" to "Digitar o IP da TV", "Details" to "Detalhes",
             // privacy
             "Privacy" to "Privacidade", "Share anonymous usage" to "Compartilhar uso anônimo", "Yes" to "Sim", "No" to "Não", "Not set" to "Não definido",
             "Share" to "Compartilhar", "Don't share" to "Não compartilhar", "No thanks" to "Não, obrigado",

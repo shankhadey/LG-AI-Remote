@@ -175,6 +175,18 @@ class TvController(app: Application) : AndroidViewModel(app), TvActions {
         connect(pairing = true)
     }
 
+    // ---- first launch and turn-on help ----
+    /** First launch only (no TV ever set up): what the app is, then "Find my TV". */
+    var showWelcome by mutableStateOf(!prefs.getBoolean("welcomed", false) && !prefs.contains("ip"))
+        private set
+    fun welcomeDone() { prefs.edit().putBoolean("welcomed", true).apply(); showWelcome = false }
+
+    /** Times "Turn on" failed in a row (the TV never answered). >0 shows the turn-on help; 2+ adds the other causes. */
+    var turnOnFailures by mutableStateOf(0)
+    fun closeTurnOnHelp() { turnOnFailures = 0 }
+    /** How long the wake loop keeps trying (tests shorten it). */
+    internal var wakeTotalMs = 45_000L
+
     // ---- using a different TV: the current one is kept until the new one has paired ----
     private val TV_KEYS = listOf("ip", "clientKey", "mac", "name", "brand", "nameCustom")
     /** A TV to go back to from setup (the one in use before "Use a different TV"). */
@@ -249,6 +261,7 @@ class TvController(app: Application) : AndroidViewModel(app), TvActions {
                 // Turned off (or a newer attempt began) while we waited for that answer: it's stale, don't apply it.
                 if (epoch != connEpoch) return@launch
                 tvOff = state in STANDBY_STATES
+                if (!tvOff) turnOnFailures = 0
                 screen = Screen.Remote
                 if (firstTime || pairing) {
                     dropPreviousTv()
@@ -281,6 +294,7 @@ class TvController(app: Application) : AndroidViewModel(app), TvActions {
                     event("POWER TV says $st")
                     if (!off && System.currentTimeMillis() - offAt < 3000) return@onPower   // still shutting down
                     tvOff = off
+                    if (!off) turnOnFailures = 0   // turned on some other way (e.g. the TV's remote): help no longer needed
                 }
             }
         }
@@ -740,11 +754,12 @@ class TvController(app: Application) : AndroidViewModel(app), TvActions {
                     now = System::currentTimeMillis,
                     log = ::event,
                     onTick = { wakeSeconds = it },
+                    totalMs = wakeTotalMs,
                 )
                 when (val r = loop.run()) {
                     is WakeLoop.Result.On -> {
                         // Mark on *before* leaving the turning-on state, so the screen goes straight to the remote.
-                        connected = true; tvOff = false; waking = false
+                        connected = true; tvOff = false; waking = false; turnOnFailures = 0
                         say("TV is on")
                         com.home.tvremote.analytics.Analytics.log(com.home.tvremote.analytics.Analytics.Event.TurnOnFromPhone, "result" to "on", "brand" to brand)
                         tv?.let { afterConnect(it) }
@@ -753,7 +768,8 @@ class TvController(app: Application) : AndroidViewModel(app), TvActions {
                         com.home.tvremote.analytics.Analytics.log(com.home.tvremote.analytics.Analytics.Event.TurnOnFromPhone, "result" to "gave_up", "brand" to brand)
                         when {
                             r.packetsSent == 0 -> say("This phone couldn't send the wake-up signal (${r.lastError?.message ?: "no Wi-Fi?"}). Make sure the phone is on Wi-Fi.", error = true)
-                            else -> say("The TV didn't respond to the wake-up signal. See Power-on settings (menu under the TV name) for what to check.", error = true)
+                            // The TV never answered: show what to switch on (only now, when it's needed).
+                            else -> turnOnFailures++
                         }
                     }
                 }

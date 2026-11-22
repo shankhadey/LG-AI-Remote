@@ -113,6 +113,42 @@ class SimulatedTvTest {
         eventually("reconnects without the user doing anything", tv, ms = 10_000) { tv.connected }
     }
 
+    // ---------------- first launch and turn-on help ----------------
+
+    @Test fun firstLaunch_showsWelcomeOnce_existingUsersNever() {
+        val fresh = onMain { TvController(App(paparazzi.context)) }
+        assertTrue(onMain { fresh.showWelcome })
+        onMain { fresh.welcomeDone() }
+        assertFalse(onMain { fresh.showWelcome })
+        assertEquals(Screen.Setup, onMain { fresh.screen })
+        val existing = openApp()
+        assertFalse("paired before: no welcome", onMain { existing.showWelcome })
+    }
+
+    @Test fun turnOnFails_showsHelp_secondFailureMore_thenWorksAndResets() {
+        sim.power = "Off"; sim.quickStart = false; sim.wakeWorks = false
+        val tv = openApp()
+        onMain { tv.wakeTotalMs = 2500 }
+        eventually("shows Turn on", tv, ms = 8000) { tv.tvOff }
+        assertEquals("no help before trying", 0, onMain { tv.turnOnFailures })
+        onMain { tv.turnOn() }
+        eventually("help after the first failure", tv, ms = 8000) { tv.turnOnFailures == 1 && !tv.waking }
+        onMain { tv.turnOn() }
+        eventually("more help after the second", tv, ms = 8000) { tv.turnOnFailures == 2 && !tv.waking }
+        sim.wakeWorks = true
+        onMain { tv.turnOn() }
+        eventually("turns on, help gone", tv, ms = 10_000) { tv.connected && !tv.tvOff && tv.turnOnFailures == 0 }
+    }
+
+    @Test fun turnedOnWithTheTvRemoteWhileHelpShows_helpGoes() {
+        sim.power = "Active Standby"
+        val tv = openApp()
+        eventually("shows Turn on", tv, ms = 12_000) { tv.tvOff }
+        onMain { tv.turnOnFailures = 1 }
+        sim.turnedOnByRemote(); onMain { tv.refresh() }
+        eventually("TV on, help reset", tv, ms = 10_000) { !tv.tvOff && tv.turnOnFailures == 0 }
+    }
+
     // ---------------- using a different TV ----------------
 
     @Test fun differentTv_backReturnsToTheCurrentTv() {
