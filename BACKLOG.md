@@ -70,6 +70,10 @@ Measure it: time from opening to Play, quick-backs, "Not now" count per session.
 - To test on the TV: Search 1/2 (Netflix search page with "The Crown" filled in).
 - Next: Prime Video and Disney+ title/search links (same 3-try test).
 
+## v1.4.3 — the phone-network check is advisory only
+- "Different network" now warns and still sends the wake-up (Android can report the network oddly: VPN, mesh, /32).
+  Only "not on Wi-Fi at all" stops the attempt. Reduces the one new way 1.4.x could fail where 1.3.3 wouldn't.
+
 ## v1.4.2 — after the 22 Nov turn-on failures (TV-side, not the app)
 - A/B: the 1.3.3 code failed the same way (9 min standby) → not the app version. With the TV on, its network answered
   slowly, timed out and dropped → TV network stuck. Likely trigger: turned off from the app while Netflix was starting

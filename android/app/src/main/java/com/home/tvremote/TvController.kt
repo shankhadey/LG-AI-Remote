@@ -780,8 +780,10 @@ class TvController(app: Application) : AndroidViewModel(app), TvActions {
         val phone = net.phoneWifi(getApplication())
         event("WAKE phone ${phone?.let { "on Wi-Fi ${it.first}/${it.second}" } ?: "not on Wi-Fi"} · TV $ip")
         if (phone == null) { say("This phone isn't on Wi-Fi, so it can't turn the TV on. Connect to your home Wi-Fi and try again.", error = true); return }
+        // Advisory only: Android can report the network oddly (VPN, mesh), so never refuse to try because of it.
         if (ip != null && !Discovery.sameNetwork(phone.first, phone.second, ip)) {
-            say("This phone is on a different network from the TV. Connect to the same Wi-Fi as the TV and try again.", error = true); return
+            event("WAKE phone looks like it's on a different network from the TV; trying anyway")
+            say("This phone may be on a different network from the TV. Trying anyway.", error = true)
         }
         waking = true
         wakeSeconds = 0

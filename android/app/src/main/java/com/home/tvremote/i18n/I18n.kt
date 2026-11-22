@@ -240,6 +240,7 @@ object I18n {
                 "Este celular está em outra rede, diferente da TV. Conecte-se ao mesmo Wi-Fi da TV e tente de novo.",
             "The TV's network connection is unstable. If this keeps happening, restart the TV fully (turn off Quick Start+, then off and on, or unplug it for a minute)." to
                 "A conexão de rede da TV está instável. Se isso continuar, reinicie a TV por completo (desative o Início rápido+ e desligue e ligue, ou tire da tomada por um minuto).",
+            "This phone may be on a different network from the TV. Trying anyway." to "Este celular pode estar em outra rede, diferente da TV. Tentando mesmo assim.",
             // privacy
             "Privacy" to "Privacidade", "Share anonymous usage" to "Compartilhar uso anônimo", "Yes" to "Sim", "No" to "Não", "Not set" to "Não definido",
             "Share" to "Compartilhar", "Don't share" to "Não compartilhar", "No thanks" to "Não, obrigado",

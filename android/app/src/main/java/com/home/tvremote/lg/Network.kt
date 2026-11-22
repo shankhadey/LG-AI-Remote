@@ -93,7 +93,8 @@ object Discovery {
     fun sameNetwork(phone: String, prefix: Int, ip: String): Boolean {
         fun n(a: String) = a.split('.').takeIf { it.size == 4 }?.map { it.toIntOrNull() ?: return null }?.fold(0) { acc, b -> (acc shl 8) or b }
         val a = n(phone) ?: return true; val b = n(ip) ?: return true
-        val p = prefix.coerceIn(8, 32)
+        if (prefix !in 8..30) return true   // odd reports (/32 on some phones): can't tell, assume the same
+        val p = prefix
         val mask = if (p == 32) -1 else (-1 shl (32 - p))
         return (a and mask) == (b and mask)
     }

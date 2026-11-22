@@ -152,14 +152,15 @@ class SimulatedTvTest {
         assertTrue(onMain { tv.diagnostics() }.contains("WAKE phone not on Wi-Fi"))
     }
 
-    @Test fun phoneOnAnotherNetwork_saysSo() {
+    @Test fun phoneLooksOnAnotherNetwork_warnsButStillTurnsOn() {
+        // Advisory only: Android can report the phone's network oddly, so the app must still try.
         sim.power = "Off"; sim.quickStart = false
         val tv = openApp()
         eventually("shows Turn on", tv, ms = 8000) { tv.tvOff }
-        sim.phoneWifi = "10.0.0.7" to 24   // e.g. a guest network
+        sim.phoneWifi = "10.0.0.7" to 24
         onMain { tv.turnOn() }
-        eventually("explains the different network", tv) { tv.feedback?.startsWith("This phone is on a different network") == true }
-        assertEquals(0, onMain { tv.turnOnFailures })
+        eventually("warns", tv) { tv.feedback?.startsWith("This phone may be on a different network") == true }
+        eventually("and still turns the TV on", tv, ms = 10_000) { tv.connected && !tv.tvOff }
     }
 
     @Test fun turnedOnWithTheTvRemoteWhileHelpShows_helpGoes() {

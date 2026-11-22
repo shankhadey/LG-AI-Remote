@@ -163,5 +163,6 @@ class CommandParserTest {
         assertEquals(false, d.sameNetwork("192.168.2.20", 24, "192.168.1.195"))
         assertEquals(true, d.sameNetwork("10.0.3.20", 16, "10.0.200.9"))     // bigger home networks
         assertEquals(false, d.sameNetwork("10.0.0.7", 24, "192.168.1.195"))
+        assertEquals(true, d.sameNetwork("10.0.0.7", 32, "192.168.1.195"))   // odd /32 report: can't tell, don't block
     }
 }
