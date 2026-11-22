@@ -79,6 +79,11 @@ class ScreenshotTest {
         picks.lastOpened = com.home.tvremote.picks.PicksController.Opened("tv:1", "The Crown", "Netflix", "netflix", "80025678", listOf("search", "format:C", "type")) }
         shot { RemoteScreen(tv) { true } } }
     @Test fun watchingLight() { Palette.dark = false; val tv = remoteTv().apply { foregroundApp = "netflix" }; shot { RemoteScreen(tv) { true } } }
+    @Test fun browsingLight() { Palette.dark = false; val tv = remoteTv().apply { foregroundApp = "com.webos.app.home" }; shot { RemoteScreen(tv) { true } } }
+    @Test fun playingLight() { Palette.dark = false; val tv = remoteTv().apply { foregroundApp = "netflix"; mediaState = "playing"; picks.nowShowing = "Dumplin'" to "9:42"; picks.nowShowingApp = "netflix" }; shot { RemoteScreen(tv) { true } } }
+    @Test fun settingsLight() { Palette.dark = false; val tv = remoteTv().apply { showSettings = true }; shot { RemoteScreen(tv) { true } } }
+    @Test fun helpLight() { Palette.dark = false; val tv = remoteTv().apply { showSettings = true; showHelp = true }; shot { RemoteScreen(tv) { true } } }
+    @Test fun feedbackWithFixLight() { Palette.dark = false; val tv = remoteTv().apply { say("Barbie is on Max — not one of your services", true, "Add" to {}) }; shot { RemoteScreen(tv) { true } } }
     @Test fun remoteLight() { Palette.dark = false; val tv = remoteTv(); shot { RemoteScreen(tv) { true } } }
     @Test fun liveTvDark() { Palette.dark = true; val tv = remoteTv().apply { foregroundApp = "com.webos.app.livetv" }; shot { RemoteScreen(tv) { true } } }
     @Test fun liveTvLight() { Palette.dark = false; val tv = remoteTv().apply { foregroundApp = "com.webos.app.livetv" }; shot { RemoteScreen(tv) { true } } }

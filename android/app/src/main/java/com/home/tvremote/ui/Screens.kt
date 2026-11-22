@@ -1,5 +1,8 @@
 package com.home.tvremote.ui
 
+import androidx.compose.foundation.layout.widthIn
+import androidx.compose.material.icons.rounded.ChevronRight
+import androidx.activity.compose.BackHandler
 import kotlinx.coroutines.launch
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
@@ -167,40 +170,51 @@ fun RemoteScreen(tv: TvController, hasMicPermission: () -> Boolean) {
         if (granted) listen() else tv.say("Voice needs microphone permission", error = true)
     }
 
-    if (tv.tvOff) { OffScreen(tv); return }
+    fun mic() {
+        haptic.performHapticFeedback(HapticFeedbackType.LongPress)
+        if (hasMicPermission()) listen() else micPermission.launch(Manifest.permission.RECORD_AUDIO)
+    }
+    if (tv.showSettings) { SettingsScreen(tv); return }
+    if (tv.tvOff) {
+        OffScreen(tv, onMic = ::mic)
+        if (listening) ListeningPanel(heard, level, onDone = { voice.finish() }, onCancel = { voice.stop(); listening = false })
+        return
+    }
     if (!tv.connected && (tv.checking || tv.connecting)) { CheckingScreen(tv); return }
 
+    // "Watching" = the TV says something is playing or paused (browsing an app's menus keeps the browsing layout).
+    val watching = tv.mediaState != null
     Column(Modifier.fillMaxSize().padding(horizontal = 20.dp)) {
         Header(tv)
-        WhatToWatchCard(tv.picks)
-        NotItBar(tv.picks)
-        Text("MOST USED", color = Palette.faint, fontSize = 11.sp, fontWeight = FontWeight.SemiBold, letterSpacing = 1.sp,
-            modifier = Modifier.padding(top = 18.dp, bottom = 10.dp))
-        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
-            for (app in tv.mostUsed()) AppTile(app) { haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove); tv.launch(app) }
+        if (watching) NowShowing(tv)
+        else {
+            PicksLine(tv.picks)
+            // Apps as icons only: the label is the brand.
+            Row(Modifier.fillMaxWidth().padding(top = 14.dp), horizontalArrangement = Arrangement.SpaceBetween) {
+                for (app in tv.mostUsed()) AppTile(app) { haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove); tv.launch(app) }
+            }
         }
+        NotItBar(tv.picks)
         if (tv.tvKeyboardOpen) KeyboardBar(tv)
         TimerEngine.state?.let { TimerPill(it) }
-        Box(Modifier.fillMaxWidth().weight(1f).padding(top = 18.dp)) {
+        Box(Modifier.fillMaxWidth().weight(1f).padding(top = 16.dp)) {
             Touchpad(onMove = tv::move, onClick = tv::tap, onScroll = tv::scroll, modifier = Modifier.fillMaxSize(),
-                hint = if (tv.inPlayback) "Tap to pause · double-tap a side to skip · drag to point" else "Drag to point · tap to select",
-                onSkip = if (tv.inPlayback) { forward -> tv.skip(forward) } else null)
+                hint = if (watching) "Tap to pause · double-tap a side to skip" else if (tv.inPlayback) "Tap to pause/play · drag to point" else "Drag to point · tap to select",
+                onSkip = if (watching) { forward -> tv.skip(forward) } else null)
             Feedback(tv, Modifier.align(Alignment.TopCenter).padding(top = 12.dp))
         }
-        Row(Modifier.fillMaxWidth().padding(top = 16.dp), horizontalArrangement = Arrangement.SpaceBetween) {
-            RoundButton(Icons.AutoMirrored.Rounded.ArrowBack, "Back") { tv.button("BACK") }
-            RoundButton(Icons.Rounded.Home, "Home") { tv.button("HOME") }
-            RoundButton(Icons.Rounded.Timer, "Timer") { showTimers = true }
-            RoundButton(Icons.AutoMirrored.Rounded.VolumeOff, "Mute") { tv.toggleMute() }
+        // Quiet glyphs rather than big buttons: the touchpad and the mic are the heroes.
+        Row(Modifier.fillMaxWidth().padding(top = 10.dp), horizontalArrangement = Arrangement.SpaceEvenly) {
+            Glyph(Icons.AutoMirrored.Rounded.ArrowBack, "Back") { tv.button("BACK") }
+            Glyph(Icons.Rounded.Home, "Home") { tv.button("HOME") }
+            Glyph(Icons.Rounded.Timer, "Timer") { showTimers = true }
+            Glyph(Icons.AutoMirrored.Rounded.VolumeOff, "Mute") { tv.toggleMute() }
         }
-        Row(Modifier.fillMaxWidth().padding(top = 14.dp, bottom = 14.dp), verticalAlignment = Alignment.CenterVertically,
+        Row(Modifier.fillMaxWidth().padding(top = 8.dp, bottom = 14.dp), verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.spacedBy(12.dp)) {
             Rocker(if (tv.isLiveTv) "VOL" else "VOLUME", Icons.Rounded.Remove, Icons.Rounded.Add,
                 { tv.volume(false) }, { tv.volume(true) }, Modifier.weight(1f))
-            MicButton {
-                haptic.performHapticFeedback(HapticFeedbackType.LongPress)
-                if (hasMicPermission()) listen() else micPermission.launch(Manifest.permission.RECORD_AUDIO)
-            }
+            MicButton { mic() }
             // Channel buttons only make sense on Live TV (antenna/cable); streaming apps never show them.
             if (tv.isLiveTv) Rocker("CH", Icons.Rounded.KeyboardArrowDown, Icons.Rounded.KeyboardArrowUp,
                 { tv.ssap("ssap://tv/channelDown") }, { tv.ssap("ssap://tv/channelUp") }, Modifier.weight(1f))
@@ -228,7 +242,7 @@ private fun Header(tv: TvController, showPower: Boolean = true) {
 
     Row(Modifier.fillMaxWidth().padding(top = 2.dp), verticalAlignment = Alignment.CenterVertically) {
         Box(Modifier.weight(1f)) {
-            Column(Modifier.clip(RoundedCornerShape(10.dp)).clickable { menu = true }.padding(vertical = 4.dp, horizontal = 2.dp)) {
+            Column(Modifier.clip(RoundedCornerShape(10.dp)).clickable { tv.showSettings = true }.padding(vertical = 4.dp, horizontal = 2.dp)) {
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     Text(tv.tvName, color = Palette.text, fontSize = 16.sp, fontWeight = FontWeight.SemiBold, maxLines = 1, overflow = TextOverflow.Ellipsis)
                     Icon(Icons.Rounded.KeyboardArrowDown, "Settings", tint = Palette.faint, modifier = Modifier.size(18.dp))
@@ -239,18 +253,6 @@ private fun Header(tv: TvController, showPower: Boolean = true) {
                     Spacer(Modifier.width(6.dp))
                     Text(tv.nowShowing(), color = Palette.muted, fontSize = 13.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
                 }
-            }
-            DropdownMenu(menu, onDismissRequest = { menu = false }) {
-                DropdownMenuItem(text = { Text("Rename") }, onClick = { menu = false; renameDialog = true })
-                DropdownMenuItem(text = { Text("Reconnect") }, onClick = { menu = false; tv.connect() })
-                DropdownMenuItem(text = { Text(if (tv.macKnown) "Power-on settings" else "Set up power on") }, onClick = { menu = false; macDialog = true })
-                DropdownMenuItem(text = { Text("Picks settings") }, onClick = { menu = false; tv.picks.open = true; tv.picks.step = com.home.tvremote.picks.Step.Setup })
-                DropdownMenuItem(text = { Text("Fix touchpad tap") }, onClick = { menu = false; tapDialog = true })
-                DropdownMenuItem(text = { Text("Test opening a show") }, onClick = { menu = false; linkDialog = true })
-                DropdownMenuItem(text = { Text(if (tv.homeOnWake) "After turning on: open Home ✓" else "After turning on: open Home") },
-                    onClick = { menu = false; tv.changeHomeOnWake(!tv.homeOnWake); tv.say(if (tv.homeOnWake) "Will open Home after turning the TV on" else "Will leave the TV on its start-up screen") })
-                DropdownMenuItem(text = { Text("Diagnostics") }, onClick = { menu = false; diag = true })
-                DropdownMenuItem(text = { Text("Choose a different TV") }, onClick = { menu = false; tv.forget() })
             }
         }
         if (showPower) Box(Modifier.size(42.dp).card(CircleShape)
@@ -274,7 +276,7 @@ private fun CheckingScreen(tv: TvController) {
 
 /** When the TV is off, the whole screen is one button. */
 @Composable
-private fun OffScreen(tv: TvController) {
+private fun OffScreen(tv: TvController, onMic: () -> Unit = {}) {
     Column(Modifier.fillMaxSize().padding(horizontal = 20.dp)) {
         Header(tv, showPower = false)
         Column(Modifier.fillMaxWidth().weight(1f), horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.Center) {
@@ -295,10 +297,12 @@ private fun OffScreen(tv: TvController) {
                 },
                 color = Palette.muted, fontSize = 14.sp, modifier = Modifier.padding(top = 6.dp),
             )
+            if (!tv.waking) Text("or just say “turn on the TV”", color = Palette.faint, fontSize = 13.sp, modifier = Modifier.padding(top = 2.dp))
             Spacer(Modifier.height(16.dp))
             // Only problems show here; progress is the ring and the line above.
             if (tv.feedbackIsError) Feedback(tv, Modifier.padding(horizontal = 8.dp))
         }
+        Row(Modifier.fillMaxWidth().padding(bottom = 14.dp), horizontalArrangement = Arrangement.End) { MicButton(onMic) }
     }
 }
 
@@ -306,8 +310,8 @@ private fun OffScreen(tv: TvController) {
 @Composable
 private fun AppTile(app: TvApp, onClick: () -> Unit) {
     val (bg, fg, glyph) = tileStyle(app.id, app.title)
-    Column(Modifier.width(72.dp).clip(RoundedCornerShape(14.dp)).clickable(onClick = onClick), horizontalAlignment = Alignment.CenterHorizontally) {
-        Box(Modifier.size(64.dp).then(if (bg == null) Modifier.card(RoundedCornerShape(18.dp)) else
+    Column(Modifier.clip(RoundedCornerShape(18.dp)).semantics { contentDescription = app.title }.clickable(onClick = onClick), horizontalAlignment = Alignment.CenterHorizontally) {
+        Box(Modifier.size(60.dp).then(if (bg == null) Modifier.card(RoundedCornerShape(18.dp)) else
             Modifier.clip(RoundedCornerShape(18.dp)).background(bg)), contentAlignment = Alignment.Center) {
             if (glyph == "▶") {
                 Box(Modifier.size(width = 34.dp, height = 24.dp).clip(RoundedCornerShape(7.dp)).background(Color(0xFFE62117)), contentAlignment = Alignment.Center) {
@@ -315,7 +319,6 @@ private fun AppTile(app: TvApp, onClick: () -> Unit) {
                 }
             } else Text(glyph, color = fg ?: Palette.text, fontSize = if (glyph.length > 1) 20.sp else 24.sp, fontWeight = FontWeight.SemiBold)
         }
-        Text(app.title, color = Palette.muted, fontSize = 12.sp, maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.padding(top = 6.dp))
     }
 }
 
@@ -372,9 +375,100 @@ private fun KeyboardBar(tv: TvController) {
 @Composable
 private fun Feedback(tv: TvController, modifier: Modifier = Modifier) {
     AnimatedVisibility(tv.feedback != null, enter = fadeIn(), exit = fadeOut(), modifier = modifier) {
-        Text(tv.feedback ?: "", color = if (tv.feedbackIsError) Palette.danger else Palette.text, fontSize = 13.sp,
-            textAlign = TextAlign.Center, maxLines = 3, overflow = TextOverflow.Ellipsis,
-            modifier = Modifier.card(RoundedCornerShape(14.dp)).background(Palette.surface2).padding(horizontal = 14.dp, vertical = 8.dp))
+        Row(Modifier.card(RoundedCornerShape(14.dp)).background(Palette.surface2).padding(start = 14.dp, end = if (tv.feedbackAction != null) 6.dp else 14.dp, top = 8.dp, bottom = 8.dp),
+            verticalAlignment = Alignment.CenterVertically) {
+            Text(tv.feedback ?: "", color = if (tv.feedbackIsError) Palette.danger else Palette.text, fontSize = 13.sp,
+                textAlign = TextAlign.Center, maxLines = 3, overflow = TextOverflow.Ellipsis, modifier = Modifier.weight(1f, fill = false))
+            tv.feedbackAction?.let { (label, act) ->
+                Text(label, color = Palette.text, fontSize = 13.sp, fontWeight = FontWeight.Bold,
+                    modifier = Modifier.padding(start = 8.dp).clip(RoundedCornerShape(10.dp)).clickable { tv.feedback = null; act() }.padding(horizontal = 8.dp, vertical = 4.dp))
+            }
+        }
+    }
+}
+
+// ============================================================ Settings
+
+/** One place for settings (replaces the menu under the TV name). Engineering tools live under Help. */
+@Composable
+private fun SettingsScreen(tv: TvController) {
+    BackHandler { if (tv.showHelp) tv.showHelp = false else tv.showSettings = false }
+    var renameDialog by remember { mutableStateOf(false) }
+    var macDialog by remember { mutableStateOf(false) }
+    var diag by remember { mutableStateOf(false) }
+    var tapDialog by remember { mutableStateOf(false) }
+    var linkDialog by remember { mutableStateOf(false) }
+    if (renameDialog) RenameDialog(tv) { renameDialog = false }
+    if (macDialog) MacDialog(tv) { macDialog = false }
+    if (diag) DiagnosticsDialog(tv) { diag = false }
+    if (tapDialog) TapDialog(tv) { tapDialog = false }
+    if (linkDialog) LinkDialog(tv) { linkDialog = false }
+    val s = tv.picks.store
+    Column(Modifier.fillMaxSize().background(Palette.bg).verticalScroll(rememberScrollState()).padding(horizontal = 20.dp, vertical = 8.dp)) {
+        Box(Modifier.size(40.dp).clip(CircleShape).clickable { if (tv.showHelp) tv.showHelp = false else tv.showSettings = false }, contentAlignment = Alignment.Center) {
+            Icon(Icons.AutoMirrored.Rounded.ArrowBack, "Back", tint = Palette.text)
+        }
+        if (!tv.showHelp) {
+            Text("Settings", color = Palette.text, fontSize = 26.sp, fontWeight = FontWeight.Bold, modifier = Modifier.padding(top = 6.dp))
+            Section("This TV")
+            SettingRow("Name", tv.tvName) { renameDialog = true }
+            SettingRow("Turn on from the phone", if (tv.macKnown) "Ready" else "Set up") { macDialog = true }
+            SettingRow("After turning on", if (tv.homeOnWake) "Home screen" else "Last input") { tv.changeHomeOnWake(!tv.homeOnWake) }
+            Section("Picks")
+            SettingRow("People", s.people.joinToString().ifEmpty { "Add" }) { tv.openPicksSettings() }
+            SettingRow("Favourites", s.people.joinToString(" · ") { "$it ${s.favourites(it).size}" }.ifEmpty { "—" }) { tv.openPicksSettings() }
+            SettingRow("Services", "${s.services.size}") { tv.openPicksSettings() }
+            SettingRow("Bedtimes", "${hhmm(s.weekdayBedtime)} · Fri–Sat ${hhmm(s.weekendBedtime)}") { tv.openPicksSettings() }
+            Section("More")
+            SettingRow("Help & diagnostics", "") { tv.showHelp = true }
+            SettingRow("Advanced", "keys, AI") { tv.openPicksSettings() }
+        } else {
+            Text("Help & diagnostics", color = Palette.text, fontSize = 26.sp, fontWeight = FontWeight.Bold, modifier = Modifier.padding(top = 6.dp))
+            Section("If something isn't right")
+            SettingRow("Taps don't select on the TV", "Fix touchpad tap") { tapDialog = true }
+            SettingRow("Shows open on the app's home", "Test opening a show") { linkDialog = true }
+            SettingRow("The remote lost the TV", "Reconnect") { tv.connect(); tv.showSettings = false; tv.showHelp = false }
+            SettingRow("Something went wrong", "Share diagnostics") { diag = true }
+            Section("This phone")
+            SettingRow("Use a different TV", "") { tv.showSettings = false; tv.showHelp = false; tv.forget() }
+        }
+    }
+}
+
+private fun hhmm(min: Int) = "%d:%02d".format((min / 60) % 24, min % 60)
+
+@Composable
+private fun Section(text: String) = Text(text.uppercase(), color = Palette.faint, fontSize = 11.sp, fontWeight = FontWeight.SemiBold,
+    letterSpacing = 1.sp, modifier = Modifier.padding(top = 22.dp, bottom = 4.dp))
+
+@Composable
+private fun SettingRow(title: String, value: String, onClick: () -> Unit) {
+    Row(Modifier.fillMaxWidth().clip(RoundedCornerShape(10.dp)).clickable(onClick = onClick).padding(vertical = 14.dp, horizontal = 2.dp),
+        verticalAlignment = Alignment.CenterVertically) {
+        Text(title, color = Palette.text, fontSize = 15.sp, modifier = Modifier.weight(1f))
+        if (value.isNotEmpty()) Text(value, color = Palette.muted, fontSize = 13.sp, maxLines = 1, overflow = TextOverflow.Ellipsis, textAlign = TextAlign.End,
+            modifier = Modifier.padding(start = 12.dp).widthIn(max = 170.dp))
+        Icon(Icons.Rounded.ChevronRight, null, tint = Palette.faint, modifier = Modifier.size(18.dp))
+    }
+}
+
+/** A quiet, borderless icon button (Back, Home, Timer, Mute). */
+@Composable
+private fun Glyph(icon: ImageVector, label: String, onClick: () -> Unit) {
+    val haptic = LocalHapticFeedback.current
+    Box(Modifier.size(56.dp).clip(CircleShape).clickable { haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove); onClick() },
+        contentAlignment = Alignment.Center) { Icon(icon, label, tint = Palette.muted, modifier = Modifier.size(26.dp)) }
+}
+
+/** While watching: what's on (when we opened it) and when it ends, in place of the apps and the picks line. */
+@Composable
+private fun NowShowing(tv: TvController) {
+    val app = tv.foregroundApp?.let { tv.appTitle(it) }
+    val (title, ends) = tv.picks.nowShowing ?: (app to null)
+    Column(Modifier.fillMaxWidth().padding(top = 14.dp, start = 2.dp)) {
+        Text(title ?: "Watching", color = Palette.text, fontSize = 22.sp, fontWeight = FontWeight.Bold, maxLines = 1, overflow = TextOverflow.Ellipsis)
+        Text(listOfNotNull(app.takeIf { tv.picks.nowShowing != null }, tv.mediaState, ends?.let { "ends $it" }).joinToString(" · ").ifEmpty { " " },
+            color = Palette.muted, fontSize = 13.sp, modifier = Modifier.padding(top = 2.dp))
     }
 }
 

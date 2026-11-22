@@ -176,6 +176,13 @@ class PicksController(
         if (on && open) startTvPage() else if (!on) { stopTvPage(); if (tv.foreground == "com.webos.app.browser") tv.goHome() }
     }
 
+    /** ✕ on "Keep watching": never suggest that one again for this person; the next one (if any) shows. */
+    fun dismissKeep() { keep?.playedKey?.let { store.dismissKeep(who, it) }; keep = store.keepWatching(who); bump() }
+
+    /** What was just opened from a pick or by voice, and when it ends (films, when we know the length). Shown on the remote. */
+    var nowShowing by mutableStateOf<Pair<String, String?>?>(null)
+    var nowShowingApp: String? = null
+
     fun selectWho(w: String) {
         who = w; keep = store.keepWatching(w); session?.who = w; bump()
         if (store.tmdbKey.isNotBlank() && makeRecommender == null) scope.launch { runCatching { recommender().warm(w) } }
@@ -321,6 +328,9 @@ class PicksController(
      * the other link formats, then typing the name into the app's search box.
      */
     private fun openIn(key: String, name: String, svc: Service, appId: String) {
+        val t = picks.firstOrNull { it.title.key == key }?.title
+        nowShowing = name to t?.takeIf { it.kind == Kind.Movie }?.let { endsAt(it)?.removePrefix("ends ") }
+        nowShowingApp = appId
         val lookup = netflixIdOf
         if (svc.name == "Netflix" && lookup != null) scope.launch {
             val id = withTimeoutOrNull(3000) { runCatching { lookup(key) }.getOrNull() }

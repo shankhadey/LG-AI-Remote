@@ -65,6 +65,11 @@ class TvController(app: Application) : AndroidViewModel(app), TvActions {
     }
     var feedback by mutableStateOf<String?>(null)   // short "what just happened" line
     var feedbackIsError by mutableStateOf(false)
+    /** An optional action on the message, e.g. "Fix" → the setting that fixes it. */
+    var feedbackAction by mutableStateOf<Pair<String, () -> Unit>?>(null)
+    /** The Settings screen (replaces the menu under the TV name) and its Help page. */
+    var showSettings by mutableStateOf(false)
+    var showHelp by mutableStateOf(false)
     private var feedbackJob: Job? = null
 
     private var tv: LgTv? = null
@@ -306,6 +311,8 @@ class TvController(app: Application) : AndroidViewModel(app), TvActions {
         foregroundApp = appId
         assumePlaying = true
         picks.onForeground(appId)
+        // Left the app we opened a title in: stop showing that title on the remote.
+        if (picks.nowShowingApp != null && appId != picks.nowShowingApp && appId !in SYSTEM_APPS.minus("com.webos.app.browser")) { picks.nowShowing = null; picks.nowShowingApp = null }
         // Just woken by the app and the TV came up on Live TV ("No signal" without an antenna): go Home.
         if (appId == "com.webos.app.livetv" && System.currentTimeMillis() < homeAfterWakeUntil) {
             homeAfterWakeUntil = 0
@@ -330,6 +337,7 @@ class TvController(app: Application) : AndroidViewModel(app), TvActions {
         CommandParser.KNOWN_APPS.firstOrNull { it.id == id }?.title
             ?: apps.firstOrNull { it.id == id && it.title.isNotBlank() }?.title
             ?: when {
+                id == "com.wbd.stream" -> "Max"
                 id == "com.webos.app.home" -> "Home"
                 id.startsWith("com.webos.app.hdmi") -> "HDMI " + id.removePrefix("com.webos.app.hdmi")
                 else -> id.substringAfterLast('.').replace('-', ' ').replace('_', ' ')
@@ -422,6 +430,14 @@ class TvController(app: Application) : AndroidViewModel(app), TvActions {
         say(if (seconds > 0) "Forward ${humanTime(seconds)}" else "Back ${humanTime(-seconds)}")
         enqueue { repeat(presses.coerceAtMost(60)) { tv().button(key); delay(180) } }
     }
+    /** "Barbie is on Max — not one of your services" with "Add" when it's a service the app knows. */
+    private fun sayElsewhere(r: com.home.tvremote.picks.PicksController.Found.Elsewhere) {
+        val known = r.services.firstNotNullOfOrNull { n -> com.home.tvremote.picks.Catalog.SERVICES.firstOrNull { s -> s.tmdbNames.any { it.equals(n, true) } }?.name }
+        if (known != null) say("${r.name} is on $known — not one of your services", error = true, action = "Add" to { openPicksSettings() })
+        else say(picks.elsewhere(r), error = true)
+    }
+    fun openPicksSettings() { showSettings = false; picks.open = true; picks.step = com.home.tvremote.picks.Step.Setup }
+
     /** One 10-second skip (double-tap on the touchpad's side while watching). */
     fun skip(forward: Boolean) = button(if (forward) "RIGHT" else "LEFT")
     private fun humanTime(s: Int) = if (s >= 60 && s % 60 == 0) "${s / 60} min" else if (s >= 60) "${s / 60} min ${s % 60} s" else "$s s"
@@ -767,8 +783,8 @@ class TvController(app: Application) : AndroidViewModel(app), TvActions {
                 val hint = cmd.app?.let { a -> com.home.tvremote.picks.Catalog.SERVICES.firstOrNull { s -> picks.appIdFor(s) == a.id }?.name }
                 when (val r = picks.findAndOpen(cmd.query, hint)) {
                     com.home.tvremote.picks.PicksController.Found.Opened -> {}
-                    is com.home.tvremote.picks.PicksController.Found.Elsewhere -> say(picks.elsewhere(r), error = true)
-                    is com.home.tvremote.picks.PicksController.Found.NoApp -> say(picks.noAppMessage(r), error = true)
+                    is com.home.tvremote.picks.PicksController.Found.Elsewhere -> sayElsewhere(r)
+                    is com.home.tvremote.picks.PicksController.Found.NoApp -> say("${r.name} is on ${r.service} — open ${r.service} once on the TV", error = true)
                     com.home.tvremote.picks.PicksController.Found.Nothing -> {
                         // The AI next: a misheard person ("adam sanfler movies"), a description, or a mood (→ picks).
                         val msg = picks.interpret(cmd.query) ?: return@launch
@@ -789,8 +805,8 @@ class TvController(app: Application) : AndroidViewModel(app), TvActions {
                 for (n in names) if (picks.findAndOpen(n, exactOnly = true) == com.home.tvremote.picks.PicksController.Found.Opened) return@launch
                 when (val r = picks.findAndOpen(cmd.name)) {
                     com.home.tvremote.picks.PicksController.Found.Opened -> {}
-                    is com.home.tvremote.picks.PicksController.Found.Elsewhere -> say(picks.elsewhere(r), error = true)
-                    is com.home.tvremote.picks.PicksController.Found.NoApp -> say(picks.noAppMessage(r), error = true)
+                    is com.home.tvremote.picks.PicksController.Found.Elsewhere -> sayElsewhere(r)
+                    is com.home.tvremote.picks.PicksController.Found.NoApp -> say("${r.name} is on ${r.service} — open ${r.service} once on the TV", error = true)
                     com.home.tvremote.picks.PicksController.Found.Nothing ->
                         picks.interpret("open ${cmd.name}")?.let { say("Couldn't find an app or a show called “${cmd.name}” on your services", error = true) }
                 }
@@ -824,10 +840,10 @@ class TvController(app: Application) : AndroidViewModel(app), TvActions {
     }
 
     // ---- feedback ---------------------------------------------------------
-    fun say(msg: String, error: Boolean = false) {
-        feedback = msg; feedbackIsError = error
+    fun say(msg: String, error: Boolean = false, action: Pair<String, () -> Unit>? = null) {
+        feedback = msg; feedbackIsError = error; feedbackAction = action
         feedbackJob?.cancel()
-        feedbackJob = viewModelScope.launch { delay(if (error) 4500 else 2200); feedback = null }
+        feedbackJob = viewModelScope.launch { delay(if (action != null) 7000 else if (error) 4500 else 2200); feedback = null; feedbackAction = null }
     }
     private fun showError(e: Throwable) = say(e.message ?: "Something went wrong", error = true)
 

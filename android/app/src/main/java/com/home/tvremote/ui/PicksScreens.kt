@@ -1,5 +1,15 @@
 package com.home.tvremote.ui
 
+import androidx.compose.material.icons.rounded.Close
+import androidx.compose.runtime.key
+import androidx.compose.ui.hapticfeedback.HapticFeedbackType
+import androidx.compose.ui.platform.LocalHapticFeedback
+import androidx.compose.foundation.combinedClickable
+import androidx.compose.foundation.ExperimentalFoundationApi
+import androidx.compose.material3.rememberSwipeToDismissBoxState
+import androidx.compose.material3.SwipeToDismissBoxValue
+import androidx.compose.material3.SwipeToDismissBox
+import androidx.compose.material3.ExperimentalMaterial3Api
 import android.Manifest
 import android.content.pm.PackageManager
 import androidx.activity.compose.BackHandler
@@ -71,18 +81,15 @@ import com.home.tvremote.picks.Step
 import com.home.tvremote.voice.VoiceInput
 
 /** Entry point on the remote, above Most used. */
+/** The picker's entry on the remote: one slim line. */
 @Composable
-fun WhatToWatchCard(pc: PicksController) {
-    Row(Modifier.fillMaxWidth().padding(top = 14.dp).card(RoundedCornerShape(20.dp)).clickable { pc.openPicker() }.padding(14.dp),
+fun PicksLine(pc: PicksController) {
+    Row(Modifier.fillMaxWidth().padding(top = 14.dp).card(RoundedCornerShape(16.dp)).clickable { pc.openPicker() }.padding(horizontal = 12.dp, vertical = 10.dp),
         verticalAlignment = Alignment.CenterVertically) {
-        Box(Modifier.size(40.dp).clip(RoundedCornerShape(12.dp)).background(Palette.primary), contentAlignment = Alignment.Center) {
-            Icon(Icons.Rounded.AutoAwesome, null, tint = Palette.onPrimary, modifier = Modifier.size(20.dp))
+        Box(Modifier.size(28.dp).clip(RoundedCornerShape(9.dp)).background(Palette.primary), contentAlignment = Alignment.Center) {
+            Icon(Icons.Rounded.AutoAwesome, null, tint = Palette.onPrimary, modifier = Modifier.size(15.dp))
         }
-        Spacer(Modifier.width(12.dp))
-        Column(Modifier.weight(1f)) {
-            Text("What should we watch?", color = Palette.text, fontSize = 16.sp, fontWeight = FontWeight.SemiBold)
-            Text("5 picks in under a minute", color = Palette.muted, fontSize = 13.sp)
-        }
+        Text("What should we watch?", color = Palette.text, fontSize = 15.sp, fontWeight = FontWeight.SemiBold, modifier = Modifier.weight(1f).padding(start = 10.dp))
         Icon(Icons.Rounded.ChevronRight, null, tint = Palette.faint)
     }
 }
@@ -125,24 +132,21 @@ private fun PicksTop(pc: PicksController, label: String, onBack: () -> Unit) {
             Icon(Icons.AutoMirrored.Rounded.ArrowBack, "Back", tint = Palette.text)
         }
         Text(label, color = Palette.muted, fontSize = 14.sp, maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.weight(1f).padding(start = 4.dp))
-        ShowOnTv(pc, short = true)
+        ShowOnTv(pc)
     }
 }
 
+/** "On TV" as a quiet switch in the corner. */
 @Composable
-private fun ShowOnTv(pc: PicksController, short: Boolean = false) {
+private fun ShowOnTv(pc: PicksController) {
     Row(Modifier.clip(RoundedCornerShape(10.dp)).clickable { pc.changeShowOnTv(!pc.showOnTv) }.padding(6.dp), verticalAlignment = Alignment.CenterVertically) {
-        Box(Modifier.size(20.dp).clip(RoundedCornerShape(6.dp)).then(
-            if (pc.showOnTv) Modifier.background(Palette.primary) else Modifier.border(2.dp, Palette.faint, RoundedCornerShape(6.dp))),
-            contentAlignment = Alignment.Center) {
-            if (pc.showOnTv) Icon(Icons.Rounded.Check, null, tint = Palette.onPrimary, modifier = Modifier.size(16.dp))
-        }
+        Text("On TV", color = Palette.muted, fontSize = 13.sp)
         Spacer(Modifier.width(8.dp))
-        Text(if (short) "On TV" else "Show on TV", color = Palette.text, fontSize = 14.sp)
+        Switch(pc.showOnTv, { pc.changeShowOnTv(it) }, modifier = Modifier.height(24.dp),
+            colors = SwitchDefaults.colors(checkedTrackColor = Palette.primary, checkedThumbColor = Palette.onPrimary))
     }
 }
 
-/** The phone as a touchpad for the picker on the TV: header with the On TV box, what's pointed at, the pad, the mic. */
 @Composable
 private fun TouchpadPicks(pc: PicksController) {
     val context = LocalContext.current
@@ -184,37 +188,40 @@ private fun ChoosePicks(pc: PicksController) {
     var editing by remember { mutableStateOf<String?>(null) }
     editing?.let { person -> FavouritesEditor(pc, person) { editing = null }; return }
     val context = LocalContext.current
-    var text by remember { mutableStateOf("") }
+    var heard by remember { mutableStateOf("") }
     var listening by remember { mutableStateOf(false) }
     val voice = remember {
-        VoiceInput(context, onPartial = { text = it }, onResult = { g -> text = g.first(); pc.askSpoken(g) },
+        VoiceInput(context, onPartial = { heard = it }, onResult = { g -> heard = g.first(); pc.askSpoken(g) },
             onError = { listening = false }, onEnd = { listening = false })
     }
     DisposableEffect(Unit) { onDispose { voice.release() } }
+    fun mic() {
+        if (ContextCompat.checkSelfPermission(context, Manifest.permission.RECORD_AUDIO) == PackageManager.PERMISSION_GRANTED && voice.available) {
+            if (listening) voice.finish() else { listening = true; heard = ""; voice.start() }
+        } else pc.noteMicNeeded()
+    }
 
     Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(horizontal = 20.dp, vertical = 8.dp)) {
-        Box(Modifier.size(40.dp).clip(CircleShape).clickable { pc.close() }, contentAlignment = Alignment.Center) {
-            Icon(Icons.AutoMirrored.Rounded.ArrowBack, "Back", tint = Palette.text)
+        Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+            Box(Modifier.size(40.dp).clip(CircleShape).clickable { pc.close() }, contentAlignment = Alignment.Center) {
+                Icon(Icons.AutoMirrored.Rounded.ArrowBack, "Back", tint = Palette.text)
+            }
+            Spacer(Modifier.weight(1f))
+            ShowOnTv(pc)
         }
         Text(pc.title, color = Palette.text, fontSize = 26.sp, fontWeight = FontWeight.Bold, modifier = Modifier.padding(top = 6.dp))
-        Text(pc.contextLine, color = Palette.muted, fontSize = 14.sp, modifier = Modifier.padding(top = 4.dp))
+        Text(if (listening) heard.ifEmpty { "Listening…" } else pc.contextLine, color = if (listening) Palette.text else Palette.muted,
+            fontSize = 14.sp, modifier = Modifier.padding(top = 4.dp))
 
         Label("Who's watching")
         FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
             for (p in pc.profiles()) Chip(p, p == pc.who) { pc.selectWho(p) }
         }
-        if (pc.store.languages.size > 1) {
-            Label("Language")
-            FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                Chip("Any", pc.language == null) { pc.selectLanguage(null) }
-                for (c in pc.store.languages) Chip(Catalog.languageLabel(c), pc.language == c) { pc.selectLanguage(c) }
-            }
-        }
         pc.favVersion.let { }   // redraw when favourites change
         if (pc.wantsFavourites()) {
             Column(Modifier.fillMaxWidth().padding(top = 14.dp).card(RoundedCornerShape(18.dp)).padding(14.dp)) {
                 Text("Picks get better when I know ${pc.who}'s taste", color = Palette.text, fontSize = 15.sp, fontWeight = FontWeight.SemiBold)
-                Text("Name 3–5 shows or movies ${pc.who} loved. Takes a minute.", color = Palette.muted, fontSize = 13.sp, modifier = Modifier.padding(top = 4.dp, bottom = 10.dp))
+                Text("Name 3–5 shows or movies ${pc.who} loved.", color = Palette.muted, fontSize = 13.sp, modifier = Modifier.padding(top = 4.dp, bottom = 10.dp))
                 Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                     Text("Add favourites", color = Palette.onPrimary, fontSize = 13.sp, fontWeight = FontWeight.SemiBold,
                         modifier = Modifier.clip(RoundedCornerShape(16.dp)).background(Palette.primary).clickable { editing = pc.who }.padding(horizontal = 14.dp, vertical = 8.dp))
@@ -223,91 +230,117 @@ private fun ChoosePicks(pc: PicksController) {
                 }
             }
         }
+        if (pc.store.languages.size > 1) {
+            Label("Language")
+            FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                Chip("Any", pc.language == null) { pc.selectLanguage(null) }
+                for (c in pc.store.languages) Chip(Catalog.languageLabel(c), pc.language == c) { pc.selectLanguage(c) }
+            }
+        }
         pc.keep?.let { k ->
             Label("Keep watching")
-            Row(Modifier.fillMaxWidth().card(RoundedCornerShape(18.dp)).padding(12.dp), verticalAlignment = Alignment.CenterVertically) {
-                Column(Modifier.weight(1f)) {
+            Row(Modifier.fillMaxWidth().card(RoundedCornerShape(18.dp)).clickable { pc.playKeepWatching() }.padding(start = 14.dp, top = 10.dp, bottom = 10.dp, end = 4.dp),
+                verticalAlignment = Alignment.CenterVertically) {
+                Icon(Icons.Rounded.PlayArrow, null, tint = Palette.text, modifier = Modifier.size(20.dp))
+                Column(Modifier.weight(1f).padding(start = 10.dp)) {
                     Text(k.playedName ?: "", color = Palette.text, fontSize = 15.sp, fontWeight = FontWeight.SemiBold)
                     Text(k.service ?: "", color = Palette.muted, fontSize = 12.sp)
                 }
-                SmallPrimary("Play", Icons.Rounded.PlayArrow) { pc.playKeepWatching() }
-            }
-        }
-        Label("Pick a mood")
-        val moods = pc.moods()
-        for (row in moods.chunked(2)) {
-            Row(Modifier.fillMaxWidth().padding(bottom = 10.dp), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-                for (m in row) Column(Modifier.weight(1f).height(64.dp).card(RoundedCornerShape(18.dp)).clickable { pc.chooseMood(m) }.padding(horizontal = 14.dp),
-                    verticalArrangement = Arrangement.Center) {
-                    Text(m.label, color = Palette.text, fontSize = 15.sp, fontWeight = FontWeight.SemiBold)
-                    Text(m.hint, color = Palette.muted, fontSize = 12.sp)
+                // Dismiss: never suggested again for this person.
+                Box(Modifier.size(40.dp).clip(CircleShape).clickable { pc.dismissKeep() }, contentAlignment = Alignment.Center) {
+                    Icon(Icons.Rounded.Close, "Don't suggest this", tint = Palette.faint, modifier = Modifier.size(18.dp))
                 }
             }
         }
-        Row(Modifier.fillMaxWidth().padding(top = 4.dp).card(RoundedCornerShape(28.dp)).padding(start = 18.dp, end = 7.dp, top = 7.dp, bottom = 7.dp),
-            verticalAlignment = Alignment.CenterVertically) {
-            Box(Modifier.weight(1f)) {
-                if (text.isEmpty()) Text(if (listening) "Listening…" else "Or just say it…", color = Palette.faint, fontSize = 15.sp)
-                BasicTextField(text, { text = it }, singleLine = true, textStyle = TextStyle(color = Palette.text, fontSize = 15.sp),
-                    cursorBrush = SolidColor(Palette.accent), keyboardOptions = KeyboardOptions(imeAction = ImeAction.Go),
-                    keyboardActions = KeyboardActions(onGo = { pc.askSpoken(listOf(text)) }), modifier = Modifier.fillMaxWidth())
+        Label("Mood")
+        // Six even tiles: Surprise is the sixth.
+        val tiles: List<Pair<Pair<String, String>, () -> Unit>> = pc.moods().map { m -> (m.label to m.hint) to { pc.chooseMood(m) } } +
+            listOf(("Surprise ${if (pc.who == Catalog.TOGETHER) "us" else "me"}" to "Anything good") to { pc.surprise() })
+        for ((r, row) in tiles.chunked(2).withIndex()) {
+            Row(Modifier.fillMaxWidth().padding(bottom = 10.dp), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                for ((idx, t) in row.withIndex()) {
+                    val dark = r * 2 + idx == tiles.lastIndex
+                    Column(Modifier.weight(1f).height(64.dp).then(if (dark) Modifier.clip(RoundedCornerShape(18.dp)).background(Palette.primary) else Modifier.card(RoundedCornerShape(18.dp)))
+                        .clickable(onClick = t.second).padding(horizontal = 14.dp), verticalArrangement = Arrangement.Center) {
+                        Text(t.first.first, color = if (dark) Palette.onPrimary else Palette.text, fontSize = 15.sp, fontWeight = FontWeight.SemiBold)
+                        Text(t.first.second, color = if (dark) Palette.onPrimary.copy(alpha = 0.7f) else Palette.muted, fontSize = 12.sp)
+                    }
+                }
+                if (row.size == 1) Spacer(Modifier.weight(1f))
             }
-            Box(Modifier.size(42.dp).clip(CircleShape).background(if (listening) Palette.danger else Palette.primary).clickable {
-                if (ContextCompat.checkSelfPermission(context, Manifest.permission.RECORD_AUDIO) == PackageManager.PERMISSION_GRANTED && voice.available) {
-                    if (listening) voice.finish() else { listening = true; text = ""; voice.start() }
-                } else text = "Allow the microphone first (tap the remote's mic once)"
-            }, contentAlignment = Alignment.Center) { Icon(Icons.Rounded.Mic, "Say it", tint = Palette.onPrimary, modifier = Modifier.size(20.dp)) }
         }
-        Row(Modifier.fillMaxWidth().padding(top = 14.dp, bottom = 20.dp), verticalAlignment = Alignment.CenterVertically) {
-            Box(Modifier.weight(1f)) { ShowOnTv(pc) }
-            PrimaryPill("Surprise ${if (pc.who == Catalog.TOGETHER) "us" else "me"}") { pc.surprise() }
+        // Or say it: the same mic as the remote.
+        Row(Modifier.fillMaxWidth().padding(top = 10.dp, bottom = 20.dp).clip(RoundedCornerShape(24.dp)).clickable { mic() }.padding(vertical = 10.dp),
+            horizontalArrangement = Arrangement.Center, verticalAlignment = Alignment.CenterVertically) {
+            Icon(Icons.Rounded.Mic, null, tint = if (listening) Palette.danger else Palette.muted, modifier = Modifier.size(18.dp))
+            Text(if (listening) "  Listening… tap to stop" else "  or say it — “something like Severance”", color = Palette.muted, fontSize = 13.sp)
         }
     }
 }
 
 @Composable
 private fun ResultsPicks(pc: PicksController) {
+    var confirmNever by remember { mutableStateOf<Int?>(null) }
+    confirmNever?.let { i ->
+        val name = pc.picks.getOrNull(i)?.title?.name ?: ""
+        androidx.compose.material3.AlertDialog(onDismissRequest = { confirmNever = null },
+            title = { Text("Never suggest $name?") },
+            text = { Text("It won't come up again for ${pc.who}.") },
+            confirmButton = { androidx.compose.material3.TextButton(onClick = { pc.never(i); confirmNever = null }) { Text("Never") } },
+            dismissButton = { androidx.compose.material3.TextButton(onClick = { confirmNever = null }) { Text("Cancel") } },
+            containerColor = Palette.surface, titleContentColor = Palette.text, textContentColor = Palette.muted)
+    }
     Column(Modifier.fillMaxSize().padding(horizontal = 20.dp, vertical = 8.dp)) {
         PicksTop(pc, pc.summary) { pc.back() }
-        Column(Modifier.weight(1f).verticalScroll(rememberScrollState())) {
-            pc.picks.forEachIndexed { i, p -> PickCard(pc, p, i) }
+        Column(Modifier.weight(1f).verticalScroll(rememberScrollState()).padding(top = 6.dp)) {
+            pc.picks.forEachIndexed { i, p -> key(p.title.key) { PickRow(pc, p, i, onNever = { confirmNever = i }) } }
         }
+        Text("Tap to play · swipe left for “not now” · hold for “never”", color = Palette.faint, fontSize = 12.sp,
+            modifier = Modifier.align(Alignment.CenterHorizontally).padding(top = 6.dp))
         Row(Modifier.fillMaxWidth().padding(top = 10.dp, bottom = 6.dp), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-            Box(Modifier.weight(1f).height(50.dp).card(RoundedCornerShape(25.dp)).clickable { pc.more() }, contentAlignment = Alignment.Center) {
-                Text("Show $PICKS more", color = Palette.text, fontSize = 14.sp, fontWeight = FontWeight.SemiBold)
+            Box(Modifier.weight(1f).height(48.dp).card(RoundedCornerShape(24.dp)).clickable { pc.more() }, contentAlignment = Alignment.Center) {
+                Text("$PICKS more", color = Palette.text, fontSize = 14.sp, fontWeight = FontWeight.SemiBold)
             }
-            Box(Modifier.weight(1f).height(50.dp).card(RoundedCornerShape(25.dp)).clickable { pc.back() }, contentAlignment = Alignment.Center) {
-                Text("Different mood", color = Palette.text, fontSize = 14.sp, fontWeight = FontWeight.SemiBold)
+            Box(Modifier.weight(1f).height(48.dp).card(RoundedCornerShape(24.dp)).clickable { pc.back() }, contentAlignment = Alignment.Center) {
+                Text("Other mood", color = Palette.text, fontSize = 14.sp, fontWeight = FontWeight.SemiBold)
             }
         }
-        Text("Data from TMDB · ratings and availability may vary", color = Palette.faint, fontSize = 11.sp, modifier = Modifier.align(Alignment.CenterHorizontally))
+        Text("Data from TMDB · availability may vary", color = Palette.faint, fontSize = 11.sp, modifier = Modifier.align(Alignment.CenterHorizontally))
     }
 }
 
+/** A pick: tap to play, swipe left for Not now (the next one slides in), hold for Never (asks first). */
+@OptIn(ExperimentalMaterial3Api::class, ExperimentalFoundationApi::class)
 @Composable
-private fun PickCard(pc: PicksController, p: Pick, i: Int) {
-    // Compact, so all five fit on a phone screen without scrolling.
-    Row(Modifier.fillMaxWidth().padding(top = 8.dp).card(RoundedCornerShape(18.dp)).padding(10.dp)) {
-        Box(Modifier.width(56.dp).height(84.dp).clip(RoundedCornerShape(9.dp)).background(Color(android.graphics.Color.parseColor(pc.color(p.title.name))))) {
-            val url = pc.posterUrl(p.title)
-            if (url != null) AsyncImage(model = url, contentDescription = null, contentScale = ContentScale.Crop, modifier = Modifier.fillMaxSize())
-            else Text(p.title.name, color = Color.White, fontSize = 11.sp, lineHeight = 13.sp, fontWeight = FontWeight.Bold, maxLines = 4,
-                overflow = TextOverflow.Ellipsis, modifier = Modifier.align(Alignment.BottomStart).padding(6.dp))
-        }
-        Spacer(Modifier.width(12.dp))
-        Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(3.dp)) {
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                Text(p.title.name, color = Palette.text, fontSize = 15.sp, fontWeight = FontWeight.SemiBold, maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.weight(1f, fill = false))
-                if (p.title.fresh) Text("NEW", color = Palette.onPrimary, fontSize = 9.sp, fontWeight = FontWeight.Bold,
-                    modifier = Modifier.padding(start = 6.dp).clip(RoundedCornerShape(4.dp)).background(Palette.primary).padding(horizontal = 4.dp, vertical = 1.dp))
+private fun PickRow(pc: PicksController, p: Pick, i: Int, onNever: () -> Unit) {
+    val haptic = LocalHapticFeedback.current
+    val state = rememberSwipeToDismissBoxState(confirmValueChange = { v ->
+        if (v == SwipeToDismissBoxValue.EndToStart) { haptic.performHapticFeedback(HapticFeedbackType.LongPress); pc.notNow(i) }
+        false   // the list itself replaces the pick
+    })
+    SwipeToDismissBox(state, enableDismissFromStartToEnd = false, backgroundContent = {
+        Box(Modifier.fillMaxSize().padding(vertical = 4.dp).clip(RoundedCornerShape(16.dp)).background(Palette.surface2).padding(end = 18.dp),
+            contentAlignment = Alignment.CenterEnd) { Text("Not now", color = Palette.muted, fontSize = 13.sp, fontWeight = FontWeight.SemiBold) }
+    }) {
+        Row(Modifier.fillMaxWidth().padding(vertical = 4.dp).clip(RoundedCornerShape(16.dp)).background(Palette.bg)
+            .combinedClickable(onClick = { pc.play(i) }, onLongClick = { haptic.performHapticFeedback(HapticFeedbackType.LongPress); onNever() })
+            .padding(vertical = 8.dp), verticalAlignment = Alignment.CenterVertically) {
+            Box(Modifier.width(56.dp).height(84.dp).clip(RoundedCornerShape(9.dp)).background(Color(android.graphics.Color.parseColor(pc.color(p.title.name))))) {
+                val url = pc.posterUrl(p.title)
+                if (url != null) AsyncImage(model = url, contentDescription = null, contentScale = ContentScale.Crop, modifier = Modifier.fillMaxSize())
+                else Text(p.title.name, color = Color.White, fontSize = 10.sp, lineHeight = 12.sp, fontWeight = FontWeight.Bold, maxLines = 4,
+                    overflow = TextOverflow.Ellipsis, modifier = Modifier.align(Alignment.BottomStart).padding(5.dp))
             }
-            Text(pc.meta(p.title), color = Palette.muted, fontSize = 11.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
-            Text(p.why, color = Palette.text, fontSize = 12.sp, lineHeight = 16.sp, maxLines = 2, overflow = TextOverflow.Ellipsis)
-            Row(horizontalArrangement = Arrangement.spacedBy(6.dp), modifier = Modifier.padding(top = 2.dp)) {
-                SmallPrimary("Play", Icons.Rounded.PlayArrow) { pc.play(i) }
-                Ghost("Not now") { pc.notNow(i) }
-                Ghost("Never", Icons.Rounded.ThumbDown) { pc.never(i) }
+            Column(Modifier.weight(1f).padding(start = 12.dp), verticalArrangement = Arrangement.spacedBy(3.dp)) {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Text(p.title.name, color = Palette.text, fontSize = 15.sp, fontWeight = FontWeight.SemiBold, maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.weight(1f, fill = false))
+                    if (p.title.fresh) Text("NEW", color = Palette.onPrimary, fontSize = 9.sp, fontWeight = FontWeight.Bold,
+                        modifier = Modifier.padding(start = 6.dp).clip(RoundedCornerShape(4.dp)).background(Palette.primary).padding(horizontal = 4.dp, vertical = 1.dp))
+                }
+                Text(pc.meta(p.title), color = Palette.muted, fontSize = 11.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                Text(p.why, color = Palette.text, fontSize = 12.5.sp, lineHeight = 16.sp, maxLines = 2, overflow = TextOverflow.Ellipsis)
             }
+            Icon(Icons.Rounded.PlayArrow, "Play", tint = Palette.faint, modifier = Modifier.padding(start = 6.dp).size(22.dp))
         }
     }
 }

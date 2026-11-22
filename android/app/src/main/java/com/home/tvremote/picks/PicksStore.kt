@@ -180,9 +180,14 @@ class PicksStore(private val prefs: SharedPreferences) {
     }
 
     /** Latest liked TV series for this person within 14 days: "Keep watching". */
-    fun keepWatching(who: String, now: Long = System.currentTimeMillis()): Session? =
-        sessions().lastOrNull { it.who == who && it.playedKey?.startsWith("tv:") == true &&
+    fun keepWatching(who: String, now: Long = System.currentTimeMillis()): Session? {
+        val dismissed = keepDismissed(who)
+        return sessions().lastOrNull { it.who == who && it.playedKey?.startsWith("tv:") == true && it.playedKey !in dismissed &&
             it.outcome in setOf("played", "watched") && now - (it.playedAt ?: 0) < 14 * DAY }
+    }
+    /** "Keep watching" suggestions dismissed with ✕ (per person; they don't come back). */
+    fun keepDismissed(who: String): Set<String> = prefs.getStringSet("keepDismissed:$who", emptySet()) ?: emptySet()
+    fun dismissKeep(who: String, key: String) = prefs.edit().putStringSet("keepDismissed:$who", keepDismissed(who) + key).apply()
 
     private fun edit(block: (JSONObject) -> Unit) { val j = learning(); block(j); save(j) }
     private fun trim(j: JSONObject, name: String, max: Int) {

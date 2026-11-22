@@ -4,12 +4,15 @@ import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.foundation.background
+import androidx.compose.material.icons.rounded.Forward10
+import androidx.compose.material.icons.rounded.Replay10
 import androidx.compose.foundation.gestures.awaitEachGesture
 import androidx.compose.foundation.gestures.awaitFirstDown
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -126,10 +129,10 @@ fun Touchpad(
             },
     ) {
         if (onSkip != null) {
-            Text("⟲ 10", color = Palette.faint, fontSize = 14.sp, fontWeight = FontWeight.SemiBold,
-                modifier = Modifier.align(Alignment.CenterStart).padding(start = 18.dp))
-            Text("10 ⟳", color = Palette.faint, fontSize = 14.sp, fontWeight = FontWeight.SemiBold,
-                modifier = Modifier.align(Alignment.CenterEnd).padding(end = 18.dp))
+            androidx.compose.material3.Icon(androidx.compose.material.icons.Icons.Rounded.Replay10, "Double-tap to go back 10 seconds", tint = Palette.faint,
+                modifier = Modifier.align(Alignment.CenterStart).padding(start = 16.dp).size(26.dp))
+            androidx.compose.material3.Icon(androidx.compose.material.icons.Icons.Rounded.Forward10, "Double-tap to skip 10 seconds", tint = Palette.faint,
+                modifier = Modifier.align(Alignment.CenterEnd).padding(end = 16.dp).size(26.dp))
         }
         // The skip ripple on the side that was tapped.
         AnimatedVisibility(ripple != null, enter = fadeIn(), exit = fadeOut(),

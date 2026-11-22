@@ -499,6 +499,18 @@ class PicksTest {
         assertNull(pc.resolvePerson("the office"))
     }
 
+    @Test fun keepWatchingCanBeDismissedForGood() {
+        val s = store()
+        val now = System.currentTimeMillis()
+        s.saveSession(Session(openedAt = now - 1000, who = "Alex", playedKey = "tv:1", playedName = "Severance", playedAt = now - 900, outcome = "watched"))
+        val pc = PicksController(s, FakeTv(), CoroutineScope(StandardTestDispatcher()), onDevice = null, netflixIdOf = null)
+        pc.openPicker(); pc.selectWho("Alex")
+        assertEquals("Severance", pc.keep?.playedName)
+        pc.dismissKeep()
+        assertNull(pc.keep)
+        assertNull(s.keepWatching("Alex"))
+    }
+
     private fun MockWebServer.takeRequestsPaths(): List<String> = (0 until requestCount).mapNotNull { takeRequest().path }
 
     // ---------------- AI fallback chain ----------------

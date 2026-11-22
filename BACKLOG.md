@@ -70,6 +70,18 @@ Measure it: time from opening to Play, quick-backs, "Not now" count per session.
 - To test on the TV: Search 1/2 (Netflix search page with "The Crown" filled in).
 - Next: Prime Video and Disney+ title/search links (same 3-try test).
 
+## v1.0.0 — the redesign (8 screens, "one hero per screen")
+- Remote browsing: slim "What should we watch?" line, app icons without labels, touchpad, quiet glyph row
+  (Back · Home · Timer · Mute), volume + mic. Remote watching (TV reports playing/paused): title + app + state +
+  "ends" (from picks), touchpad with double-tap skip icons.
+- TV off: one button + "or just say 'turn on the TV'" + mic.
+- Choose: six even mood tiles (Surprise is the sixth, dark), "On TV" switch in the corner, mic line instead of a text
+  box, Keep watching with ✕ (dismissed per person, for good).
+- Picks: rows (poster, meta, reason); tap = play, swipe left = Not now, hold = Never (confirm). "5 more" / "Other mood".
+- Settings replaces the menu under the TV name (This TV / Picks / More); Help & diagnostics holds the tools,
+  phrased as problems. Messages can carry an action ("Add" → services for "on Max — not one of your services").
+- Picks rows in Settings (People/Favourites/Services/Bedtimes/Advanced) still open the existing Picks settings page.
+
 ## v0.9.9
 - Skipping is a gesture now (user + "Jony" choice): double-tap the left/right half of the touchpad while watching
   (keep tapping for more, ripple shows ±N s); faint ⟲ 10 / 10 ⟳ at the edges. Skip-button row removed (touchpad
