@@ -366,8 +366,10 @@ class PicksTest {
                         .put(JSONObject().put("media_type", "movie").put("id", 346698).put("title", "Barbie").put("release_date", "2023-07-21"))))
                     p.startsWith("/3/search/person") -> json(JSONObject().put("results", org.json.JSONArray().put(JSONObject().put("id", 4491))))
                     p.startsWith("/3/person/4491/combined_credits") -> json(JSONObject().put("cast", org.json.JSONArray()
-                        .put(JSONObject().put("media_type", "tv").put("id", 1668).put("name", "Friends").put("vote_count", 9000).put("popularity", 90.0))
-                        .put(JSONObject().put("media_type", "tv").put("id", 70796).put("name", "The Morning Show").put("vote_count", 900).put("popularity", 50.0))))
+                        .put(JSONObject().put("media_type", "tv").put("id", 1668).put("name", "Friends").put("vote_count", 9000).put("popularity", 90.0).put("episode_count", 236).put("character", "Rachel Green"))
+                        .put(JSONObject().put("media_type", "tv").put("id", 70796).put("name", "The Morning Show").put("vote_count", 900).put("popularity", 50.0).put("episode_count", 30))
+                        .put(JSONObject().put("media_type", "tv").put("id", 59941).put("name", "The Tonight Show").put("vote_count", 400).put("popularity", 500.0).put("episode_count", 12).put("character", "Self"))
+                        .put(JSONObject().put("media_type", "tv").put("id", 1400).put("name", "Seinfeld guest").put("vote_count", 2500).put("popularity", 300.0).put("episode_count", 1))))
                     p.startsWith("/3/movie/346698/watch/providers") -> provider("Max")
                     p.startsWith("/3/tv/1668/watch/providers") -> provider("Netflix")
                     p.startsWith("/3/tv/70796/watch/providers") -> provider("Apple TV Plus")
@@ -384,7 +386,7 @@ class PicksTest {
             netflixIdOf = null, tmdbBase = server.url("/3").toString().trimEnd('/'))
         val r = pc.findAndOpen("barbie")
         assertTrue(r.toString(), r is PicksController.Found.Elsewhere)
-        assertEquals("Barbie is on Max, which isn't one of your services", pc.elsewhere(r as PicksController.Found.Elsewhere))
+        assertEquals("Barbie is on Max, which isn't one of your services — add Max in Picks settings if you have it", pc.elsewhere(r as PicksController.Found.Elsewhere))
     }
 
     @Test fun aiTurnsAPersonIntoPicksOnTheirServices() = runBlocking {
@@ -464,6 +466,13 @@ class PicksTest {
         val keysBefore = pc.picks.map { it.title.key }
         assertTrue(pc.picks.toString(), pc.picks.any { it.title.key == "tv:6" && it.why == "Warm, witty and short." })
         assertEquals(keysBefore, pc.picks.map { it.title.key })                   // same picks, same order
+    }
+
+    @Test fun peopleMeansRealRolesAndCanBeSeveral() {
+        val pc = controller()
+        assertEquals("jennifer aniston and adam sandler" to Kind.Movie, pc.personIn("movies with jennifer aniston and adam sandler"))
+        assertEquals("Barbie is on Max, which isn't one of your services — add Max in Picks settings if you have it",
+            pc.elsewhere(PicksController.Found.Elsewhere("Barbie", listOf("HBO Max Amazon Channel", "TNT", "HBO Max"))))
     }
 
     private fun MockWebServer.takeRequestsPaths(): List<String> = (0 until requestCount).mapNotNull { takeRequest().path }

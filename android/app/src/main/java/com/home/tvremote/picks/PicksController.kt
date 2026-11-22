@@ -8,6 +8,7 @@ import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.async
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withTimeoutOrNull
 import org.json.JSONArray
@@ -397,7 +398,10 @@ class PicksController(
         val tmdb = Tmdb(store.tmdbKey, tmdbBase)
         val mine = Catalog.SERVICES.filter { it.name in store.services }
         val found = runCatching { tmdb.search(query) }.getOrDefault(emptyList()).take(5)
-        val ranked = found.sortedByDescending { if (norm(it.name) == norm(query)) 1 else 0 }.filter { !exactOnly || norm(it.name) == norm(query) }
+        // An exact name match means they meant that title: only it, or "it's on …". (Otherwise "play Barbie" opened
+        // "Barbie: Dreamhouse Adventures" because that one happened to be on their services.)
+        val exact = found.filter { norm(it.name) == norm(query) }
+        val ranked = if (exact.isNotEmpty() || exactOnly) exact else found
         for (t in ranked) {
             val e = runCatching { tmdb.enrich(t, mine) }.getOrDefault(t)
             val svcName = e.service?.takeIf { serviceHint == null || it == serviceHint }
@@ -434,9 +438,11 @@ class PicksController(
         val mine = Catalog.SERVICES.filter { it.name in store.services }
         suspend fun onMine(ts: List<Title>) = ts.take(10).map { runCatching { tmdb.enrich(it, mine) }.getOrDefault(it) }.filter { it.service != null }
         val titles = j.optJSONArray("titles")?.let { a -> (0 until a.length()).map { a.getString(it) } }.orEmpty().filter { it.isNotBlank() }
-        val personName = j.optString("person").takeIf { it.isNotBlank() && it != "null" }
+        val personName = j.optJSONArray("person")?.let { a -> (0 until a.length()).joinToString(" and ") { a.getString(it) } }?.takeIf { it.isNotBlank() }
+            ?: j.optString("person").takeIf { it.isNotBlank() && it != "null" }
         // A named person wins: the model sometimes says "title" and invents films for "a movie with <actor>".
-        if (personName != null && j.optString("kind") != "description") return showPerson(personName, personIn(text)?.second)
+        if (personName != null && j.optString("kind") != "description") return showPerson(personName, personIn(text)?.second
+            ?: if (Regex("\\b(movie|film)s?\\b", RegexOption.IGNORE_CASE).containsMatchIn(text)) Kind.Movie else null)
         return when (j.optString("kind")) {
             "title" -> titles.firstOrNull()?.let { name ->
                 when (val r = findAndOpen(name)) {
@@ -465,29 +471,46 @@ class PicksController(
 
     /** "a movie with Jennifer Aniston", "shows starring Pedro Pascal" → (name, film/series/either). No AI needed. */
     fun personIn(text: String): Pair<String, Kind?>? {
-        val m = Regex("(?:with|starring|featuring|directed by|by) ([a-z][a-z .'-]{3,40})$", RegexOption.IGNORE_CASE).find(text.trim()) ?: return null
-        val name = m.groupValues[1].trim().takeIf { it.split(' ').size in 2..4 } ?: return null
+        val m = Regex("(?:with|starring|featuring|directed by|by) ([a-z][a-z .'&-]{3,80})$", RegexOption.IGNORE_CASE).find(text.trim()) ?: return null
+        val name = m.groupValues[1].trim().takeIf { n -> splitPeople(n).all { it.split(' ').size in 2..4 } } ?: return null
         val kind = when { Regex("\\b(movie|film)s?\\b", RegexOption.IGNORE_CASE).containsMatchIn(text) -> Kind.Movie
             Regex("\\b(shows?|series)\\b", RegexOption.IGNORE_CASE).containsMatchIn(text) -> Kind.Tv; else -> null }
         return name to kind
     }
 
-    /** A person's titles on the household's services, shown as picks. Returns a message when there are none. */
-    suspend fun showPerson(person: String, kind: Kind? = null): String? {
-        if (!store.isSetUp || store.tmdbKey.isBlank()) return "Set up picks first"
+    private fun splitPeople(s: String) = s.split(Regex(" and | & |, ")).map { it.trim() }.filter { it.isNotEmpty() }
+    private fun titleCase(s: String) = s.split(' ').joinToString(" ") { w -> w.replaceFirstChar { it.uppercase() } }
+
+    /**
+     * A person's titles (or, for "A and B", titles with all of them) on the household's services, best known first,
+     * shown as picks. Returns a message when there are none.
+     */
+    suspend fun showPerson(person: String, kind: Kind? = null): String? = kotlinx.coroutines.coroutineScope {
+        if (!store.isSetUp || store.tmdbKey.isBlank()) return@coroutineScope "Set up picks first"
         val tmdb = Tmdb(store.tmdbKey, tmdbBase)
         val mine = Catalog.SERVICES.filter { it.name in store.services }
-        val credits = runCatching { tmdb.personCredits(person) }.getOrDefault(emptyList()).filter { kind == null || it.kind == kind }
-        val list = credits.take(10).map { runCatching { tmdb.enrich(it, mine) }.getOrDefault(it) }.filter { it.service != null }
-        tv.log("VOICE person “$person” (${kind ?: "any"}) → ${list.joinToString { it.name }.ifEmpty { "nothing on your services" }}")
-        if (list.isEmpty()) return "Nothing with $person on your services"
-        showList(list, "With ${person.split(' ').joinToString(" ") { w -> w.replaceFirstChar { it.uppercase() } }}") { "With $person." }
-        return null
+        val people = splitPeople(person)
+        val each = people.map { p -> async { runCatching { tmdb.personCredits(p) }.getOrDefault(emptyList()).filter { kind == null || it.kind == kind } } }.map { it.await() }
+        val shared = each.drop(1).fold(each.firstOrNull().orEmpty()) { acc, l -> acc.filter { t -> l.any { it.key == t.key } } }
+        // Check where each is streaming, all at once.
+        val list = shared.take(20).map { t -> async { runCatching { tmdb.enrich(t, mine) }.getOrDefault(t) } }.map { it.await() }.filter { it.service != null }
+        val who = people.joinToString(" and ") { titleCase(it) }
+        tv.log("VOICE person “$who” (${kind ?: "any"}) → ${list.joinToString { it.name }.ifEmpty { "nothing on your services (${shared.size} found)" }}")
+        if (list.isEmpty()) return@coroutineScope if (shared.isEmpty()) "Couldn't find ${if (people.size > 1) "anything with both" else "titles with $who"}"
+            else "Nothing with $who on your services right now"
+        showList(list, "With $who") { t -> "With $who${if (t.year.isNotEmpty()) " · ${t.year}" else ""}." }
+        null
     }
 
-    fun elsewhere(r: Found.Elsewhere): String =
-        if (r.services.isEmpty()) "${r.name} isn't on a subscription service in the US"
-        else "${r.name} is on ${r.services.take(2).joinToString(" and ")}, which isn't one of your services"
+    /** "Barbie is on Max, which isn't one of your services". Provider names cleaned up ("HBO Max Amazon Channel" → Max). */
+    fun elsewhere(r: Found.Elsewhere): String {
+        val known = r.services.mapNotNull { n -> Catalog.SERVICES.firstOrNull { s -> s.tmdbNames.any { it.equals(n, true) } }?.name }.distinct()
+        val others = r.services.filter { n -> !n.contains("Channel", true) && !n.contains("Roku", true) && Catalog.SERVICES.none { s -> s.tmdbNames.any { it.equals(n, true) } } }
+        val names = (known.ifEmpty { others }).distinct().take(2)   // a streaming service we know beats cable channels (TNT…)
+        return if (names.isEmpty()) "${r.name} isn't on a subscription service in the US (only to rent or buy)"
+        else "${r.name} is on ${names.joinToString(" and ")}, which isn't one of your services" +
+            (known.firstOrNull()?.let { " — add $it in Picks settings if you have it" } ?: "")
+    }
 
     /** Shows a ready-made list (a person's films, titles matching a description) on the picks screen. */
     private fun showList(list: List<Title>, label: String, why: (Title) -> String) {

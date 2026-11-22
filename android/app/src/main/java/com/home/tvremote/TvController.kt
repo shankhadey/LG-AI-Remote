@@ -379,7 +379,12 @@ class TvController(app: Application) : AndroidViewModel(app), TvActions {
      */
     fun tap() {
         val pointedRecently = System.currentTimeMillis() - lastPointAt < 3000
-        if (!pointedRecently && inPlayback) togglePlayback() else sendTap(tapMethod)
+        when {
+            !pointedRecently && inPlayback -> togglePlayback()
+            // Pointed at something while watching (e.g. the timeline): OK would just pause, so click where the pointer is.
+            inPlayback -> sendTap("click")
+            else -> sendTap(tapMethod)
+        }
     }
 
     private fun togglePlayback() {
@@ -682,7 +687,10 @@ class TvController(app: Application) : AndroidViewModel(app), TvActions {
                 else -> null
             }
         }
-        return (listOf(name) + others).map { it.trim() }.filter { it.isNotEmpty() }.distinctBy { it.lowercase() }.take(4)
+        val primary = name.trim()
+        return (listOf(primary) + others).map { it.trim().trimStart('(', '"', '\'', '-', ' ') }.filter { it.isNotEmpty() }
+            .filter { it == primary || !primary.lowercase().contains(it.lowercase()) }
+            .distinctBy { it.lowercase() }.take(4)
     }
 
     /** Picker voice: anything that isn't a request for recommendations runs as a normal command. */
@@ -749,15 +757,18 @@ class TvController(app: Application) : AndroidViewModel(app), TvActions {
             is Command.OpenApp -> launch(cmd.app)
             is Command.Search -> if (!cmd.title || cmd.app?.id?.startsWith("youtube") == true) search(cmd.query, cmd.app) else viewModelScope.launch {
                 // "play / watch X": a show or film on their services first.
+                picks.personIn(cmd.query)?.let { (person, kind) ->
+                    say("Looking for ${person}…"); picks.showPerson(person, kind)?.let { say(it, error = true) }; return@launch
+                }
                 say("Looking for ${cmd.query}…")
                 val hint = cmd.app?.let { a -> com.home.tvremote.picks.Catalog.SERVICES.firstOrNull { s -> picks.appIdFor(s) == a.id }?.name }
                 when (val r = picks.findAndOpen(cmd.query, hint)) {
                     com.home.tvremote.picks.PicksController.Found.Opened -> {}
                     is com.home.tvremote.picks.PicksController.Found.Elsewhere -> say(picks.elsewhere(r), error = true)
                     com.home.tvremote.picks.PicksController.Found.Nothing -> {
-                        // Not a title: maybe a person or a description. Last resort: YouTube, saying so.
+                        // Not a show or film anywhere: maybe a description; last resort YouTube (music, clips), saying so.
                         val msg = picks.interpret(cmd.query)
-                        if (msg != null) { search(cmd.query, cmd.app); say("Not a show or film on your services — searching YouTube") }
+                        if (msg != null) { search(cmd.query, cmd.app); say("“${cmd.query}” isn't a show or film — searching YouTube") }
                     }
                 }
             }
@@ -765,8 +776,9 @@ class TvController(app: Application) : AndroidViewModel(app), TvActions {
                 // "open X" where X isn't an app: maybe it's a show or film, a person, or a description.
                 say("Looking for ${cmd.name}…")
                 // Misheard titles: try each of the recognizer's guesses for an exact title before settling.
+                // Your first guess exactly, then the recognizer's other guesses exactly, then the first guess loosely.
                 val names = titleCandidates(cmd.name)
-                for (n in names.drop(1)) if (picks.findAndOpen(n, exactOnly = true) == com.home.tvremote.picks.PicksController.Found.Opened) return@launch
+                for (n in names) if (picks.findAndOpen(n, exactOnly = true) == com.home.tvremote.picks.PicksController.Found.Opened) return@launch
                 when (val r = picks.findAndOpen(cmd.name)) {
                     com.home.tvremote.picks.PicksController.Found.Opened -> {}
                     is com.home.tvremote.picks.PicksController.Found.Elsewhere -> say(picks.elsewhere(r), error = true)

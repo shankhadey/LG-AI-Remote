@@ -70,6 +70,19 @@ Measure it: time from opening to Play, quick-backs, "Not now" count per session.
 - To test on the TV: Search 1/2 (Netflix search page with "The Crown" filled in).
 - Next: Prime Video and Disney+ title/search links (same 3-try test).
 
+## v0.9.6 (tests of 21 Nov evening, user was still on 0.9.4)
+- People: credits were talk shows and guest spots (Bryan Cranston → Family Guy, Seinfeld…; Aniston's 13 talk shows
+  crowded out her films). Now real roles only (no "Self"/host, TV ≥ 4 episodes, film billing ≤ 8), most-voted first,
+  film/series filter before cutting, availability checked in parallel. "A and B" = titles with both (AI arrays too).
+  Live: Cranston → Breaking Bad, John Carter, Total Recall…; Aniston (films) → Murder Mystery 1 & 2, Dumplin'.
+- "play Barbie": exact title match wins → "Barbie is on Max, which isn't one of your services — add Max…" (was opening
+  Barbie: Dreamhouse Adventures / YouTube). YouTube only for things that aren't shows or films.
+- "open Stranger Things" opened "Stranger" (from the guess "open stranger thanks" → "thanks" stripped). Now: your first
+  guess exactly, then other guesses exactly (skipping ones that are part of it), then loosely.
+- "play/watch … with <person>" goes to people, not titles.
+- Clicking Netflix's timeline paused instead: taps while watching after pointing now send a real click, not OK.
+- Pending: simulated LG TV for end-to-end tests before builds (user asked; not started).
+
 ## v0.9.5: skipping while watching
 - ⟲ 10 s / 10 s ⟳ buttons above the touchpad while something plays (hold = keep skipping; LEFT/RIGHT arrows).
 - Voice: "skip 5 minutes", "go back 30 seconds" (10-s arrow presses, max 10 min). Jump to a spot: pause, point at the

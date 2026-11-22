@@ -97,9 +97,18 @@ class Tmdb(private val key: String, private val base: String = "https://api.them
     suspend fun personCredits(name: String): List<Title> {
         val p = get("/search/person", mapOf("query" to name)).optJSONArray("results")?.optJSONObject(0) ?: return emptyList()
         val arr = get("/person/${p.optInt("id")}/combined_credits").optJSONArray("cast") ?: JSONArray()
+        // Real roles only: not talk shows or appearances as themselves, not one-off guest spots, not tiny film parts.
+        // (Raw credits put Jimmy Fallon and a Seinfeld guest spot ahead of Friends and Breaking Bad.)
+        val junkTv = setOf(10763, 10764, 10767)
         return (0 until arr.length()).map { arr.getJSONObject(it) }.mapNotNull { o ->
-            when (o.optString("media_type")) { "movie" -> parse(Kind.Movie, o); "tv" -> parse(Kind.Tv, o); else -> null }
-        }.filter { it.votes >= 20 }.distinctBy { it.key }.sortedByDescending { it.popularity }.take(15)
+            val character = o.optString("character").lowercase()
+            if (character.contains("self") || character.contains("host") || character.contains("narrator") && o.optString("media_type") == "tv") return@mapNotNull null
+            when (o.optString("media_type")) {
+                "movie" -> parse(Kind.Movie, o).takeIf { o.optInt("order", 99) <= 8 }
+                "tv" -> parse(Kind.Tv, o).takeIf { o.optInt("episode_count", 0) >= 4 && it.genres.none { g -> g in junkTv } }
+                else -> null
+            }
+        }.filter { it.votes >= 50 }.distinctBy { it.key }.sortedByDescending { it.votes }.take(30)
     }
 
     /** Runtime (movie length or typical episode length) and which of the user's services has it. */
