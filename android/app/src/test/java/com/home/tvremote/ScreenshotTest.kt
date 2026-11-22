@@ -203,6 +203,21 @@ class ScreenshotTest {
     }
 
     @Test fun pairing() { shot { PairingScreen(controller()) } }
+    // ---- frames for the demo video (generic names, no posters) ----
+    @Test fun demoRemote() { Palette.dark = false; val tv = remoteTv().apply { foregroundApp = "com.webos.app.home" }; shot { RemoteScreen(tv) { true } } }
+    @Test fun demoListening() { Palette.dark = false; shot { ListeningPanel("Something light for the two of us", 0.8f, {}, {}) } }
+    @Test fun demoPlaying() {
+        Palette.dark = false
+        val tv = remoteTv().apply { foregroundApp = "com.apple.appletv"; mediaState = "playing"; picks.nowShowing = "Ted Lasso" to null; picks.nowShowingApp = "com.apple.appletv"; say("Opening Ted Lasso on Apple TV+") }
+        shot { RemoteScreen(tv) { true } }
+    }
+    @Test fun demoExportTvPage() {
+        val dir = java.io.File("build/demo-video"); dir.mkdirs()   // the TV page + its data, for rendering the demo video
+        java.io.File(dir, "page.html").writeText(com.home.tvremote.picks.PicksWeb.PAGE)
+        java.io.File(dir, "state_picks.json").writeText(picks(com.home.tvremote.picks.Step.Results).webState())
+        java.io.File(dir, "state_choose.json").writeText(picks(com.home.tvremote.picks.Step.Choose).webState())
+    }
+
     // Onboarding: welcome (first launch), turn-on help (only after a failed turn-on), nothing found
     @Test fun welcomeDark() { Palette.dark = true; shot { com.home.tvremote.ui.WelcomeScreen {} } }
     @Test fun welcomeLight() { Palette.dark = false; shot { com.home.tvremote.ui.WelcomeScreen {} } }
