@@ -70,6 +70,18 @@ Measure it: time from opening to Play, quick-backs, "Not now" count per session.
 - To test on the TV: Search 1/2 (Netflix search page with "The Crown" filled in).
 - Next: Prime Video and Disney+ title/search links (same 3-try test).
 
+## v1.4.2 — after the 22 Nov turn-on failures (TV-side, not the app)
+- A/B: the 1.3.3 code failed the same way (9 min standby) → not the app version. With the TV on, its network answered
+  slowly, timed out and dropped → TV network stuck. Likely trigger: turned off from the app while Netflix was starting
+  (suspend mid-launch with Quick Start+); stays stuck because Quick Start+ never fully restarts the TV.
+- Protection: turning off (button or voice) while an app is starting (opened < 8 s ago, or play state starting/loaded)
+  presses Home first, waits for Home (≤ 2.5 s) + 0.6 s, then turns off. Logged "POWER off while X was starting".
+  Not applied to the sleep timer's turn-off (runs mid-show, not mid-launch).
+- Unstable TV network: 2+ request timeouts within 30 s → plain message (restart the TV fully) + "NETWORK" in Diagnostics.
+- API keys (TMDB, Groq) moved to secrets.xml, excluded from Android cloud backup and device transfer (found when a
+  reinstall restored everything). Older keys migrate automatically.
+- To confirm on the TV: reproduce (open Netflix, off within 1–2 s, wait 5 min, on) on 1.3.3 vs 1.4.2.
+
 ## v1.4.1 — turn-on failed on 1.4.0 (22 Nov, 11:24) — open
 - 468 wake packets over 45 s, the TV never appeared on the network. First failed wake in all diagnostics (every
   earlier one worked: ~3–5 s with Quick Start+, ~17 s without). Wake code unchanged since 1.2.1 (diffed).

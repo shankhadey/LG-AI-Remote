@@ -360,6 +360,16 @@ class PicksTest {
         assertFalse("found by TMDB ID: TMDB isn't asked", asked)
     }
 
+    @Test fun apiKeysMoveOutOfTheBackedUpFile() {
+        val main = FakePrefs(); val secrets = FakePrefs()
+        main.edit().putString("tmdbKey", "old-tmdb").putString("groqKey", "old-groq").apply()   // saved by an older version
+        val st = com.home.tvremote.picks.PicksStore(main, secrets)
+        assertEquals("old-tmdb", st.tmdbKey); assertEquals("old-groq", st.groqKey)
+        assertNull("gone from the backed-up file", main.getString("tmdbKey", null))
+        assertEquals("old-tmdb", secrets.getString("tmdbKey", null))
+        st.tmdbKey = "new"; assertEquals("new", secrets.getString("tmdbKey", null)); assertNull(main.getString("tmdbKey", null))
+    }
+
     @Test fun aSavedLinkFormatThatNoLongerExistsFallsBack() {
         val st = store()
         st.setLinkVariant("Prime Video", "P3")   // chosen in 1.2.1, dropped 22 Nov

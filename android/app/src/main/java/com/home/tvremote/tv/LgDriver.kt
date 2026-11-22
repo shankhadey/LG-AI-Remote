@@ -16,6 +16,7 @@ class LgDriver(val tv: LgTv) : TvDriver {
     override suspend fun connect(onPrompt: () -> Unit) = tv.connect(onPrompt)
     override fun close() = tv.close()
     override fun dispose() = tv.dispose()
+    override fun onUnstable(cb: () -> Unit) { tv.onTimeout = cb }
 
     override suspend fun powerState(): String? = req("com.webos.service.tvpower/power/getPowerState").optString("state").ifEmpty { null }
     override suspend fun turnOff() { req("system/turnOff") }

@@ -171,6 +171,41 @@ class SimulatedTvTest {
         eventually("TV on, help reset", tv, ms = 10_000) { !tv.tvOff && tv.turnOnFailures == 0 }
     }
 
+    // ---------------- turning off while an app is starting ----------------
+
+    @Test fun turnOffWhileAnAppIsStarting_goesHomeFirst() {
+        // 22 Nov: turned off while Netflix was starting; afterwards the TV wouldn't wake or answer properly.
+        val tv = openApp()
+        eventually("connects", tv) { tv.connected && sim.uris().any { it.endsWith("com.webos.media/getForegroundAppInfo") } }
+        onMain { tv.openApp("netflix", "Netflix") }
+        eventually("Netflix opening", tv) { sim.foreground == "netflix" && tv.foregroundApp == "netflix" }
+        onMain { tv.power() }
+        eventually("turned off", tv, ms = 8000) { sim.sent("system/turnOff").isNotEmpty() }
+        assertTrue("Home pressed before turning off", sim.pointer.contains("type:button name:HOME"))
+        assertTrue(onMain { tv.diagnostics() }.contains("Home first, then off"))
+    }
+
+    @Test fun turnOffWhileWatching_turnsStraightOff() {
+        val tv = openApp()
+        eventually("connects", tv) { tv.connected && sim.uris().any { it.endsWith("com.webos.media/getForegroundAppInfo") } }
+        onMain { tv.startupWindowMs = 200 }
+        sim.startsPlaying("netflix")
+        eventually("watching", tv) { tv.inPlayback }
+        Thread.sleep(500)
+        onMain { tv.power() }
+        eventually("turned off", tv) { sim.sent("system/turnOff").isNotEmpty() }
+        assertFalse("no Home detour while just watching", sim.pointer.contains("type:button name:HOME"))
+    }
+
+    @Test fun tvStopsAnswering_appSaysTheNetworkIsUnstable() {
+        val tv = openApp()
+        eventually("connects", tv) { tv.connected }
+        sim.stuck = true
+        onMain { tv.run(com.home.tvremote.voice.Command.VolumeSet(10)); tv.run(com.home.tvremote.voice.Command.VolumeSet(12)) }
+        eventually("says the TV's network is unstable", tv, ms = 15_000) { tv.feedback?.startsWith("The TV's network connection is unstable") == true }
+        assertTrue(onMain { tv.diagnostics() }.contains("NETWORK TV not answering in time"))
+    }
+
     // ---------------- using a different TV ----------------
 
     @Test fun differentTv_backReturnsToTheCurrentTv() {

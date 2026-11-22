@@ -32,6 +32,8 @@ class SimulatedLgTv {
     @Volatile var wakeDelayMs = 300L
     /** False: the TV ignores Wake-on-LAN ("Turn on via Wi-Fi" off, or the router drops it). */
     @Volatile var wakeWorks = true
+    /** True: the TV takes requests but never answers (its network stuck after a bad suspend, 22 Nov). */
+    @Volatile var stuck = false
 
     // ---- what the app sent ----
     val requests = CopyOnWriteArrayList<JSONObject>()
@@ -48,7 +50,9 @@ class SimulatedLgTv {
         pointerServer.dispatcher = object : Dispatcher() {
             override fun dispatch(request: RecordedRequest) = MockResponse().withWebSocketUpgrade(object : WebSocketListener() {
                 override fun onMessage(webSocket: WebSocket, text: String) {
-                    pointer += text.lines().filter { it.startsWith("type:") || it.startsWith("name:") }.joinToString(" ")
+                    val line = text.lines().filter { it.startsWith("type:") || it.startsWith("name:") }.joinToString(" ")
+                    pointer += line
+                    if (line == "type:button name:HOME") { foreground = "com.webos.app.home"; playState = null; pushForeground() }
                 }
             })
         }
@@ -81,6 +85,7 @@ class SimulatedLgTv {
             if (!on && hangPairingWhenOff) return            // standby: silence
             reply(ws, id, JSONObject().put("client-key", "SIMKEY"), "registered"); return
         }
+        if (stuck) return
         if (type == "subscribe") subs.getOrPut(uri) { CopyOnWriteArrayList() } += ws to id
         when {
             uri.endsWith("tvpower/power/getPowerState") -> reply(ws, id, powerPayload())

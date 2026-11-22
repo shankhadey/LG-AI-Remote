@@ -51,7 +51,16 @@ data class Session(
  * Settings and learning for picks, in SharedPreferences. Everything stays on the phone.
  * Learning is per person ("who"), with "Together" as its own profile.
  */
-class PicksStore(private val prefs: SharedPreferences) {
+class PicksStore(private val prefs: SharedPreferences,
+                 /** API keys, kept in their own file so Android's cloud backup leaves them out (see backup_rules.xml). */
+                 private val secrets: SharedPreferences = prefs) {
+    /** Keys saved by older versions in the main file move to [secrets] (and out of the backed-up file). */
+    private fun secret(k: String): String {
+        if (secrets !== prefs && !secrets.contains(k) && prefs.contains(k)) {
+            secrets.edit().putString(k, prefs.getString(k, "")).apply(); prefs.edit().remove(k).apply()
+        }
+        return secrets.getString(k, "") ?: ""
+    }
 
     // ---- settings ----------------------------------------------------------
     var people: List<String>
@@ -79,11 +88,11 @@ class PicksStore(private val prefs: SharedPreferences) {
         get() = prefs.getInt("bedWeekend", 30)
         set(v) = prefs.edit().putInt("bedWeekend", v).apply()
     var tmdbKey: String
-        get() = prefs.getString("tmdbKey", "")!!
-        set(v) = prefs.edit().putString("tmdbKey", v.trim()).apply()
+        get() = secret("tmdbKey")
+        set(v) = secrets.edit().putString("tmdbKey", v.trim()).apply()
     var groqKey: String
-        get() = prefs.getString("groqKey", "")!!
-        set(v) = prefs.edit().putString("groqKey", v.trim()).apply()
+        get() = secret("groqKey")
+        set(v) = secrets.edit().putString("groqKey", v.trim()).apply()
     var groqModel: String
         get() = prefs.getString("groqModel", "").orEmpty().ifEmpty { DEFAULT_MODEL }
         set(v) = prefs.edit().putString("groqModel", v.trim()).apply()

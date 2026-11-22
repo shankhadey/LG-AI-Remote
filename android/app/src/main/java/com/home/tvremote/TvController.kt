@@ -46,7 +46,7 @@ class TvController(app: Application) : AndroidViewModel(app), TvActions {
         // Kept across app restarts, so Diagnostics shows what happened before the app was reopened.
         prefs.getString("events", "").orEmpty().split('\n').filter { it.isNotBlank() })
     /** "What should we watch?" (declared early: onForeground() forwards to it). */
-    val picks = PicksController(PicksStore(app.getSharedPreferences("picks", Context.MODE_PRIVATE)), this, viewModelScope)
+    val picks = PicksController(PicksStore(app.getSharedPreferences("picks", Context.MODE_PRIVATE), app.getSharedPreferences("secrets", Context.MODE_PRIVATE)), this, viewModelScope)
 
     var screen by mutableStateOf(if (prefs.getString("ip", null) != null) Screen.Remote else Screen.Setup)
     var tvName by mutableStateOf(prefs.getString("name", "$brand TV")!!)
@@ -240,7 +240,21 @@ class TvController(app: Application) : AndroidViewModel(app), TvActions {
             event("DROPPED connection")
             if (!waking && System.currentTimeMillis() - offAt > 20_000) scheduleReconnect()
         },
-    ).also { tv = it }
+    ).also { tv = it; it.onUnstable(::tvUnstable) }
+
+    // 22 Nov: after a bad suspend the TV answered slowly or not at all until fully restarted. Say so instead of just being slow.
+    private val timeouts = java.util.concurrent.ConcurrentLinkedDeque<Long>()
+    @Volatile private var unstableSaidAt = 0L
+    private fun tvUnstable() {
+        val now = System.currentTimeMillis()
+        timeouts.addLast(now); while (timeouts.size > 5) timeouts.pollFirst()
+        if (timeouts.count { now - it < 30_000 } < 2 || now - unstableSaidAt < 10 * 60_000) return
+        unstableSaidAt = now
+        viewModelScope.launch {
+            event("NETWORK TV not answering in time (2+ timeouts in 30 s)")
+            say("The TV's network connection is unstable. If this keeps happening, restart the TV fully (turn off Quick Start+, then off and on, or unplug it for a minute).", error = true)
+        }
+    }
 
     fun connect(pairing: Boolean = false) {
         val ip = prefs.getString("ip", null) ?: return
@@ -327,6 +341,7 @@ class TvController(app: Application) : AndroidViewModel(app), TvActions {
                 // live-TV preview tile (com.webos.app.livedmost), which were taken for "watching" (22 Nov, 1.2.1).
                 val front = foregroundApp
                 val item = items.firstOrNull { it.first == front }?.takeIf { front != null && front !in SYSTEM_APPS }
+                frontPlayState = item?.second
                 mediaState = item?.second?.takeIf { it == "playing" || it == "paused" }
             }
         }
@@ -361,6 +376,7 @@ class TvController(app: Application) : AndroidViewModel(app), TvActions {
 
     private fun onForeground(appId: String) {
         if (appId.isEmpty() || appId == foregroundApp) return
+        if (appId !in SYSTEM_APPS) { appStartedAt = System.currentTimeMillis(); frontPlayState = null }
         foregroundApp = appId
         assumePlaying = true
         picks.onForeground(appId)
@@ -500,6 +516,7 @@ class TvController(app: Application) : AndroidViewModel(app), TvActions {
      */
     fun launch(app: TvApp) {
         say("Opening ${app.title}")
+        appStartedAt = System.currentTimeMillis()
         // Runs beside the command queue (not in it) so checking the result never holds up other buttons.
         viewModelScope.launch {
             val t = runCatching { tv() }.getOrElse { showError(it); return@launch }
@@ -663,9 +680,31 @@ class TvController(app: Application) : AndroidViewModel(app), TvActions {
     }
 
     /** Turn off, then drop the connection: the TV goes away without closing it, which left a stale socket. */
+    // ---- turning off while an app is still starting ----
+    // 22 Nov: the TV was turned off while Netflix was starting; afterwards it wouldn't wake over Wi-Fi and its network
+    // answered slowly or not at all, until a full restart. Suspending (Quick Start+) mid-launch is the likely trigger.
+    // So: if an app is starting, go Home first, let it settle, then turn off.
+    @Volatile private var appStartedAt = 0L
+    @Volatile private var frontPlayState: String? = null
+    /** How long after an app opens it still counts as starting (tests shorten it). */
+    internal var startupWindowMs = 8_000L
+    private fun appStarting(): Boolean {
+        val front = foregroundApp ?: return false
+        if (front in SYSTEM_APPS) return false
+        return System.currentTimeMillis() - appStartedAt < startupWindowMs || frontPlayState in setOf("starting", "loaded")
+    }
+
     private fun turnOff() {
+        val starting = appStarting(); val front = foregroundApp
         say("Turning off"); tvOff = true; foregroundApp = null; offAt = System.currentTimeMillis(); connEpoch++
         enqueue {
+            if (starting) {
+                event("POWER off while $front was starting: Home first, then off")
+                runCatching { tv().button("HOME") }
+                val until = System.currentTimeMillis() + 2500
+                while (System.currentTimeMillis() < until && foregroundApp != "com.webos.app.home") kotlinx.coroutines.delay(100)
+                kotlinx.coroutines.delay(600)   // let the app finish closing
+            }
             runCatching { tv().turnOff() }
             tv?.close(); connected = false
         }

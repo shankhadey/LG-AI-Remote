@@ -21,6 +21,8 @@ interface TvDriver {
     fun close()
     /** Closes for good: the app is done with this TV object; nothing may reopen it (a late request used to). */
     fun dispose() = close()
+    /** Called when the TV doesn't answer a request in time (a sign its network connection is unstable). */
+    fun onUnstable(cb: () -> Unit) {}
 
     // power
     suspend fun powerState(): String?

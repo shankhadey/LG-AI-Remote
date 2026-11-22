@@ -70,6 +70,8 @@ class LgTv(
 
     /** Set by [dispose]: this object is finished; requests fail instead of reconnecting. */
     @Volatile private var disposed = false
+    /** Told when a request times out. */
+    @Volatile var onTimeout: (() -> Unit)? = null
     fun dispose() { disposed = true; close() }
 
     suspend fun connect(onPrompt: () -> Unit = {}) {
@@ -207,7 +209,7 @@ class LgTv(
         return try {
             withTimeout(6000) { d.await() }.also { log("OK  $what → ${it.toString().take(300)}", started) }
         } catch (e: TimeoutCancellationException) {
-            pending.remove(id); log("TIMEOUT  $what", started); throw TvException("The TV didn't respond")
+            pending.remove(id); log("TIMEOUT  $what", started); onTimeout?.invoke(); throw TvException("The TV didn't respond")
         } catch (e: Exception) {
             log("ERR $what → ${e.message}", started); throw e
         }
