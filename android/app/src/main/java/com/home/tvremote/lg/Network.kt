@@ -143,7 +143,8 @@ object Discovery {
 
     private fun describe(ip: String, location: String?, brand: String = "LG"): FoundTv {
         val xml = location?.takeIf { it.isNotEmpty() }?.let { fetch(it) } ?: ""
-        return FoundTv(ip, tag(xml, "friendlyName").ifEmpty { "$brand TV" }, tag(xml, "modelName"), brand)
+        // "[LG] webOS TV 43UQ7500PSF" → "LG 43UQ7500PSF" in the list (and as the TV's name once chosen).
+        return FoundTv(ip, tag(xml, "friendlyName").ifEmpty { "$brand TV" }.let { prettyName(it) }, tag(xml, "modelName"), brand)
     }
 
     /** A Samsung TV's own description from its REST port, or null if [ip] isn't one. */

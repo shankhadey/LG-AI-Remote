@@ -203,4 +203,14 @@ class ScreenshotTest {
     }
 
     @Test fun pairing() { shot { PairingScreen(controller()) } }
+    // First run, as a new user sees it (no TV saved)
+    @Test fun firstRunSearching() { val tv = controller().apply { scanning = true }; shot { SetupScreen(tv) } }
+    @Test fun firstRunFound() {
+        val tv = controller().apply { scanning = false; found.add(FoundTv("192.168.29.40", com.home.tvremote.lg.Discovery.prettyName("[LG] webOS TV 43UQ7500PSF"), "43UQ7500PSF")) }
+        shot { SetupScreen(tv) }
+    }
+    @Test fun firstRunNothingFound() {
+        val tv = controller().apply { scanning = true; scanReport = "This phone is 192.168.29.12. Checked 254 addresses on its Wi-Fi network (192.168.29.1 – 192.168.29.254) and none answered like an LG or Samsung TV. If the TV's address isn't in that range, the phone and TV are on different networks (e.g. a guest network). You can still enter the TV's IP below." }
+        shot { tv.scanning = false; SetupScreen(tv) }
+    }
 }

@@ -70,6 +70,12 @@ Measure it: time from opening to Play, quick-backs, "Not now" count per session.
 - To test on the TV: Search 1/2 (Netflix search page with "The Crown" filled in).
 - Next: Prime Video and Disney+ title/search links (same 3-try test).
 
+## Onboarding (first run) — gaps seen 22 Nov, before family testing in India
+- v1.3.3: found TVs listed as "LG 43UQ7500PSF", not the raw "[LG] webOS TV 43UQ7500PSF".
+- Proposed (needs design approval): a first screen saying what the app does; after pairing, check "Turn on via Wi-Fi"
+  and say how to enable it (today the user only finds out when turning on fails); on "nothing found", a short
+  checklist (TV on? same Wi-Fi, not guest? router "client isolation" off?) instead of the technical report.
+
 ## v1.3.2 — results of testing 1.2.1 (22 Nov)
 - Passed on the TV: power (incl. power right after connecting), LG refactor (remote, voice, timers, picks, picks page).
 - Prime: only P1 (contentId = GTI) works: Groundhog Day opened after the profile picker. URL forms landed on another
