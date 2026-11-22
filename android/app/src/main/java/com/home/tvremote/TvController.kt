@@ -270,7 +270,10 @@ class TvController(app: Application) : AndroidViewModel(app), TvActions {
         runCatching {
             // Play state of the app on screen, where the TV shares it (sharpens tap-to-pause).
             t.onMedia { items ->
-                val item = items.firstOrNull { it.first == foregroundApp } ?: items.firstOrNull()
+                // Only the app in front counts, and only a real app: the LG Home screen plays banner videos and a
+                // live-TV preview tile (com.webos.app.livedmost), which were taken for "watching" (22 Nov, 1.2.1).
+                val front = foregroundApp
+                val item = items.firstOrNull { it.first == front }?.takeIf { front != null && front !in SYSTEM_APPS }
                 mediaState = item?.second?.takeIf { it == "playing" || it == "paused" }
             }
         }
@@ -930,6 +933,7 @@ class TvController(app: Application) : AndroidViewModel(app), TvActions {
             "com.webos.app.home", "com.webos.app.livetv", "com.webos.surfacemanager", "com.webos.app.inputpicker",
             "com.webos.app.screensaver", "com.webos.app.settings", "com.palm.app.settings", "com.webos.app.notificationcenter",
             "com.webos.app.browser", // the timer / picks pages: taps should select there, not pause
+            "com.webos.app.livedmost", // the live-TV preview on the Home screen
         ) + (1..4).map { "com.webos.app.hdmi$it" }
     }
 }

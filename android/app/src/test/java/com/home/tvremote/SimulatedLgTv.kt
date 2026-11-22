@@ -117,6 +117,13 @@ class SimulatedLgTv {
     fun turnedOnByRemote() { power = "Active"; foreground = "com.webos.app.home"; pushPower() }
     fun turnedOffByRemote() { power = if (quickStart) "Active Standby" else "Off"; pushPower() }
     fun startsPlaying(app: String) { foreground = app; playState = "playing"; pushForeground() }
+    /** On the Home screen, the banner video and the live-TV preview tile play by themselves (seen 22 Nov). */
+    fun homeScreenVideosPlay() {
+        foreground = "com.webos.app.home"; playState = null; pushForeground()
+        push("com.webos.media/getForegroundAppInfo", JSONObject().put("returnValue", true).put("foregroundAppInfo", JSONArray()
+            .put(JSONObject().put("appId", "com.webos.app.livedmost").put("playState", "playing").put("type", "media"))
+            .put(JSONObject().put("appId", "com.webos.app.home").put("playState", "playing").put("type", "media"))))
+    }
     fun keyboardOpens() = push("ime/registerRemoteKeyboard", JSONObject().put("currentWidget", JSONObject().put("focus", true)))
     fun keyboardCloses() = push("ime/registerRemoteKeyboard", JSONObject().put("currentWidget", JSONObject().put("focus", false)))
     /** The TV drops every connection (Wi-Fi blip, phone sleeping…). */

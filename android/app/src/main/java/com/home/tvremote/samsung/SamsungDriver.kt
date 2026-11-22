@@ -122,8 +122,8 @@ class SamsungDriver(
                 ready.complete(Unit)
             }
             "ms.channel.unauthorized" -> ready.completeExceptionally(TvException("The TV declined. Try again and choose Allow on the TV."))
-            "ms.remote.imeStart" -> { log("SUB keyboard open"); keyboardCb?.invoke(true) }
-            "ms.remote.imeEnd" -> { log("SUB keyboard closed"); keyboardCb?.invoke(false) }
+            "ms.remote.imeStart" -> { log("SUB keyboard open"); imeOpen = true; keyboardCb?.invoke(true) }
+            "ms.remote.imeEnd" -> { log("SUB keyboard closed"); imeOpen = false; keyboardCb?.invoke(false) }
             "ed.installedApp.get" -> m.optJSONObject("data")?.optJSONArray("data")?.let { appsReply?.complete(it) }
         }
     }
@@ -189,7 +189,9 @@ class SamsungDriver(
     }
     override suspend fun onForeground(cb: (String) -> Unit) { foregroundCb = cb }
     override suspend fun onPower(cb: (String) -> Unit) { powerCb = cb }
-    override suspend fun onKeyboard(cb: (Boolean) -> Unit) { keyboardCb = cb }
+    /** Kept so a keyboard that opened before the app started listening (right after connecting) isn't missed. */
+    @Volatile private var imeOpen = false
+    override suspend fun onKeyboard(cb: (Boolean) -> Unit) { keyboardCb = cb; if (imeOpen) cb(true) }
 
     private fun startPolling() {
         pollJob?.cancel()

@@ -70,6 +70,18 @@ Measure it: time from opening to Play, quick-backs, "Not now" count per session.
 - To test on the TV: Search 1/2 (Netflix search page with "The Crown" filled in).
 - Next: Prime Video and Disney+ title/search links (same 3-try test).
 
+## v1.2.2 / v1.3.1 — testing 1.2.1 from onboarding (22 Nov)
+- Fixed: on the LG Home screen the remote jumped to the "watching" view ("Home · playing"). The Home screen's banner
+  video and live-TV preview tile (com.webos.app.livedmost) report as playing media; we counted any playing media,
+  even from an app not in front. Now only the app in front counts, and never Home / Live TV / inputs / settings.
+  Simulator test reproduces the 22 Nov log. Shipped as 1.2.2 (1.2.1 + this fix) for testing.
+- Fixed (found by the Samsung simulator, 1 run in 3): a keyboard that opened right after connecting was missed on
+  Samsung; the driver now remembers it.
+- To fix next: "Use a different TV" forgets the TV immediately with no confirmation and setup has no Back. Should
+  confirm, keep the current TV until a new one pairs, and offer Back.
+- To look at: voice heard "Tom TV | on TV | turn TV | tongue TV" and ran a person search for "Tom". When an
+  alternative looks like a power command ("turn TV", "on TV"), prefer it (or ask) over the AI's person guess.
+
 ## v1.3.0 — Portuguese (Brazil) and countries: US, Brazil, India, Canada, UK, Australia (built 22 Nov)
 - Settings › Language & country. Language: Automatic (follows the phone) / English / Português (Brasil).
   Country (defaults to the phone's): TMDB where-to-watch region, services offered at setup, content languages

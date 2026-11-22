@@ -147,6 +147,17 @@ class SimulatedTvTest {
 
     // ---------------- while watching ----------------
 
+    @Test fun homeScreenBannerVideo_isNotWatching() {
+        // 22 Nov, 1.2.1: the remote jumped to the "watching" view on the LG Home screen ("Home · playing").
+        val tv = openApp()
+        eventually("connects", tv) { tv.connected && sim.uris().any { it.endsWith("com.webos.media/getForegroundAppInfo") } }
+        sim.homeScreenVideosPlay()
+        eventually("sees the Home screen", tv) { tv.foregroundApp == "com.webos.app.home" }
+        stays("stays on the normal remote", tv, 1500) { !tv.inPlayback }
+        sim.startsPlaying("netflix")
+        eventually("a real show playing still counts", tv) { tv.inPlayback }
+    }
+
     @Test fun tapPausesButAPointedTapClicks_andSkipButtonsSendArrows() {
         val tv = openApp()
         eventually("connects", tv) { tv.connected && sim.uris().any { it.endsWith("com.webos.media/getForegroundAppInfo") } }
