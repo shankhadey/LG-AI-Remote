@@ -316,6 +316,12 @@ Measure it: time from opening to Play, quick-backs, "Not now" count per session.
 - Test matrix: at least 3 more LG TVs across webOS versions (2020–2025); pairing, Wake-on-LAN, pointer, links.
 - Keys: no per-user TMDB/Groq keys in a shared app → our small server (see Before selling).
 
+## Decision (22 Nov): one small server for TMDB + AI; no bundled model
+- The server holds the TMDB access (the real blocker for other users) and the AI key; AI only where it helps
+  (understanding requests that need world knowledge, writing reasons). Ranking stays on the phone, no AI.
+- Phone keeps: on-phone AI where free (Gemini Nano; Apple's on-device model on iPhone) and rule-based reasons
+  as the always-works fallback. No bundled open-weights model (+0.6–1 GB, weak film knowledge, budget phones).
+
 ## Before selling (if it goes to the stores)
 - TMDB commercial agreement; JustWatch agreement for where-to-watch data used commercially.
 - Our own small server holding a paid model key (no keys inside a sold app; free tiers aren't for products).
