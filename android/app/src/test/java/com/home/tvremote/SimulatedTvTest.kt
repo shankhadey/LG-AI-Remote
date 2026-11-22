@@ -49,6 +49,13 @@ class SimulatedTvTest {
         return onMain { TvController(app).also { it.appVisible = true } }
     }
 
+    private fun openAppWithPrefs(): Pair<TvController, Application> {
+        val app = App(paparazzi.context)
+        app.getSharedPreferences("tv", 0).edit().putString("ip", "192.168.1.195").putString("mac", "f4:ca:e7:87:7e:1e")
+            .putString("clientKey", "SIMKEY").putBoolean("nameCustom", true).putString("name", "Living Room").apply()
+        return onMain { TvController(app).also { it.appVisible = true } } to app
+    }
+
     private fun <T> onMain(block: () -> T): T = kotlinx.coroutines.runBlocking(main) { block() }
 
     /** Waits up to [ms] for [cond]; fails with [what] and the app's Diagnostics if it never happens. */
@@ -106,6 +113,32 @@ class SimulatedTvTest {
         eventually("reconnects without the user doing anything", tv, ms = 10_000) { tv.connected }
     }
 
+    // ---------------- using a different TV ----------------
+
+    @Test fun differentTv_backReturnsToTheCurrentTv() {
+        // 22 Nov: "Use a different TV" forgot the TV at once and setup had no way back.
+        val (tv, app) = openAppWithPrefs()
+        eventually("connects", tv) { tv.connected }
+        onMain { tv.findAnotherTv() }
+        assertEquals(Screen.Setup, onMain { tv.screen })
+        assertTrue("can go back", onMain { tv.canCancelSetup })
+        assertEquals("nothing forgotten yet", "SIMKEY", app.getSharedPreferences("tv", 0).getString("clientKey", null))
+        onMain { tv.cancelSetup() }
+        eventually("back on the remote, connected to the same TV", tv) { tv.screen == Screen.Remote && tv.connected }
+        assertEquals("192.168.1.195", app.getSharedPreferences("tv", 0).getString("ip", null))
+        assertTrue("MAC kept", app.getSharedPreferences("tv", 0).getString("mac", null).orEmpty().contains("f4:ca:e7:87:7e:1e", ignoreCase = true))
+    }
+
+    @Test fun differentTv_oncePairedTheOldOneIsDropped() {
+        val (tv, app) = openAppWithPrefs()
+        eventually("connects", tv) { tv.connected }
+        onMain { tv.findAnotherTv(); tv.choose("192.168.1.196", "Bedroom TV", "LG") }
+        eventually("the new TV pairs", tv) { tv.connected && app.getSharedPreferences("tv", 0).getString("clientKey", null) == "SIMKEY" }
+        eventually("no going back once paired, and on the remote", tv) { !tv.canCancelSetup && tv.screen == Screen.Remote }
+        assertEquals("192.168.1.196", app.getSharedPreferences("tv", 0).getString("ip", null))
+        assertTrue(app.getSharedPreferences("tv", 0).all.keys.none { it.startsWith("prev_") })
+    }
+
     // ---------------- opening shows ----------------
 
     @Test fun netflixLinkIsSentAsTheTvExpects() {
@@ -126,9 +159,9 @@ class SimulatedTvTest {
         eventually("launches Prime with the GTI as contentId", tv) {
             sim.sent("system.launcher/launch").any { it.optJSONObject("payload")?.let { p -> p.optString("id") == "amazon" && p.optString("contentId") == gti } == true }
         }
-        onMain { tv.openTitle("com.disney.disneyplus-prod", "Disney+", DeepLinks.disney("4uKGzAJi3ROz", true, "Frozen", "D1")) }
+        onMain { tv.openTitle("com.disney.disneyplus-prod", "Disney+", DeepLinks.disney("entity-04c97b72-504b-47f2-9c6f-fe13d9aea82f", "D1")) }
         eventually("launches Disney+ with the title page", tv) {
-            sim.sent("system.launcher/launch").any { it.optJSONObject("payload")?.optJSONObject("params")?.optString("contentTarget") == "https://www.disneyplus.com/movies/frozen/4uKGzAJi3ROz" }
+            sim.sent("system.launcher/launch").any { it.optJSONObject("payload")?.optJSONObject("params")?.optString("contentTarget") == "https://www.disneyplus.com/browse/entity-04c97b72-504b-47f2-9c6f-fe13d9aea82f" }
         }
         assertEquals("com.disney.disneyplus-prod", sim.foreground)
     }

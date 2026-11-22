@@ -323,9 +323,9 @@ class PicksTest {
         server.dispatcher = object : Dispatcher() {
             override fun dispatch(r: RecordedRequest): MockResponse {
                 val q = r.requestUrl?.queryParameter("query").orEmpty()
-                assertTrue(q, "P14462" in q && "P7595" in q && "P1874" in q)   // movie: Disney+ movie ID property
+                assertTrue(q, "P14462" in q && "P13902" in q && "P1874" in q)   // Disney+ browse ID
                 val b = JSONObject().put("item", JSONObject().put("value", "http://www.wikidata.org/entity/Q190050")).put("pv", JSONObject().put("value", "amzn1.dv.gti.84aa074e-d217-477f-9242-3e62c961c14b"))
-                    .put("dp", JSONObject().put("value", "38HCX4uW3BlA"))
+                    .put("dp", JSONObject().put("value", "entity-04c97b72-504b-47f2-9c6f-fe13d9aea82f"))
                 return MockResponse().setBody(JSONObject().put("results", JSONObject().put("bindings", org.json.JSONArray().put(b))).toString())
             }
         }
@@ -333,7 +333,7 @@ class PicksTest {
         val ids = com.home.tvremote.picks.Wikidata(server.url("/sparql").toString()).ids("movie:550")!!
         assertNull(ids.netflix)
         assertEquals("amzn1.dv.gti.84aa074e-d217-477f-9242-3e62c961c14b", ids.prime)
-        assertEquals("38HCX4uW3BlA", ids.disney)
+        assertEquals("entity-04c97b72-504b-47f2-9c6f-fe13d9aea82f", ids.disney)
     }
 
     @Test fun wikidataFallsBackToTheItemTmdbPointsTo() = runBlocking {
@@ -342,13 +342,13 @@ class PicksTest {
             override fun dispatch(r: RecordedRequest): MockResponse {
                 val q = r.requestUrl?.queryParameter("query").orEmpty(); queries += q
                 val row = if ("wd:Q42" in q) JSONObject().put("item", JSONObject().put("value", "http://www.wikidata.org/entity/Q42"))
-                    .put("dp", JSONObject().put("value", "3jLIGMDYINqD")) else JSONObject()   // TMDB ID not on Wikidata: no item
+                    .put("dp", JSONObject().put("value", "entity-422f6dcc-226f-44e7-98d4-22de69b31cf3")) else JSONObject()   // TMDB ID not on Wikidata: no item
                 return MockResponse().setBody(JSONObject().put("results", JSONObject().put("bindings", org.json.JSONArray().put(row))).toString())
             }
         }
         server.start()
         val w = com.home.tvremote.picks.Wikidata(server.url("/sparql").toString())
-        assertEquals("3jLIGMDYINqD", w.ids("tv:82856") { "Q42" }?.disney)
+        assertEquals("entity-422f6dcc-226f-44e7-98d4-22de69b31cf3", w.ids("tv:82856") { "Q42" }?.disney)
         assertEquals(2, queries.size)
         assertNull(w.ids("tv:1") { null })                       // neither way: nothing
         var asked = false
@@ -360,7 +360,14 @@ class PicksTest {
         assertFalse("found by TMDB ID: TMDB isn't asked", asked)
     }
 
-    @Test fun primeOpensTheTitleByItsGti_thenOtherFormats_thenTyping() {
+    @Test fun aSavedLinkFormatThatNoLongerExistsFallsBack() {
+        val st = store()
+        st.setLinkVariant("Prime Video", "P3")   // chosen in 1.2.1, dropped 22 Nov
+        assertEquals("P1", st.linkVariant("Prime Video"))
+        st.setLinkVariant("Disney+", "D2"); assertEquals("D2", st.linkVariant("Disney+"))
+    }
+
+    @Test fun primeOpensTheTitleByItsGti_thenTyping() {
         val tv = OpenLog(typed = true)
         val d = StandardTestDispatcher()
         val gti = "amzn1.dv.gti.6aa9f790-371c-d77c-e4a2-2539f0bbcc92"
@@ -369,22 +376,21 @@ class PicksTest {
         pc.openPicker(); pc.picks += Pick(Title(Kind.Movie, 137, "Groundhog Day", service = "Prime Video"), "why")
         pc.play(0); d.scheduler.advanceTimeBy(100)
         assertTrue(tv.calls.last(), tv.calls.last().startsWith("link amazon") && "\"contentId\":\"$gti\"" in tv.calls.last())
-        pc.tryNextFix(); assertTrue(tv.calls.last(), "app.primevideo.com/detail?gti=$gti" in tv.calls.last() && "contentTarget" !in tv.calls.last())
-        pc.tryNextFix(); assertTrue(tv.calls.last(), "contentTarget" in tv.calls.last())
+        // The only Prime format that works (22 Nov); "Not it?" goes straight to typing.
         assertEquals("Not it? Type “Groundhog Day” in Prime Video's search", pc.fixLabel())
     }
 
-    @Test fun disneyOpensTheTitlePage_seriesAndMoviesDiffer() {
+    @Test fun disneyOpensTheTitleByItsBrowseId() {
         val tv = OpenLog(typed = true)
         val d = StandardTestDispatcher()
         val pc = PicksController(store(), tv, CoroutineScope(d), clock = { at(Calendar.TUESDAY, 21, 30) }, onDevice = null,
-            titleIdsOf = { if (it == "tv:82856") com.home.tvremote.picks.TitleIds(disney = "3jLIGMDYINqD") else com.home.tvremote.picks.TitleIds(disney = "4uKGzAJi3ROz") })
+            titleIdsOf = { if (it == "tv:82856") com.home.tvremote.picks.TitleIds(disney = "entity-422f6dcc-226f-44e7-98d4-22de69b31cf3") else com.home.tvremote.picks.TitleIds(disney = "entity-04c97b72-504b-47f2-9c6f-fe13d9aea82f") })
         pc.openPicker(); pc.picks += Pick(Title(Kind.Tv, 82856, "The Mandalorian", service = "Disney+"), "why")
         pc.play(0); d.scheduler.advanceTimeBy(100)
-        assertTrue(tv.calls.last(), tv.calls.last().startsWith("link com.disney.disneyplus-prod") && "series/the-mandalorian/3jLIGMDYINqD" in tv.calls.last())
+        assertTrue(tv.calls.last(), tv.calls.last().startsWith("link com.disney.disneyplus-prod") && "disneyplus.com/browse/entity-422f6dcc-226f-44e7-98d4-22de69b31cf3" in tv.calls.last() && "\"contentId\":\"422f6dcc-226f-44e7-98d4-22de69b31cf3\"" in tv.calls.last())
         pc.openPicker(); pc.picks += Pick(Title(Kind.Movie, 109445, "Frozen", service = "Disney+"), "why")
         pc.play(0); d.scheduler.advanceTimeBy(100)
-        assertTrue(tv.calls.last(), "movies/frozen/4uKGzAJi3ROz" in tv.calls.last())
+        assertTrue(tv.calls.last(), "disneyplus.com/browse/entity-04c97b72-504b-47f2-9c6f-fe13d9aea82f" in tv.calls.last())
     }
 
     @Test fun primeWithoutAnId_opensTheAppAndTypes() {

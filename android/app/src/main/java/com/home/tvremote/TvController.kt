@@ -171,15 +171,51 @@ class TvController(app: Application) : AndroidViewModel(app), TvActions {
         if (ip != prefs.getString("ip", null) || b != this@TvController.brand) { prefs.edit().remove("clientKey").remove("mac").apply(); macKnown = false }
         prefs.edit().putString("ip", ip).putString("brand", b).putString("name", if (brand == null) "$b TV" else name).remove("nameCustom").apply()
         tvName = prefs.getString("name", name) ?: name
-        tv?.close(); tv = null
+        tv?.dispose(); tv = null
         connect(pairing = true)
     }
 
-    fun forget() {
-        tv?.close(); tv = null
-        prefs.edit().clear().apply()
-        apps.clear(); found.clear(); connected = false; macKnown = false
+    // ---- using a different TV: the current one is kept until the new one has paired ----
+    private val TV_KEYS = listOf("ip", "clientKey", "mac", "name", "brand", "nameCustom")
+    /** A TV to go back to from setup (the one in use before "Use a different TV"). */
+    var canCancelSetup by mutableStateOf(prefs.contains("prev_ip"))
+        private set
+
+    /** "Use a different TV": search for another TV. Nothing is forgotten yet. */
+    fun findAnotherTv() {
+        if (!prefs.contains("prev_ip") && prefs.contains("ip")) prefs.edit().apply {
+            for (k in TV_KEYS) prefs.all[k]?.let { v -> if (v is Boolean) putBoolean("prev_$k", v) else putString("prev_$k", v.toString()) }
+        }.apply()
+        canCancelSetup = prefs.contains("prev_ip")
+        event("SETUP looking for a different TV (current one kept)")
+        found.clear(); scanReport = null
         screen = Screen.Setup
+    }
+
+    /** Back from setup: return to the TV in use before, as it was. */
+    fun cancelSetup() {
+        if (!prefs.contains("prev_ip")) return
+        tv?.dispose(); tv = null
+        prefs.edit().apply {
+            for (k in TV_KEYS) {
+                remove(k)
+                prefs.all["prev_$k"]?.let { v -> if (v is Boolean) putBoolean(k, v) else putString(k, v.toString()) }
+                remove("prev_$k")
+            }
+        }.apply()
+        canCancelSetup = false
+        tvName = prefs.getString("name", "$brand TV") ?: "$brand TV"
+        macKnown = prefs.getString("mac", null) != null
+        event("SETUP cancelled, back to ${prefs.getString("ip", "?")}")
+        screen = Screen.Remote
+        connect()
+    }
+
+    /** The new TV has paired: the previous one is no longer needed. */
+    private fun dropPreviousTv() {
+        if (!prefs.contains("prev_ip")) return
+        prefs.edit().apply { for (k in TV_KEYS) remove("prev_$k") }.apply()
+        canCancelSetup = false
     }
 
     // ---- connection -------------------------------------------------------
@@ -215,10 +251,13 @@ class TvController(app: Application) : AndroidViewModel(app), TvActions {
                 tvOff = state in STANDBY_STATES
                 screen = Screen.Remote
                 if (firstTime || pairing) {
+                    dropPreviousTv()
                     runCatching { t.toast(com.home.tvremote.i18n.I18n.t("Phone remote connected")) }
                     say("Connected to $tvName")
                 }
-                afterConnect(t)
+                // Setting up subscriptions can take seconds on a slow TV; a new connect (e.g. a different TV) mustn't wait.
+                connecting = false
+                if (epoch == connEpoch) afterConnect(t)
             } catch (e: Exception) {
                 event("CONNECT failed after ${System.currentTimeMillis() - t0} ms: ${e.message?.take(80)}")
                 if (epoch != connEpoch) return@launch   // stale: something newer (turning on, a later connect) is in charge
@@ -636,7 +675,10 @@ class TvController(app: Application) : AndroidViewModel(app), TvActions {
     var usageConsent by mutableStateOf(com.home.tvremote.analytics.Analytics.consent)
         internal set
     /** The one-time question shows on the remote once the TV is connected and the user hasn't answered. */
-    val askUsage get() = usageConsent == null && connected && !tvOff
+    val askUsage get() = usageConsent == null && connected && !tvOff && usageAvailable
+    /** Only ask (and show the setting) when this build can actually send: Firebase set up. */
+    val usageAvailable get() = com.home.tvremote.analytics.Analytics.active || forceUsageUi
+    internal var forceUsageUi = false   // screenshots of the design
     fun changeUsageConsent(on: Boolean) {
         com.home.tvremote.analytics.Analytics.setConsent(getApplication(), on); usageConsent = on
         if (on) com.home.tvremote.analytics.Analytics.setProfile(picks.store.country, com.home.tvremote.i18n.Regions.resolve(picks.store.appLanguage))
@@ -735,7 +777,12 @@ class TvController(app: Application) : AndroidViewModel(app), TvActions {
         val parser = CommandParser(apps)
         if (guesses.size > 1) event("HEARD ${guesses.take(4).joinToString(" | ")}")
         alternatives = guesses
-        val pick = guesses.firstOrNull { g -> parser.parse(g).let { it != null && it !is Command.NoSuchApp } } ?: guesses.first()
+        val understood = guesses.firstOrNull { g -> parser.parse(g).let { it != null && it !is Command.NoSuchApp } }
+        if (understood == null) CommandParser.powerFromGuesses(guesses, tvOff)?.let { on ->
+            event("VOICE power ${if (on) "on" else "off"} from mangled guesses")
+            run(Command.Power(on)); return guesses.first()
+        }
+        val pick = understood ?: guesses.first()
         handle(pick, fromVoice = true)
         return pick
     }
@@ -764,7 +811,8 @@ class TvController(app: Application) : AndroidViewModel(app), TvActions {
     private fun pickerSpeech(guesses: List<String>): Boolean {
         alternatives = guesses
         val parser = CommandParser(apps)
-        val cmd = guesses.firstNotNullOfOrNull { g -> parser.parse(g)?.takeIf { it !is Command.NoSuchApp } } ?: parser.parse(guesses.first())
+        val cmd = guesses.firstNotNullOfOrNull { g -> parser.parse(g)?.takeIf { it !is Command.NoSuchApp } }
+            ?: CommandParser.powerFromGuesses(guesses, tvOff)?.let { Command.Power(it) } ?: parser.parse(guesses.first())
         if (cmd == null || cmd is Command.WhatToWatch) return false
         event("PICKER voice “${guesses.first()}” → ${cmd::class.simpleName}")
         val opens = cmd is Command.OpenApp || cmd is Command.MaybeApp || cmd is Command.NoSuchApp || (cmd is Command.Search && cmd.title)
@@ -895,7 +943,7 @@ class TvController(app: Application) : AndroidViewModel(app), TvActions {
     }
     private fun showError(e: Throwable) = say(e.message ?: "Something went wrong", error = true)
 
-    override fun onCleared() { tv?.close() }
+    override fun onCleared() { tv?.dispose() }
 
     /**
      * Everything that touches the network to reach the TV. Tests swap in a simulated LG TV (SimulatedTvTest);

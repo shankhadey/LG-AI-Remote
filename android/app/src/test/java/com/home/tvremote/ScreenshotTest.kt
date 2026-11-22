@@ -85,9 +85,9 @@ class ScreenshotTest {
     @Test fun helpLight() { Palette.dark = false; val tv = remoteTv().apply { showSettings = true; showHelp = true }; shot { RemoteScreen(tv) { true } } }
     @Test fun feedbackWithFixLight() { Palette.dark = false; val tv = remoteTv().apply { say("Barbie is on Max — not one of your services", true, "Add" to {}) }; shot { RemoteScreen(tv) { true } } }
     // ---- usage sharing (asked once) ----
-    @Test fun usageCardLight() { Palette.dark = false; val tv = remoteTv().apply { foregroundApp = "com.webos.app.home"; usageConsent = null }; shot { RemoteScreen(tv) { true } } }
-    @Test fun usageCardDark() { Palette.dark = true; val tv = remoteTv().apply { foregroundApp = "com.webos.app.home"; usageConsent = null }; shot { RemoteScreen(tv) { true } } }
-    @Test fun ptUsageCardLight() = pt { Palette.dark = false; val tv = ptTv().apply { foregroundApp = "com.webos.app.home"; usageConsent = null }; shot { RemoteScreen(tv) { true } } }
+    @Test fun usageCardLight() { Palette.dark = false; val tv = remoteTv().apply { foregroundApp = "com.webos.app.home"; usageConsent = null; forceUsageUi = true }; shot { RemoteScreen(tv) { true } } }
+    @Test fun usageCardDark() { Palette.dark = true; val tv = remoteTv().apply { foregroundApp = "com.webos.app.home"; usageConsent = null; forceUsageUi = true }; shot { RemoteScreen(tv) { true } } }
+    @Test fun ptUsageCardLight() = pt { Palette.dark = false; val tv = ptTv().apply { foregroundApp = "com.webos.app.home"; usageConsent = null; forceUsageUi = true }; shot { RemoteScreen(tv) { true } } }
 
     // ---- Portuguese (Brazil) ----
     private fun pt(block: () -> Unit) { com.home.tvremote.i18n.I18n.lang = "pt"; com.home.tvremote.i18n.I18n.country = "BR"; try { block() } finally { com.home.tvremote.i18n.I18n.lang = "en"; com.home.tvremote.i18n.I18n.country = "US" } }

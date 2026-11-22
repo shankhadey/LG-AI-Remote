@@ -70,6 +70,20 @@ Measure it: time from opening to Play, quick-backs, "Not now" count per session.
 - To test on the TV: Search 1/2 (Netflix search page with "The Crown" filled in).
 - Next: Prime Video and Disney+ title/search links (same 3-try test).
 
+## v1.3.2 — results of testing 1.2.1 (22 Nov)
+- Passed on the TV: power (incl. power right after connecting), LG refactor (remote, voice, timers, picks, picks page).
+- Prime: only P1 (contentId = GTI) works: Groundhog Day opened after the profile picker. URL forms landed on another
+  show ("Masterplan"). Now P1 only; "Not it?" goes straight to typing. A saved choice that no longer exists falls back.
+- Disney+: the old 12-character IDs (P7595/P7596) opened the Disney+ home in every format. Switched to the current
+  "browse" ID (entity-<uuid>, Wikidata P13902, ~2,900 titles) with 3 new formats to test (D1 contentId=uuid +
+  contentTarget /browse/entity-…, D2 contentTarget only, D3 URL as contentId).
+- Voice: "turn on TV" heard as "Tom TV | on TV | turn TV | tongue TV" ran a person search. Now, when no single guess is
+  a command, the guesses together are checked for TV + power word (on/off, else toggle).
+- "Use a different TV": confirms first, keeps the current TV until the new one pairs, Back on setup returns to it.
+- Found by the new simulator test: a new connection was ignored while the previous one was still setting up, and a
+  closed connection could reopen itself from a late request (and save its key over the new TV's). Both fixed.
+- The usage-sharing question only appears in builds with Firebase set up.
+
 ## v1.2.2 / v1.3.1 — testing 1.2.1 from onboarding (22 Nov)
 - Fixed: on the LG Home screen the remote jumped to the "watching" view ("Home · playing"). The Home screen's banner
   video and live-TV preview tile (com.webos.app.livedmost) report as playing media; we counted any playing media,

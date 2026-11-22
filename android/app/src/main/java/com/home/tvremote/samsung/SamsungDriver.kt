@@ -79,7 +79,11 @@ class SamsungDriver(
     private fun log(line: String) { history.addFirst(java.text.SimpleDateFormat("HH:mm:ss", java.util.Locale.US).format(java.util.Date()) + " " + line); while (history.size > 40) history.pollLast() }
 
     // ---- connection ----
+    @Volatile private var disposed = false
+    override fun dispose() { disposed = true; close() }
+
     override suspend fun connect(onPrompt: () -> Unit) {
+        if (disposed) throw TvException("Connection closed")
         if (isConnected) return
         var last: Exception? = null
         for (base in urls) {

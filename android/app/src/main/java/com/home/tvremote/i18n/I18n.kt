@@ -206,6 +206,7 @@ object I18n {
             "Nothing matched — try another mood, language or “Any”" to "Nada combinou. Tente outro clima, outro idioma ou “Todos”.",
             "Double-tap to go back 10 seconds" to "Toque duas vezes para voltar 10 segundos", "Double-tap to skip 10 seconds" to "Toque duas vezes para avançar 10 segundos",
             "Fix" to "Corrigir", "Couldn't find anything with both" to "Nada encontrado com os dois juntos",
+            "Use a different TV?" to "Usar outra TV?", "Find TVs" to "Procurar TVs",
             // privacy
             "Privacy" to "Privacidade", "Share anonymous usage" to "Compartilhar uso anônimo", "Yes" to "Sim", "No" to "Não", "Not set" to "Não definido",
             "Share" to "Compartilhar", "Don't share" to "Não compartilhar", "No thanks" to "Não, obrigado",
@@ -281,6 +282,8 @@ object I18n {
         "about {} free" to "cerca de {1} livres",
         "None of your services were found in TMDB's {} list" to "Nenhum dos seus serviços aparece na lista do TMDB para este país",
         "TV turns off at {}" to "A TV desliga às {1}", "Timer on TV · ends at {}" to "Timer na TV · termina às {1}",
+        "The remote looks for TVs on your Wi-Fi. {} stays set up until the new TV is connected, and Back returns to it." to
+            "O controle vai procurar TVs no seu Wi-Fi. A {1} continua configurada até a nova TV ser conectada, e Voltar retorna a ela.",
         "Opening {} — look for {}" to "Abrindo {1}. Procure {2}.", "Fri–Sat {}" to "Sex–Sáb {1}",
         "{} h {} m" to "{1}h{2}", "{} h" to "{1}h",
     ).sortedByDescending { it.first.replace("{}", "").length }   // most specific first ("Opening {} on {}" before "Opening {}")

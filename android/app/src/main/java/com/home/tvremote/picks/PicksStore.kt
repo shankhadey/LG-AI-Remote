@@ -107,7 +107,9 @@ class PicksStore(private val prefs: SharedPreferences) {
     /** The link format ("try") used for each service; Netflix keeps its original setting. */
     fun linkVariant(service: String): String = when (service) {
         "Netflix" -> netflixLink
-        else -> prefs.getString("link_$service", null) ?: com.home.tvremote.picks.DeepLinks.variants(service).first()
+        // A saved choice that no longer exists (e.g. Prime "P3", dropped 22 Nov) falls back to the first.
+        else -> prefs.getString("link_$service", null)?.takeIf { it in com.home.tvremote.picks.DeepLinks.variants(service) }
+            ?: com.home.tvremote.picks.DeepLinks.variants(service).first()
     }
     fun setLinkVariant(service: String, v: String) { if (service == "Netflix") netflixLink = v else prefs.edit().putString("link_$service", v).apply() }
 

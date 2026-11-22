@@ -31,37 +31,27 @@ object DeepLinks {
         }
     }
 
-    // ---- Prime Video (LG app "amazon"): Amazon's GTI title ID. P1 reported working on a 2024 LG (17 Nov 2026). ----
-    val PRIME_VARIANTS = listOf("P1", "P2", "P3")
-    /** Well-known films with a GTI on Wikidata, a different one per try. */
-    val PRIME_TESTS = mapOf(
-        "P1" to ("amzn1.dv.gti.6aa9f790-371c-d77c-e4a2-2539f0bbcc92" to "Groundhog Day"),
-        "P2" to ("amzn1.dv.gti.67d67132-66a8-46fb-9b4d-3ebe25602945" to "Casino Royale"),
-        "P3" to ("amzn1.dv.gti.98a9f73a-f078-b2ed-17d1-91d6ab15b397" to "Blade Runner"),
-    )
-    fun prime(gti: String, variant: String): JSONObject {
-        val url = "https://app.primevideo.com/detail?gti=$gti"
-        return when (variant) {
-            "P2" -> JSONObject().put("contentId", url)
-            "P3" -> JSONObject().put("params", JSONObject().put("contentTarget", url))
-            else -> JSONObject().put("contentId", gti)
-        }
-    }
+    // ---- Prime Video (LG app "amazon"): contentId = Amazon's GTI. Confirmed on our 2023 LG (22 Nov): opens the title,
+    // after "Who's watching?" on a cold start. URL forms (contentId or contentTarget) landed on another show.
+    val PRIME_VARIANTS = listOf("P1")
+    val PRIME_TESTS = mapOf("P1" to ("amzn1.dv.gti.6aa9f790-371c-d77c-e4a2-2539f0bbcc92" to "Groundhog Day"))
+    fun prime(gti: String, @Suppress("UNUSED_PARAMETER") variant: String): JSONObject = JSONObject().put("contentId", gti)
 
-    // ---- Disney+ (LG app "com.disney.disneyplus-prod"): Disney's 12-character title ID. No format confirmed yet. ----
+    // ---- Disney+ (LG app "com.disney.disneyplus-prod"): the current "browse" ID (entity-<uuid>, Wikidata P13902).
+    // The old 12-character IDs opened the Disney+ home screen in every format (22 Nov), so they're no longer used.
     val DISNEY_VARIANTS = listOf("D1", "D2", "D3")
     val DISNEY_TESTS = mapOf(
-        "D1" to ("4uKGzAJi3ROz" to "Frozen"),
-        "D2" to ("aRbVJUb2h2Rf" to "Avengers: Endgame"),
-        "D3" to ("db9orsI5O4gC" to "Coco"),
+        "D1" to ("entity-04c97b72-504b-47f2-9c6f-fe13d9aea82f" to "Frozen"),
+        "D2" to ("entity-b39aa962-be56-4b09-a536-98617031717f" to "Avengers: Endgame"),
+        "D3" to ("entity-ce1ccdca-f468-4960-b67c-026b01ba42ab" to "Coco"),
     )
-    fun disney(id: String, movie: Boolean, name: String, variant: String): JSONObject {
-        val slug = name.lowercase().replace(Regex("[^a-z0-9]+"), "-").trim('-').ifEmpty { "title" }
-        val url = "https://www.disneyplus.com/${if (movie) "movies" else "series"}/$slug/$id"
+    fun disney(entity: String, variant: String): JSONObject {
+        val url = "https://www.disneyplus.com/browse/$entity"
+        val uuid = entity.removePrefix("entity-")
         return when (variant) {
-            "D2" -> JSONObject().put("contentId", url)
-            "D3" -> JSONObject().put("params", JSONObject().put("contentTarget", "https://www.disneyplus.com/video/$id"))
-            else -> JSONObject().put("contentId", id).put("params", JSONObject().put("contentTarget", url))
+            "D2" -> JSONObject().put("params", JSONObject().put("contentTarget", url))
+            "D3" -> JSONObject().put("contentId", url)
+            else -> JSONObject().put("contentId", uuid).put("params", JSONObject().put("contentTarget", url).put("entityId", uuid))
         }
     }
 
@@ -71,7 +61,7 @@ object DeepLinks {
     fun tests(service: String) = when (service) { "Prime Video" -> PRIME_TESTS; "Disney+" -> DISNEY_TESTS; else -> NETFLIX_TESTS }
     fun forService(service: String, id: String, key: String, name: String, variant: String): JSONObject = when (service) {
         "Prime Video" -> prime(id, variant)
-        "Disney+" -> disney(id, key.startsWith("movie:"), name, variant)
+        "Disney+" -> disney(id, variant)
         else -> netflix(id, variant)
     }
 
@@ -109,7 +99,7 @@ class Wikidata(private val base: String = "https://query.wikidata.org/sparql") {
 
     /** The IDs on the item matched by [match]; null when no item matched. */
     private suspend fun query(movie: Boolean, match: String): TitleIds? = withContext(Dispatchers.IO) {
-        val disneyProp = if (movie) "P7595" else "P7596"        // Disney+ movie ID / Disney+ series ID
+        val disneyProp = "P13902"                                 // Disney+ browse ID (entity-<uuid>), movies and series
         // P1874 = Netflix ID, P14462 = Prime Video GTI
         val query = """SELECT (SAMPLE(?i) AS ?item) (SAMPLE(?n) AS ?nf) (SAMPLE(?p) AS ?pv) (SAMPLE(?d) AS ?dp) WHERE { $match
             OPTIONAL { ?i wdt:P1874 ?n } OPTIONAL { ?i wdt:P14462 ?p } OPTIONAL { ?i wdt:$disneyProp ?d } }"""
@@ -123,7 +113,7 @@ class Wikidata(private val base: String = "https://query.wikidata.org/sparql") {
             TitleIds(
                 netflix = v("nf")?.takeIf { it.all(Char::isDigit) },
                 prime = v("pv")?.takeIf { it.startsWith("amzn1.dv.gti.") },
-                disney = v("dp")?.takeIf { it.matches(Regex("[A-Za-z0-9]{8,20}")) },
+                disney = v("dp")?.takeIf { it.matches(Regex("entity-[0-9a-f-]{36}")) },
             )
         }
     }

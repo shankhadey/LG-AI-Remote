@@ -19,6 +19,8 @@ interface TvDriver {
 
     suspend fun connect(onPrompt: () -> Unit = {})
     fun close()
+    /** Closes for good: the app is done with this TV object; nothing may reopen it (a late request used to). */
+    fun dispose() = close()
 
     // power
     suspend fun powerState(): String?

@@ -400,6 +400,15 @@ private fun SettingsScreen(tv: TvController) {
     var linkDialog by remember { mutableStateOf(false) }
     var langDialog by remember { mutableStateOf(false) }
     var usageDialog by remember { mutableStateOf(false) }
+    var confirmNewTv by remember { mutableStateOf(false) }
+    if (confirmNewTv) AlertDialog(
+        onDismissRequest = { confirmNewTv = false },
+        title = { Text("Use a different TV?") },
+        text = { Text("The remote looks for TVs on your Wi-Fi. ${tv.tvName} stays set up until the new TV is connected, and Back returns to it.") },
+        confirmButton = { TextButton(onClick = { confirmNewTv = false; tv.showSettings = false; tv.showHelp = false; tv.findAnotherTv() }) { Text("Find TVs") } },
+        dismissButton = { TextButton(onClick = { confirmNewTv = false }) { Text("Cancel") } },
+        containerColor = Palette.surface, titleContentColor = Palette.text, textContentColor = Palette.muted,
+    )
     if (usageDialog) ChoiceDialog("Share anonymous usage", listOf("on" to "Share", "off" to "Don't share"),
         when (tv.usageConsent) { true -> "on"; false -> "off"; null -> "" }, USAGE_NOTE) { it?.let { v -> tv.changeUsageConsent(v == "on") }; usageDialog = false }
     var countryDialog by remember { mutableStateOf(false) }
@@ -430,8 +439,8 @@ private fun SettingsScreen(tv: TvController) {
             Section("Language & country")
             SettingRow("Language", com.home.tvremote.i18n.Regions.LANGUAGES.first { it.first == tv.appLanguage }.second) { langDialog = true }
             SettingRow("Country", com.home.tvremote.i18n.Regions.of(tv.country).name) { countryDialog = true }
-            Section("Privacy")
-            SettingRow("Share anonymous usage", when (tv.usageConsent) { true -> "Yes"; false -> "No"; null -> "Not set" }) { usageDialog = true }
+            if (tv.usageAvailable) Section("Privacy")
+            if (tv.usageAvailable) SettingRow("Share anonymous usage", when (tv.usageConsent) { true -> "Yes"; false -> "No"; null -> "Not set" }) { usageDialog = true }
             Section("More")
             SettingRow("Help & diagnostics", "") { tv.showHelp = true }
             SettingRow("Advanced", "keys, AI") { tv.openPicksSettings() }
@@ -443,7 +452,7 @@ private fun SettingsScreen(tv: TvController) {
             SettingRow("The remote lost the TV", "Reconnect") { tv.connect(); tv.showSettings = false; tv.showHelp = false }
             SettingRow("Something went wrong", "Share diagnostics") { diag = true }
             Section("This phone")
-            SettingRow("Use a different TV", "") { tv.showSettings = false; tv.showHelp = false; tv.forget() }
+            SettingRow("Use a different TV", "") { confirmNewTv = true }
         }
     }
 }
@@ -803,7 +812,11 @@ private fun MacDialog(tv: TvController, onClose: () -> Unit) {
 fun SetupScreen(tv: TvController) {
     var manualIp by remember { mutableStateOf("") }
     LaunchedEffect(Unit) { if (tv.found.isEmpty()) tv.scan() }
+    BackHandler(enabled = tv.canCancelSetup) { tv.cancelSetup() }
     Column(Modifier.fillMaxSize().padding(horizontal = 20.dp, vertical = 24.dp), verticalArrangement = Arrangement.spacedBy(14.dp)) {
+        if (tv.canCancelSetup) Box(Modifier.size(40.dp).clip(CircleShape).clickable { tv.cancelSetup() }, contentAlignment = Alignment.Center) {
+            Icon(Icons.AutoMirrored.Rounded.ArrowBack, tr("Back"), tint = Palette.text)
+        }
         Text("Find your TV", color = Palette.text, fontSize = 28.sp, fontWeight = FontWeight.Bold)
         Text("Turn the TV on and make sure this phone is on the same Wi-Fi.", color = Palette.muted, fontSize = 15.sp)
         PrimaryButton(if (tv.scanning) "Searching your Wi-Fi…" else "Search again", enabled = !tv.scanning) { tv.scan() }

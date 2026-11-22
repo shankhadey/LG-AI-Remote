@@ -68,7 +68,12 @@ class LgTv(
     // ask at once, and two overlapping handshakes leave a socket that looks open but isn't paired.
     private val connectLock = kotlinx.coroutines.sync.Mutex()
 
+    /** Set by [dispose]: this object is finished; requests fail instead of reconnecting. */
+    @Volatile private var disposed = false
+    fun dispose() { disposed = true; close() }
+
     suspend fun connect(onPrompt: () -> Unit = {}) {
+        if (disposed) throw TvException("Connection closed")
         if (isConnected) return
         connectLock.lock()
         try { if (!isConnected) connectOnce(onPrompt) } finally { connectLock.unlock() }

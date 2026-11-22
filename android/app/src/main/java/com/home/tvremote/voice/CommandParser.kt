@@ -225,6 +225,24 @@ class CommandParser(tvApps: List<TvApp>) {
         fun knownApps(brand: String): List<TvApp> =
             if (brand == "Samsung") com.home.tvremote.samsung.SamsungApps.COMMON else KNOWN_APPS
 
+        /**
+         * Short power commands get mangled by speech recognition ("turn on TV" heard as "Tom TV | on TV | turn TV |
+         * tongue TV", 22 Nov). When no single guess is a command but the guesses together say "TV" + a power word,
+         * return on (true) / off (false); with neither word, the opposite of [tvIsOff]'s state. Null = not a power request.
+         */
+        fun powerFromGuesses(guesses: List<String>, tvIsOff: Boolean): Boolean? {
+            val gs = guesses.map { normalize(it) }.filter { it.isNotEmpty() && it.split(' ').size <= 4 }
+            if (gs.isEmpty()) return null
+            val tv = gs.any { Regex("\\b(tv|tele|television|televisao)\\b").containsMatchIn(it) }
+            val verb = gs.any { Regex("\\b(turn|switch|power|ligar|liga|ligue|desligar|desliga|desligue)\\b").containsMatchIn(it) }
+            if (!tv || !verb) return null
+            return when {
+                gs.any { Regex("\\b(off|desligar|desliga|desligue)\\b").containsMatchIn(it) } -> false
+                gs.any { Regex("\\b(on|ligar|liga|ligue)\\b").containsMatchIn(it) } -> true
+                else -> tvIsOff
+            }
+        }
+
         fun distance(a: String, b: String): Int {
             val dp = IntArray(b.length + 1) { it }
             for (i in 1..a.length) {

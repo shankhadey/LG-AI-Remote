@@ -145,4 +145,15 @@ class CommandParserTest {
         assertNull(p.parse(""))
         assertNull(p.parse("the quick brown fox"))
     }
+
+    @Test fun mangledPowerCommandsFromTheGuessesTogether() {
+        // 22 Nov: "turn on TV" heard as these; it ran a "movies with Tom" search.
+        assertEquals(true, CommandParser.powerFromGuesses(listOf("Tom TV", "on TV", "turn TV", "tongue TV"), tvIsOff = true))
+        assertEquals(false, CommandParser.powerFromGuesses(listOf("turn the TV of", "turn TV off"), tvIsOff = false))
+        assertEquals(false, CommandParser.powerFromGuesses(listOf("turn TV"), tvIsOff = false))        // neither word: toggle
+        assertEquals(true, CommandParser.powerFromGuesses(listOf("liga a TV"), tvIsOff = true))
+        assertEquals(null, CommandParser.powerFromGuesses(listOf("Tom Hanks movies on TV tonight please"), tvIsOff = false))
+        assertEquals(null, CommandParser.powerFromGuesses(listOf("Tom Hanks"), tvIsOff = false))
+        assertEquals(null, CommandParser.powerFromGuesses(listOf("open the TV guide"), tvIsOff = false))
+    }
 }
