@@ -123,6 +123,7 @@ object Palette {
     val primary get() = if (dark) Color(0xFFF2F2F4) else Color(0xFF111114)
     val onPrimary get() = if (dark) Color(0xFF0C0C0E) else Color(0xFFFFFFFF)
     val accent = Color(0xFF4F8CFF)
+    val success = Color(0xFF30B95B)
     val danger get() = if (dark) Color(0xFFFF6B6F) else Color(0xFFD7263D)
     val ok = Color(0xFF34C46E)
 }
@@ -866,7 +867,7 @@ fun PairingScreen(tv: TvController) {
 }
 
 @Composable
-private fun PrimaryButton(text: String, enabled: Boolean = true, onClick: () -> Unit) {
+internal fun PrimaryButton(text: String, enabled: Boolean = true, onClick: () -> Unit) {
     Box(Modifier.fillMaxWidth().clip(RoundedCornerShape(16.dp)).background(if (enabled) Palette.primary else Palette.surface2)
         .clickable(enabled = enabled, onClick = onClick).padding(16.dp), contentAlignment = Alignment.Center) {
         Text(text, color = if (enabled) Palette.onPrimary else Palette.muted, fontWeight = FontWeight.SemiBold, fontSize = 16.sp)

@@ -203,6 +203,14 @@ class ScreenshotTest {
     }
 
     @Test fun pairing() { shot { PairingScreen(controller()) } }
+    // Onboarding proposals (not wired yet)
+    @Test fun proposalWelcomeDark() { Palette.dark = true; shot { com.home.tvremote.ui.WelcomeScreen {} } }
+    @Test fun proposalWelcomeLight() { Palette.dark = false; shot { com.home.tvremote.ui.WelcomeScreen {} } }
+    @Test fun proposalTurnOnDark() { Palette.dark = true; shot { com.home.tvremote.ui.TurnOnSetupScreen("LG", "LG 43UQ7500PSF", {}, {}) } }
+    @Test fun proposalTurnOnLight() { Palette.dark = false; shot { com.home.tvremote.ui.TurnOnSetupScreen("LG", "LG 43UQ7500PSF", {}, {}) } }
+    @Test fun proposalNothingFoundDark() { Palette.dark = true; shot { com.home.tvremote.ui.NothingFoundScreen({}, {}, {}) } }
+    @Test fun proposalNothingFoundLight() { Palette.dark = false; shot { com.home.tvremote.ui.NothingFoundScreen({}, {}, {}) } }
+
     // First run, as a new user sees it (no TV saved)
     @Test fun firstRunSearching() { val tv = controller().apply { scanning = true }; shot { SetupScreen(tv) } }
     @Test fun firstRunFound() {
