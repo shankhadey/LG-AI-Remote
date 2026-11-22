@@ -84,6 +84,20 @@ class ScreenshotTest {
     @Test fun settingsLight() { Palette.dark = false; val tv = remoteTv().apply { showSettings = true }; shot { RemoteScreen(tv) { true } } }
     @Test fun helpLight() { Palette.dark = false; val tv = remoteTv().apply { showSettings = true; showHelp = true }; shot { RemoteScreen(tv) { true } } }
     @Test fun feedbackWithFixLight() { Palette.dark = false; val tv = remoteTv().apply { say("Barbie is on Max — not one of your services", true, "Add" to {}) }; shot { RemoteScreen(tv) { true } } }
+    // ---- Portuguese (Brazil) ----
+    private fun pt(block: () -> Unit) { com.home.tvremote.i18n.I18n.lang = "pt"; com.home.tvremote.i18n.I18n.country = "BR"; try { block() } finally { com.home.tvremote.i18n.I18n.lang = "en"; com.home.tvremote.i18n.I18n.country = "US" } }
+    /** A controller set to Portuguese and Brazil from Settings, as the user would. */
+    private fun ptTv() = remoteTv().also { it.changeAppLanguage("pt"); it.changeCountry("BR") }
+    @Test fun ptBrowsingLight() = pt { Palette.dark = false; val tv = ptTv().apply { foregroundApp = "com.webos.app.home" }; shot { RemoteScreen(tv) { true } } }
+    @Test fun ptPlayingLight() = pt { Palette.dark = false; val tv = ptTv().apply { foregroundApp = "netflix"; mediaState = "playing"; picks.nowShowing = "Round 6" to "21:42"; picks.nowShowingApp = "netflix" }; shot { RemoteScreen(tv) { true } } }
+    @Test fun ptSettingsLight() = pt { Palette.dark = false; val tv = ptTv().apply { showSettings = true }; shot { RemoteScreen(tv) { true } } }
+    @Test fun ptFeedbackLight() = pt { Palette.dark = false; val tv = ptTv().apply { say("Opening Back to the Future on Netflix") }; shot { RemoteScreen(tv) { true } } }
+    @Test fun ptOffDark() = pt { Palette.dark = true; val tv = ptTv().apply { connected = false; tvOff = true }; shot { RemoteScreen(tv) { true } } }
+    @Test fun ptTimerSheetLight() = pt { Palette.dark = false; shot { TimerSheet({ _, _ -> }, {}) } }
+    @Test fun ptPicksChooseLight() = pt { Palette.dark = false; val pc = picks(com.home.tvremote.picks.Step.Choose); shot { com.home.tvremote.ui.PicksScreen(pc) } }
+    @Test fun ptPicksResultsLight() = pt { Palette.dark = false; val pc = picks(com.home.tvremote.picks.Step.Results); shot { com.home.tvremote.ui.PicksScreen(pc) } }
+    @Test fun ptPicksSetupLight() = pt { Palette.dark = false; val pc = picks(com.home.tvremote.picks.Step.Setup); shot { com.home.tvremote.ui.PicksScreen(pc) } }
+
     @Test fun remoteLight() { Palette.dark = false; val tv = remoteTv(); shot { RemoteScreen(tv) { true } } }
     @Test fun liveTvDark() { Palette.dark = true; val tv = remoteTv().apply { foregroundApp = "com.webos.app.livetv" }; shot { RemoteScreen(tv) { true } } }
     @Test fun liveTvLight() { Palette.dark = false; val tv = remoteTv().apply { foregroundApp = "com.webos.app.livetv" }; shot { RemoteScreen(tv) { true } } }

@@ -70,6 +70,29 @@ Measure it: time from opening to Play, quick-backs, "Not now" count per session.
 - To test on the TV: Search 1/2 (Netflix search page with "The Crown" filled in).
 - Next: Prime Video and Disney+ title/search links (same 3-try test).
 
+## v1.3.0 — Portuguese (Brazil) and countries: US, Brazil, India, Canada, UK, Australia (built 22 Nov)
+- Settings › Language & country. Language: Automatic (follows the phone) / English / Português (Brasil).
+  Country (defaults to the phone's): TMDB where-to-watch region, services offered at setup, content languages
+  suggested, speech accent (en-IN, en-GB, en-AU, en-CA; pt-BR in Portuguese), 24 h clock in Brazil and the UK.
+- Services added: Globoplay (BR), JioHotstar, Sony LIV (IN), Crave (CA), BBC iPlayer, ITVX, Channel 4, NOW (UK),
+  Stan, Binge, ABC iview, SBS On Demand (AU). Their LG app IDs are unknown: the app learns them once the user opens
+  the app from the TV. Content languages added: Portuguese, Malayalam.
+- Translation: every on-screen string, TV toast, notification and the picks/timer pages on the TV. Reviewed for
+  Brazilian CX tone: "você", neutral voice, "na Netflix / no Prime Video", "1h30", "às 21:42". Logs and Diagnostics
+  stay English (labels coming back from the TV page are mapped back to English). I18nTest fails if a screen string
+  has no Portuguese.
+- Titles are never translated by us: the app shows each title as TMDB lists it in the app's language (pt-BR titles
+  in Portuguese, e.g. "Round 6"), which is what Netflix etc. show in that country.
+- Voice: Portuguese commands (ligar/desligar a TV, volume, mudo, pausar, avançar 30 segundos, canal 5, abrir a
+  Netflix, assistir X na Netflix, o que vamos assistir…); AI understands Portuguese and writes reasons in Portuguese.
+- Next: native-speaker review on a real phone; Spanish (Mexico) if LatAm grows; Hindi UI for India later.
+
+## Usage analytics (backlog — needs a decision)
+- Installs and countries: Google Play Console gives these for free once the app is on Play.
+- Per-install usage: an anonymous install ID + a few events (app open, TV brand/model, picks opened/played,
+  quick-back, voice command kind, link worked/not). Options: Firebase Analytics (free, Google), PostHog (EU hosting
+  option), Aptabase (privacy-first, small). Needs a privacy policy + consent (LGPD in Brazil, UK GDPR).
+
 ## v1.2.0 — Prime Video and Disney+ open straight to the title (built 22 Nov, untested on the TV)
 - IDs from Wikidata in one query per title: Netflix (P1874), Prime Video GTI (P14462), Disney+ movie/series (P7595/P7596).
 - Prime: contentId = amzn1.dv.gti.… (P1, reported working on a 2024 LG on 17 Nov 2026); P2/P3 = primevideo URL as

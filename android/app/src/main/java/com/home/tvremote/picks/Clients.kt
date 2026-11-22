@@ -20,12 +20,15 @@ const val PICKS = 5
 private val http = OkHttpClient.Builder().connectTimeout(8, TimeUnit.SECONDS).readTimeout(20, TimeUnit.SECONDS).build()
 
 /** TMDB (themoviedb.org): catalog, US availability, runtimes, "people who liked X also liked". */
-class Tmdb(private val key: String, private val base: String = "https://api.themoviedb.org/3", private val region: String = "US") {
+class Tmdb(private val key: String, private val base: String = "https://api.themoviedb.org/3", val region: String = "US",
+           /** Titles and overviews in this language ("pt-BR"); null = TMDB's default (English). */
+           private val language: String? = null) {
     private val providerCache = mutableMapOf<String, Int>()
 
     private suspend fun get(path: String, params: Map<String, String> = emptyMap()): JSONObject = withContext(Dispatchers.IO) {
         val url: HttpUrl = (base + path).toHttpUrl().newBuilder().apply {
             if (!key.startsWith("ey")) addQueryParameter("api_key", key) // v3 key; v4 tokens (JWT, "ey…") go in a header
+            if (language != null && "language" !in params) addQueryParameter("language", language)
             params.forEach { (k, v) -> addQueryParameter(k, v) }
         }.build()
         val req = Request.Builder().url(url).apply { if (key.startsWith("ey")) header("Authorization", "Bearer $key") }.build()
@@ -263,7 +266,8 @@ class AiPicker(val engines: List<AiEngine>) {
         val j = e.json(
             """Convert a TV-viewing request into JSON filters. Reply with JSON only, no other text:
 {"mood":"light|cozy|gripping|mindbending|any","kind":"movie|tv|any","language":"<ISO 639-1 code or null>","max_minutes":<number or null>,"like_titles":["..."],"new":<true if they want something new or recent, else false>}
-Languages the household watches: ${languages.entries.joinToString { "${it.key}=${it.value}" }}.""",
+Languages the household watches: ${languages.entries.joinToString { "${it.key}=${it.value}" }}.
+The request may be in English or Portuguese.""",
             text,
         )
         Ask(
@@ -285,7 +289,8 @@ title: they named a show or film; give its official title (fix mishearings).
 person: they want something with an actor or director; give the name.
 description: they described a show or film; list up to 5 real titles that best match, best first.
 mood: they want a recommendation by mood or genre.
-other: anything else.""",
+other: anything else.
+What they said may be in English or Portuguese; give titles as officially listed (either language is fine).""",
             text,
         ).takeIf { it.has("kind") }
     }
@@ -300,6 +305,7 @@ other: anything else.""",
 using ONLY ids from the list. Prefer variety and a good fit for the moment. When the list has both, include
 at least one movie and one series. Favour titles marked NEW over older ones of similar appeal. For each, write one short, warm
 reason (max 14 words) grounded in the description or the household's taste. No spoilers, no made-up facts.
+Write the reasons in ${com.home.tvremote.i18n.I18n.aiLanguage}.
 Reply with JSON only, no other text: {"picks":[{"id":"tv:123","why":"..."}]}""",
             "Moment: $context\nTaste: $taste\nCandidates:\n$list",
         )

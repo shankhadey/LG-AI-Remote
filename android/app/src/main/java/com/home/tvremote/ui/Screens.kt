@@ -73,7 +73,6 @@ import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.Icon
-import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
@@ -244,7 +243,7 @@ private fun Header(tv: TvController, showPower: Boolean = true) {
         Box(Modifier.weight(1f)) {
             Column(Modifier.clip(RoundedCornerShape(10.dp)).clickable { tv.showSettings = true }.padding(vertical = 4.dp, horizontal = 2.dp)) {
                 Row(verticalAlignment = Alignment.CenterVertically) {
-                    Text(tv.tvName, color = Palette.text, fontSize = 16.sp, fontWeight = FontWeight.SemiBold, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                    RawText(tv.tvName, color = Palette.text, fontSize = 16.sp, fontWeight = FontWeight.SemiBold, maxLines = 1, overflow = TextOverflow.Ellipsis)
                     Icon(Icons.Rounded.KeyboardArrowDown, "Settings", tint = Palette.faint, modifier = Modifier.size(18.dp))
                 }
                 Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.padding(top = 2.dp)) {
@@ -398,6 +397,11 @@ private fun SettingsScreen(tv: TvController) {
     var diag by remember { mutableStateOf(false) }
     var tapDialog by remember { mutableStateOf(false) }
     var linkDialog by remember { mutableStateOf(false) }
+    var langDialog by remember { mutableStateOf(false) }
+    var countryDialog by remember { mutableStateOf(false) }
+    if (langDialog) ChoiceDialog("App language", com.home.tvremote.i18n.Regions.LANGUAGES, tv.appLanguage, "Follows the phone's language.") { it?.let(tv::changeAppLanguage); langDialog = false }
+    if (countryDialog) ChoiceDialog("Country", com.home.tvremote.i18n.Regions.ALL.map { it.code to it.name }, tv.country,
+        "Where you watch: sets the streaming services, where-to-watch info and the clock.") { it?.let(tv::changeCountry); countryDialog = false }
     if (renameDialog) RenameDialog(tv) { renameDialog = false }
     if (macDialog) MacDialog(tv) { macDialog = false }
     if (diag) DiagnosticsDialog(tv) { diag = false }
@@ -411,14 +415,17 @@ private fun SettingsScreen(tv: TvController) {
         if (!tv.showHelp) {
             Text("Settings", color = Palette.text, fontSize = 26.sp, fontWeight = FontWeight.Bold, modifier = Modifier.padding(top = 6.dp))
             Section("This TV")
-            SettingRow("Name", tv.tvName) { renameDialog = true }
+            SettingRow("Name", tv.tvName, raw = true) { renameDialog = true }
             SettingRow("Turn on from the phone", if (tv.macKnown) "Ready" else "Set up") { macDialog = true }
             SettingRow("After turning on", if (tv.homeOnWake) "Home screen" else "Last input") { tv.changeHomeOnWake(!tv.homeOnWake) }
             Section("Picks")
             SettingRow("People", s.people.joinToString().ifEmpty { "Add" }) { tv.openPicksSettings() }
-            SettingRow("Favourites", s.people.joinToString(" · ") { "$it ${s.favourites(it).size}" }.ifEmpty { "—" }) { tv.openPicksSettings() }
+            SettingRow("Favourites", s.people.joinToString(" · ") { "$it ${s.favourites(it).size}" }.ifEmpty { "—" }, raw = true) { tv.openPicksSettings() }
             SettingRow("Services", "${s.services.size}") { tv.openPicksSettings() }
             SettingRow("Bedtimes", "${hhmm(s.weekdayBedtime)} · Fri–Sat ${hhmm(s.weekendBedtime)}") { tv.openPicksSettings() }
+            Section("Language & country")
+            SettingRow("Language", com.home.tvremote.i18n.Regions.LANGUAGES.first { it.first == tv.appLanguage }.second) { langDialog = true }
+            SettingRow("Country", com.home.tvremote.i18n.Regions.of(tv.country).name) { countryDialog = true }
             Section("More")
             SettingRow("Help & diagnostics", "") { tv.showHelp = true }
             SettingRow("Advanced", "keys, AI") { tv.openPicksSettings() }
@@ -435,19 +442,20 @@ private fun SettingsScreen(tv: TvController) {
     }
 }
 
-private fun hhmm(min: Int) = "%d:%02d".format((min / 60) % 24, min % 60)
+private fun hhmm(min: Int) = (if (com.home.tvremote.i18n.Regions.of(com.home.tvremote.i18n.I18n.country).clock24) "%02d:%02d" else "%d:%02d").format((min / 60) % 24, min % 60)
 
 @Composable
-private fun Section(text: String) = Text(text.uppercase(), color = Palette.faint, fontSize = 11.sp, fontWeight = FontWeight.SemiBold,
+private fun Section(text: String) = RawText(tr(text).uppercase(), color = Palette.faint, fontSize = 11.sp, fontWeight = FontWeight.SemiBold,
     letterSpacing = 1.sp, modifier = Modifier.padding(top = 22.dp, bottom = 4.dp))
 
 @Composable
-private fun SettingRow(title: String, value: String, onClick: () -> Unit) {
+private fun SettingRow(title: String, value: String, raw: Boolean = false, onClick: () -> Unit) {
     Row(Modifier.fillMaxWidth().clip(RoundedCornerShape(10.dp)).clickable(onClick = onClick).padding(vertical = 14.dp, horizontal = 2.dp),
         verticalAlignment = Alignment.CenterVertically) {
         Text(title, color = Palette.text, fontSize = 15.sp, modifier = Modifier.weight(1f))
-        if (value.isNotEmpty()) Text(value, color = Palette.muted, fontSize = 13.sp, maxLines = 1, overflow = TextOverflow.Ellipsis, textAlign = TextAlign.End,
-            modifier = Modifier.padding(start = 12.dp).widthIn(max = 170.dp))
+        if (value.isNotEmpty()) (if (raw) RawText(value, color = Palette.muted, fontSize = 13.sp, maxLines = 1, overflow = TextOverflow.Ellipsis, textAlign = TextAlign.End,
+            modifier = Modifier.padding(start = 12.dp).widthIn(max = 170.dp)) else Text(value, color = Palette.muted, fontSize = 13.sp, maxLines = 1, overflow = TextOverflow.Ellipsis, textAlign = TextAlign.End,
+            modifier = Modifier.padding(start = 12.dp).widthIn(max = 170.dp)))
         Icon(Icons.Rounded.ChevronRight, null, tint = Palette.faint, modifier = Modifier.size(18.dp))
     }
 }
@@ -466,7 +474,7 @@ private fun NowShowing(tv: TvController) {
     val app = tv.foregroundApp?.let { tv.appTitle(it) }
     val (title, ends) = tv.picks.nowShowing ?: (app to null)
     Column(Modifier.fillMaxWidth().padding(top = 14.dp, start = 2.dp)) {
-        Text(title ?: "Watching", color = Palette.text, fontSize = 22.sp, fontWeight = FontWeight.Bold, maxLines = 1, overflow = TextOverflow.Ellipsis)
+        if (title == null) Text("Watching", color = Palette.text, fontSize = 22.sp, fontWeight = FontWeight.Bold) else RawText(title, color = Palette.text, fontSize = 22.sp, fontWeight = FontWeight.Bold, maxLines = 1, overflow = TextOverflow.Ellipsis)
         Text(listOfNotNull(app.takeIf { tv.picks.nowShowing != null }, tv.mediaState, ends?.let { "ends $it" }).joinToString(" · ").ifEmpty { " " },
             color = Palette.muted, fontSize = 13.sp, modifier = Modifier.padding(top = 2.dp))
     }
@@ -484,11 +492,11 @@ private fun Rocker(label: String, downIcon: ImageVector, upIcon: ImageVector, on
     val haptic = LocalHapticFeedback.current
     Row(modifier.height(58.dp).card(RoundedCornerShape(29.dp)), verticalAlignment = Alignment.CenterVertically) {
         Box(Modifier.weight(1f).height(58.dp).clickable { haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove); onDown() }, contentAlignment = Alignment.Center) {
-            Icon(downIcon, "$label down", tint = Palette.text, modifier = Modifier.size(22.dp))
+            Icon(downIcon, tr("$label down"), tint = Palette.text, modifier = Modifier.size(22.dp))
         }
         Text(label, color = Palette.faint, fontSize = 11.sp, fontWeight = FontWeight.SemiBold, letterSpacing = 1.sp)
         Box(Modifier.weight(1f).height(58.dp).clickable { haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove); onUp() }, contentAlignment = Alignment.Center) {
-            Icon(upIcon, "$label up", tint = Palette.text, modifier = Modifier.size(22.dp))
+            Icon(upIcon, tr("$label up"), tint = Palette.text, modifier = Modifier.size(22.dp))
         }
     }
 }
@@ -665,6 +673,29 @@ private fun TapDialog(tv: TvController, onClose: () -> Unit) {
     )
 }
 
+/** Pick one of [options] (value to English label). Returns the value, or null when dismissed. */
+@Composable
+private fun ChoiceDialog(title: String, options: List<Pair<String, String>>, current: String, note: String, onDone: (String?) -> Unit) {
+    AlertDialog(
+        onDismissRequest = { onDone(null) },
+        title = { Text(title) },
+        text = {
+            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                Text(note, fontSize = 14.sp)
+                for ((value, label) in options) {
+                    val selected = value == current
+                    Row(Modifier.fillMaxWidth().clip(RoundedCornerShape(12.dp)).background(if (selected) Palette.accent else Palette.surface2)
+                        .clickable { onDone(value) }.padding(14.dp), verticalAlignment = Alignment.CenterVertically) {
+                        Text(label, color = if (selected) Color.White else Palette.text, fontWeight = FontWeight.SemiBold, modifier = Modifier.weight(1f))
+                    }
+                }
+            }
+        },
+        confirmButton = { TextButton(onClick = { onDone(null) }) { Text("Close") } },
+        containerColor = Palette.surface, titleContentColor = Palette.text, textContentColor = Palette.muted,
+    )
+}
+
 @Composable
 private fun RenameDialog(tv: TvController, onClose: () -> Unit) {
     var name by remember { mutableStateOf(tv.tvName) }
@@ -674,7 +705,7 @@ private fun RenameDialog(tv: TvController, onClose: () -> Unit) {
         text = {
             BasicTextField(name, { name = it }, singleLine = true,
                 textStyle = TextStyle(color = Palette.text, fontSize = 17.sp), cursorBrush = SolidColor(Palette.accent),
-                decorationBox = { inner -> Box { if (name.isEmpty()) Text("Living Room", color = Palette.faint, fontSize = 17.sp); inner() } },
+                decorationBox = { inner -> Box { if (name.isEmpty()) Text("e.g. Living Room", color = Palette.faint, fontSize = 17.sp); inner() } },
                 modifier = Modifier.fillMaxWidth().clip(RoundedCornerShape(12.dp)).background(Palette.surface2).padding(14.dp))
         },
         confirmButton = { TextButton(onClick = { tv.rename(name); onClose() }) { Text("Save") } },
@@ -695,7 +726,7 @@ private fun DiagnosticsDialog(tv: TvController, onClose: () -> Unit) {
             Column(Modifier.heightIn(max = 420.dp).verticalScroll(rememberScrollState())) {
                 Text("What the app asked the TV, and what it answered (newest first). Copy and send this to whoever is helping you.", fontSize = 13.sp)
                 Spacer(Modifier.height(10.dp))
-                Text(text, fontSize = 11.sp, fontFamily = FontFamily.Monospace, color = Palette.text)
+                RawText(text, fontSize = 11.sp, fontFamily = FontFamily.Monospace, color = Palette.text)
             }
         },
         confirmButton = {
@@ -759,7 +790,7 @@ fun SetupScreen(tv: TvController) {
                 Icon(Icons.Rounded.Tv, null, tint = Palette.text)
                 Spacer(Modifier.width(14.dp))
                 Column {
-                    Text(f.name, color = Palette.text, fontWeight = FontWeight.SemiBold, fontSize = 16.sp)
+                    RawText(f.name, color = Palette.text, fontWeight = FontWeight.SemiBold, fontSize = 16.sp)
                     Text(listOf(f.model, f.ip).filter { it.isNotEmpty() }.joinToString(" · "), color = Palette.muted, fontSize = 13.sp)
                 }
             }

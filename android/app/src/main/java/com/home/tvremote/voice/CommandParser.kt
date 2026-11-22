@@ -40,7 +40,7 @@ class CommandParser(tvApps: List<TvApp>) {
     private val apps: List<TvApp> = tvApps + KNOWN_APPS.filter { k -> tvApps.none { it.id == k.id || key(it.title) == key(k.title) } }
 
     fun parse(raw: String): Command? {
-        val t = normalize(raw)
+        val t = Portuguese.toEnglish(normalize(raw))
         if (t.isEmpty()) return null
 
         // Timers (before power, so "turn off the tv in 30 minutes" isn't "turn off now")
@@ -255,7 +255,9 @@ class CommandParser(tvApps: List<TvApp>) {
         private val FILLER = Regex("^(hey tv |ok tv |tv |please |can you |could you |would you |i want to |i wanna |let's |lets )+|( please| for me| now| thanks| thank you)+$")
 
         fun normalize(s: String): String {
-            var t = s.lowercase().replace(Regex("[^a-z0-9+ ]"), " ").replace(Regex("\\s+"), " ").trim()
+            // Accents folded first so Portuguese survives ("próximo" → "proximo"); English is unchanged.
+            val folded = java.text.Normalizer.normalize(s.lowercase(), java.text.Normalizer.Form.NFD).replace(Regex("\\p{M}+"), "")
+            var t = folded.replace(Regex("[^a-z0-9+ ]"), " ").replace(Regex("\\s+"), " ").trim()
             repeat(2) { t = t.replace(FILLER, "").trim() }
             // "twenty five" -> 25, "ten" -> 10
             t = Regex("\\b(twenty|thirty|forty|fifty|sixty|seventy|eighty|ninety) (one|two|three|four|five|six|seven|eight|nine)\\b")

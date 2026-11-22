@@ -215,7 +215,7 @@ class TvController(app: Application) : AndroidViewModel(app), TvActions {
                 tvOff = state in STANDBY_STATES
                 screen = Screen.Remote
                 if (firstTime || pairing) {
-                    runCatching { t.toast("Phone remote connected") }
+                    runCatching { t.toast(com.home.tvremote.i18n.I18n.t("Phone remote connected")) }
                     say("Connected to $tvName")
                 }
                 afterConnect(t)
@@ -511,7 +511,7 @@ class TvController(app: Application) : AndroidViewModel(app), TvActions {
         val ok = tv().openUrl(url)
         if (!ok) say("The TV didn't open the picks page (details in Diagnostics)", error = true)
     }
-    override fun toastOnTv(message: String) = enqueue { tv().toast(message) }
+    override fun toastOnTv(message: String) = enqueue { tv().toast(com.home.tvremote.i18n.I18n.t(message)) }
     override fun goHome() = button("HOME")
     override val foreground: String? get() = foregroundApp
     override fun phoneIp(): String? = Discovery.phoneWifiIp(getApplication())
@@ -623,7 +623,24 @@ class TvController(app: Application) : AndroidViewModel(app), TvActions {
     var wakeSeconds by mutableStateOf(0)
     fun appEvent(msg: String) = event(msg)
 
-    init { picks.commandHandler = ::pickerSpeech }
+    init { picks.commandHandler = ::pickerSpeech; com.home.tvremote.i18n.I18n.lang = com.home.tvremote.i18n.Regions.resolve(picks.store.appLanguage); com.home.tvremote.i18n.I18n.country = picks.store.country }
+
+    // ---- language and country ----
+    var appLanguage by mutableStateOf(picks.store.appLanguage)
+        private set
+    var country by mutableStateOf(picks.store.country)
+        private set
+    fun changeAppLanguage(setting: String) {
+        picks.store.appLanguage = setting; appLanguage = setting
+        com.home.tvremote.i18n.I18n.lang = com.home.tvremote.i18n.Regions.resolve(setting)
+        picks.regionChanged()   // titles and reasons come in the app's language
+        event("SETTINGS language $setting")
+    }
+    fun changeCountry(code: String) {
+        picks.store.country = code; country = code; com.home.tvremote.i18n.I18n.country = code
+        picks.regionChanged()
+        event("SETTINGS country $code")
+    }
 
     /** Wake-up timeline and other controller events, for Diagnostics. */
 
@@ -754,7 +771,7 @@ class TvController(app: Application) : AndroidViewModel(app), TvActions {
             say("Thinking…")
             viewModelScope.launch {
                 picks.resolvePerson(t)?.let { (person, kind) -> picks.showPerson(person, kind)?.let { say(it, error = true) }; return@launch }
-                if (WANTS_PICKS.containsMatchIn(t)) { picks.openPicker(); if (picks.step == com.home.tvremote.picks.Step.Choose) picks.ask(t); return@launch }
+                if (WANTS_PICKS.containsMatchIn(t) || com.home.tvremote.voice.Portuguese.WANTS_PICKS.containsMatchIn(t)) { picks.openPicker(); if (picks.step == com.home.tvremote.picks.Step.Choose) picks.ask(t); return@launch }
                 picks.interpret(t)?.let { say("$it. To search, say “search for …”", error = true) }
             }
             return true
@@ -797,7 +814,7 @@ class TvController(app: Application) : AndroidViewModel(app), TvActions {
                         // The AI next: a misheard person ("adam sanfler movies"), a description, or a mood (→ picks).
                         val msg = picks.interpret(cmd.query) ?: return@launch
                         // "some funny movies", "a good thriller": a request for picks, not YouTube.
-                        if (WANTS_PICKS.containsMatchIn(cmd.query)) { picks.openPicker(); if (picks.step == com.home.tvremote.picks.Step.Choose) picks.ask(cmd.query); return@launch }
+                        if (WANTS_PICKS.containsMatchIn(cmd.query) || com.home.tvremote.voice.Portuguese.WANTS_PICKS.containsMatchIn(cmd.query)) { picks.openPicker(); if (picks.step == com.home.tvremote.picks.Step.Choose) picks.ask(cmd.query); return@launch }
                         // Last resort YouTube (music, clips), saying so.
                         search(cmd.query, cmd.app); say("“${cmd.query}” isn't a show or film — searching YouTube")
                     }

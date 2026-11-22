@@ -57,11 +57,19 @@ class PicksStore(private val prefs: SharedPreferences) {
     var people: List<String>
         get() = strings("people")
         set(v) = putStrings("people", v.map { it.trim() }.filter { it.isNotEmpty() }.distinct())
+    /** Country (Regions code); defaults to the phone's country when supported, else US. */
+    var country: String
+        get() = prefs.getString("country", null) ?: com.home.tvremote.i18n.Regions.fromPhone().code
+        set(v) = prefs.edit().putString("country", v).apply()
+    /** App language setting: "auto" (follow the phone), "en" or "pt". */
+    var appLanguage: String
+        get() = prefs.getString("appLanguage", "auto") ?: "auto"
+        set(v) = prefs.edit().putString("appLanguage", v).apply()
     var services: List<String>
         get() = strings("services")
         set(v) = putStrings("services", v)
     var languages: List<String>
-        get() = strings("languages").ifEmpty { listOf("en") }
+        get() = strings("languages").ifEmpty { com.home.tvremote.i18n.Regions.of(country).languages }
         set(v) = putStrings("languages", v)
     /** Minutes after midnight; values before noon mean after midnight (00:30 = 30). */
     var weekdayBedtime: Int

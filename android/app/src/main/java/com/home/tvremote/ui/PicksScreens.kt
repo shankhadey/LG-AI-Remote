@@ -48,7 +48,6 @@ import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Icon
 import androidx.compose.material3.Switch
 import androidx.compose.material3.SwitchDefaults
-import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.getValue
@@ -243,7 +242,7 @@ private fun ChoosePicks(pc: PicksController) {
                 verticalAlignment = Alignment.CenterVertically) {
                 Icon(Icons.Rounded.PlayArrow, null, tint = Palette.text, modifier = Modifier.size(20.dp))
                 Column(Modifier.weight(1f).padding(start = 10.dp)) {
-                    Text(k.playedName ?: "", color = Palette.text, fontSize = 15.sp, fontWeight = FontWeight.SemiBold)
+                    RawText(k.playedName ?: "", color = Palette.text, fontSize = 15.sp, fontWeight = FontWeight.SemiBold)
                     Text(k.service ?: "", color = Palette.muted, fontSize = 12.sp)
                 }
                 // Dismiss: never suggested again for this person.
@@ -328,12 +327,12 @@ private fun PickRow(pc: PicksController, p: Pick, i: Int, onNever: () -> Unit) {
             Box(Modifier.width(56.dp).height(84.dp).clip(RoundedCornerShape(9.dp)).background(Color(android.graphics.Color.parseColor(pc.color(p.title.name))))) {
                 val url = pc.posterUrl(p.title)
                 if (url != null) AsyncImage(model = url, contentDescription = null, contentScale = ContentScale.Crop, modifier = Modifier.fillMaxSize())
-                else Text(p.title.name, color = Color.White, fontSize = 10.sp, lineHeight = 12.sp, fontWeight = FontWeight.Bold, maxLines = 4,
+                else RawText(p.title.name, color = Color.White, fontSize = 10.sp, lineHeight = 12.sp, fontWeight = FontWeight.Bold, maxLines = 4,
                     overflow = TextOverflow.Ellipsis, modifier = Modifier.align(Alignment.BottomStart).padding(5.dp))
             }
             Column(Modifier.weight(1f).padding(start = 12.dp), verticalArrangement = Arrangement.spacedBy(3.dp)) {
                 Row(verticalAlignment = Alignment.CenterVertically) {
-                    Text(p.title.name, color = Palette.text, fontSize = 15.sp, fontWeight = FontWeight.SemiBold, maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.weight(1f, fill = false))
+                    RawText(p.title.name, color = Palette.text, fontSize = 15.sp, fontWeight = FontWeight.SemiBold, maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.weight(1f, fill = false))
                     if (p.title.fresh) Text("NEW", color = Palette.onPrimary, fontSize = 9.sp, fontWeight = FontWeight.Bold,
                         modifier = Modifier.padding(start = 6.dp).clip(RoundedCornerShape(4.dp)).background(Palette.primary).padding(horizontal = 4.dp, vertical = 1.dp))
                 }
@@ -385,7 +384,7 @@ private fun FavouritesEditor(pc: PicksController, person: String, onDone: () -> 
                         pc.posterUrl(t)?.let { AsyncImage(model = it, contentDescription = null, contentScale = ContentScale.Crop, modifier = Modifier.fillMaxSize()) }
                     }
                     Column(Modifier.weight(1f).padding(horizontal = 12.dp)) {
-                        Text(t.name, color = Palette.text, fontSize = 15.sp, fontWeight = FontWeight.SemiBold, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                        RawText(t.name, color = Palette.text, fontSize = 15.sp, fontWeight = FontWeight.SemiBold, maxLines = 1, overflow = TextOverflow.Ellipsis)
                         Text(listOf(if (t.kind == com.home.tvremote.picks.Kind.Tv) "Series" else "Movie", t.year).filter { it.isNotEmpty() }.joinToString(" · "),
                             color = Palette.muted, fontSize = 12.sp)
                     }
@@ -454,7 +453,7 @@ private fun SetupPicks(pc: PicksController) {
 
         Label("Your services")
         FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-            for (svc in Catalog.SERVICES) Chip(svc.name, svc.name in services) { if (svc.name in services) services.remove(svc.name) else services += svc.name }
+            for (svc in Catalog.SERVICES.filter { it in Catalog.servicesFor(pc.store.country) || it.name in services }) Chip(svc.name, svc.name in services) { if (svc.name in services) services.remove(svc.name) else services += svc.name }
         }
         Label("Languages you watch")
         FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -470,7 +469,7 @@ private fun SetupPicks(pc: PicksController) {
             Column(Modifier.fillMaxWidth().card(RoundedCornerShape(14.dp)).padding(horizontal = 14.dp, vertical = 6.dp)) {
                 for (p in people.toList()) Row(Modifier.fillMaxWidth().clickable { editingFav = p }.padding(vertical = 8.dp), verticalAlignment = Alignment.CenterVertically) {
                     Column(Modifier.weight(1f)) {
-                        Text(p, color = Palette.text, fontSize = 15.sp)
+                        RawText(p, color = Palette.text, fontSize = 15.sp)
                         Text(s.favourites(p).joinToString { it.second }.ifEmpty { "None yet: tap to add" }, color = Palette.muted, fontSize = 12.sp, maxLines = 2, overflow = TextOverflow.Ellipsis)
                     }
                     Icon(Icons.Rounded.ChevronRight, null, tint = Palette.faint)
@@ -550,7 +549,8 @@ private fun BedtimeRow(label: String, minutes: Int, onChange: (Int) -> Unit) {
 }
 
 private fun clock(min: Int): String {
-    val h = min / 60; val m = min % 60
+    val h = (min / 60) % 24; val m = min % 60
+    if (com.home.tvremote.i18n.Regions.of(com.home.tvremote.i18n.I18n.country).clock24) return "%02d:%02d".format(h, m)
     return "%d:%02d %s".format(if (h % 12 == 0) 12 else h % 12, m, if (h < 12) "am" else "pm")
 }
 
@@ -573,7 +573,7 @@ private fun KeyField(title: String, help: String, value: String, onChange: (Stri
 // ---- small pieces ----------------------------------------------------------------
 
 @Composable
-private fun Label(text: String) = Text(text.uppercase(), color = Palette.faint, fontSize = 11.sp, fontWeight = FontWeight.SemiBold,
+private fun Label(text: String) = RawText(tr(text).uppercase(), color = Palette.faint, fontSize = 11.sp, fontWeight = FontWeight.SemiBold,
     letterSpacing = 1.sp, modifier = Modifier.padding(top = 20.dp, bottom = 10.dp))
 
 @Composable

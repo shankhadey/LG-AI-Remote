@@ -37,7 +37,7 @@ class TimerServer(private val state: () -> TimerState?) {
         val path = requestLine.split(' ').getOrNull(1) ?: "/"
         val (status, type, body) = when {
             path.startsWith("/state") -> Triple("200 OK", "application/json", stateJson())
-            path == "/" || path.startsWith("/timer") -> Triple("200 OK", "text/html; charset=utf-8", PAGE)
+            path == "/" || path.startsWith("/timer") -> Triple("200 OK", "text/html; charset=utf-8", localized())
             else -> Triple("404 Not Found", "text/plain", "Not found")
         }
         val bytes = body.toByteArray()
@@ -56,6 +56,13 @@ class TimerServer(private val state: () -> TimerState?) {
 
     companion object {
         /** Big, quiet, 10-foot countdown. Keeps counting from its last known end time if the phone disappears. */
+        /** The page in the app's language. */
+        fun localized(): String {
+            val t = com.home.tvremote.i18n.I18n::t
+            if (com.home.tvremote.i18n.I18n.lang == "en") return PAGE
+            return PAGE.replace("\"Time's up\"", "\"" + t("Time's up") + "\"").replace("'Press Back to return'", "'" + t("Press Back to return") + "'")
+                .replace("'Timer cancelled'", "'" + t("Timer cancelled") + "'").replace(">Timer<", ">" + t("Timer") + "<")
+        }
         val PAGE = """
 <!doctype html><html lang="en"><head><meta charset="utf-8"><title>Timer</title>
 <meta name="viewport" content="width=device-width,initial-scale=1">

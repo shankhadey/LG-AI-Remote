@@ -71,10 +71,14 @@ class PicksController(
         })
     }
 
-    private val cache = PicksCache()
+    private var cache = PicksCache()
+    /** TMDB for the household's country, in the app's language. */
+    private fun tmdb() = Tmdb(store.tmdbKey, tmdbBase, store.country, if (com.home.tvremote.i18n.I18n.lang == "pt") "pt-BR" else null)
+    /** Country (or language) changed: picks and where-to-watch data were for the old one. */
+    fun regionChanged() { cache = PicksCache(); bump() }
     /** Ranking chooses (fast); the AI, if any, writes the reasons afterwards (see [explainLater]). */
     private fun recommender(): Recommender =
-        makeRecommender?.invoke(store, aiChain()) ?: Recommender(store, Tmdb(store.tmdbKey, tmdbBase), aiChain(), cache = cache, aiChooses = false)
+        makeRecommender?.invoke(store, aiChain()) ?: Recommender(store, tmdb(), aiChain(), cache = cache, aiChooses = false)
 
     /** After picks are on screen: let the AI write warmer one-line reasons, replacing the simple ones in place. */
     private var explainJob: Job? = null
@@ -270,7 +274,7 @@ class PicksController(
         private set
     fun favouritesLater(person: String = who) { store.snoozeFavourites(person); favVersion++ }
     fun saveFavourites(person: String, list: List<Pair<String, String>>) { store.setFavourites(person, list); favVersion++ }
-    suspend fun searchTitles(q: String): List<Title> = runCatching { Tmdb(store.tmdbKey, tmdbBase).search(q) }.getOrDefault(emptyList())
+    suspend fun searchTitles(q: String): List<Title> = runCatching { tmdb().search(q) }.getOrDefault(emptyList())
 
     // ---- feedback ----------------------------------------------------------
     fun notNow(i: Int) = dismiss(i, never = false)
@@ -333,7 +337,7 @@ class PicksController(
         val t = picks.firstOrNull { it.title.key == key }?.title
         nowShowing = name to t?.takeIf { it.kind == Kind.Movie }?.let { endsAt(it)?.removePrefix("ends ") }
         nowShowingApp = appId
-        val lookup = titleIdsOf ?: if (directLinks) { k: String -> Wikidata().ids(k) { Tmdb(store.tmdbKey, tmdbBase).wikidataId(k) } } else null
+        val lookup = titleIdsOf ?: if (directLinks) { k: String -> Wikidata().ids(k) { tmdb().wikidataId(k) } } else null
         if (svc.name in DeepLinks.DIRECT && lookup != null) scope.launch {
             val id = withTimeoutOrNull(3000) { runCatching { lookup(key) }.getOrNull() }?.forService(svc.name)
             tv.log("LINK ${svc.name} id for $name: ${id ?: "not found"}")
@@ -412,7 +416,7 @@ class PicksController(
         val year = Regex("\\((\\d{4})\\)|\\b(19|20)\\d{2}$").find(rawQuery)?.value?.filter { it.isDigit() }
         val query = rawQuery.replace(Regex("\\(\\d{4}\\)"), "")
             .replace(Regex("\\s+(the )?(movie|film|show|series|tv show)$", RegexOption.IGNORE_CASE), "").trim()
-        val tmdb = Tmdb(store.tmdbKey, tmdbBase)
+        val tmdb = tmdb()
         val mine = Catalog.SERVICES.filter { it.name in store.services }
         val found = runCatching { tmdb.search(query) }.getOrDefault(emptyList()).take(5)
         // An exact name match means they meant that title: only it, or "it's on …". (Otherwise "play Barbie" opened
@@ -453,7 +457,7 @@ class PicksController(
         if (!store.isSetUp || store.tmdbKey.isBlank()) return "Didn't understand “$text”"
         val j = aiChain().interpret(text) ?: return "Didn't understand “$text”"
         tv.log("VOICE AI “$text” → $j")
-        val tmdb = Tmdb(store.tmdbKey, tmdbBase)
+        val tmdb = tmdb()
         val mine = Catalog.SERVICES.filter { it.name in store.services }
         suspend fun onMine(ts: List<Title>) = ts.take(10).map { runCatching { tmdb.enrich(it, mine) }.getOrDefault(it) }.filter { it.service != null }
         val titles = j.optJSONArray("titles")?.let { a -> (0 until a.length()).map { a.getString(it) } }.orEmpty().filter { it.isNotBlank() }
@@ -515,7 +519,7 @@ class PicksController(
             .replace(Regex("'s$"), "").trim()
         val people = splitPeople(name)
         if (people.isEmpty() || people.any { it.split(' ').size !in 2..4 }) return null
-        val tmdb = Tmdb(store.tmdbKey, tmdbBase)
+        val tmdb = tmdb()
         val real = people.map { tmdb.findPerson(it) ?: return null }
         return real.joinToString(" and ") to kind
     }
@@ -529,7 +533,7 @@ class PicksController(
      */
     suspend fun showPerson(person: String, kind: Kind? = null): String? = kotlinx.coroutines.coroutineScope {
         if (!store.isSetUp || store.tmdbKey.isBlank()) return@coroutineScope "Set up picks first"
-        val tmdb = Tmdb(store.tmdbKey, tmdbBase)
+        val tmdb = tmdb()
         val mine = Catalog.SERVICES.filter { it.name in store.services }
         val people = splitPeople(person)
         val each = people.map { p -> async { runCatching { tmdb.personCredits(p) }.getOrDefault(emptyList()).filter { kind == null || it.kind == kind } } }.map { it.await() }
@@ -552,7 +556,7 @@ class PicksController(
         val known = r.services.mapNotNull { n -> Catalog.SERVICES.firstOrNull { s -> s.tmdbNames.any { it.equals(n, true) } }?.name }.distinct()
         val others = r.services.filter { n -> !n.contains("Channel", true) && !n.contains("Roku", true) && Catalog.SERVICES.none { s -> s.tmdbNames.any { it.equals(n, true) } } }
         val names = (known.ifEmpty { others }).distinct().take(2)   // a streaming service we know beats cable channels (TNT…)
-        return if (names.isEmpty()) "${r.name} isn't on a subscription service in the US (only to rent or buy)"
+        return if (names.isEmpty()) "${r.name} isn't on a subscription service in ${com.home.tvremote.i18n.Regions.of(store.country).name} (only to rent or buy)"
         else "${r.name} is on ${names.joinToString(" and ")}, which isn't one of your services" +
             (known.firstOrNull()?.let { " — add $it in Picks settings if you have it" } ?: "")
     }
@@ -654,15 +658,15 @@ class PicksController(
             step == Step.Loading -> "loading"; step == Step.Results -> "picks"; step == Step.Error -> "error"; else -> "choose"
         }
         val j = JSONObject().put("v", version).put("phase", phase).put("leanBack", true)
-            .put("title", title).put("context", contextLine).put("summary", summary.ifEmpty { "Waiting for a mood…" })
-            .put("message", if (phase == "playing") "Opening ${pending?.service ?: "the app"} — look for ${pending?.playedName ?: ""}" else message)
+            .put("title", com.home.tvremote.i18n.I18n.t(title)).put("context", com.home.tvremote.i18n.I18n.t(contextLine)).put("summary", com.home.tvremote.i18n.I18n.t(summary.ifEmpty { "Waiting for a mood…" }))
+            .put("message", if (phase == "playing") com.home.tvremote.i18n.I18n.t("Opening ${pending?.service ?: "the app"} — look for ${pending?.playedName ?: ""}") else com.home.tvremote.i18n.I18n.t(message))
             .put("keep", keep?.playedName)
-            .put("who", JSONArray(profiles().map { JSONObject().put("label", it).put("on", it == who) }))
+            .put("who", JSONArray(profiles().map { JSONObject().put("label", it).put("show", com.home.tvremote.i18n.I18n.t(it)).put("on", it == who) }))
             .put("langs", JSONArray((listOf<String?>(null) + store.languages).map { c ->
-                JSONObject().put("code", c ?: "any").put("label", c?.let { Catalog.languageLabel(it) } ?: "Any").put("on", c == language) }))
-            .put("moods", JSONArray(moods().map { JSONObject().put("id", it.name).put("label", it.label).put("hint", it.hint) }))
+                JSONObject().put("code", c ?: "any").put("label", com.home.tvremote.i18n.I18n.t(c?.let { Catalog.languageLabel(it) } ?: "Any")).put("on", c == language) }))
+            .put("moods", JSONArray(moods().map { JSONObject().put("id", it.name).put("label", com.home.tvremote.i18n.I18n.t(it.label)).put("hint", com.home.tvremote.i18n.I18n.t(it.hint)) }))
             .put("picks", JSONArray(picks.map { p ->
-                JSONObject().put("name", p.title.name).put("meta", meta(p.title)).put("why", p.why).put("fresh", p.title.fresh)
+                JSONObject().put("name", p.title.name).put("meta", com.home.tvremote.i18n.I18n.t(meta(p.title))).put("why", com.home.tvremote.i18n.I18n.t(p.why)).put("fresh", p.title.fresh)
                     .put("poster", p.title.posterPath?.let { "https://image.tmdb.org/t/p/w342$it" }).put("color", color(p.title.name))
             }))
         return j.toString()
@@ -679,7 +683,7 @@ class PicksController(
     private fun endsAt(t: Title): String? {
         val m = t.runtimeMin ?: return null
         val c = clock().apply { add(Calendar.MINUTE, m) }
-        return "ends " + java.text.SimpleDateFormat("h:mm", java.util.Locale.US).format(c.time)
+        return "ends " + java.text.SimpleDateFormat(if (com.home.tvremote.i18n.Regions.of(store.country).clock24) "HH:mm" else "h:mm", java.util.Locale.US).format(c.time)
     }
 
     fun posterUrl(t: Title) = t.posterPath?.let { "https://image.tmdb.org/t/p/w342$it" }

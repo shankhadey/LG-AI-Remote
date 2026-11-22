@@ -78,7 +78,7 @@ class TimerService : Service() {
 
     private fun toast(msg: String) = scope.launch {
         TimerEngine.withTv(this@TimerService) {
-            it.toast(msg)
+            it.toast(com.home.tvremote.i18n.I18n.t(msg))
         }
     }
 
@@ -115,13 +115,13 @@ class TimerService : Service() {
             .setContentIntent(open)
             .setOngoing(true)
         if (s == null) {
-            b.setContentTitle("Timer stopped")
+            b.setContentTitle(com.home.tvremote.i18n.I18n.t("Timer stopped"))
         } else {
             val at = DateFormat.getTimeInstance(DateFormat.SHORT).format(Date(s.endsAt))
-            b.setContentTitle(if (s.kind == TimerKind.TurnOff) "TV turns off at $at" else "Timer on TV · ends at $at")
+            b.setContentTitle(com.home.tvremote.i18n.I18n.t(if (s.kind == TimerKind.TurnOff) "TV turns off at $at" else "Timer on TV · ends at $at"))
                 .setUsesChronometer(true).setWhen(s.endsAt).setShowWhen(true)
                 .addAction(Notification.Action.Builder(null, "+10 min", action(ACTION_PLUS10, 1)).build())
-                .addAction(Notification.Action.Builder(null, "Cancel", action(ACTION_CANCEL, 2)).build())
+                .addAction(Notification.Action.Builder(null, com.home.tvremote.i18n.I18n.t("Cancel"), action(ACTION_CANCEL, 2)).build())
             if (Build.VERSION.SDK_INT >= 24) b.setChronometerCountDown(true)
         }
         val n = b.build()

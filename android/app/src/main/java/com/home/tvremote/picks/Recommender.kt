@@ -82,7 +82,7 @@ class Recommender(
     suspend fun pick(who: String, slot: String, ask: Ask, languagePref: String?, minutesLeft: Int?, context: String): PickSet = kotlinx.coroutines.coroutineScope {
         val t0 = System.currentTimeMillis()
         val providers = providers()
-        if (providers.isEmpty()) throw PicksException("None of your services were found in TMDB's US list")
+        if (providers.isEmpty()) throw PicksException("None of your services were found in TMDB's ${tmdb.region} list")
 
         val language = ask.language ?: languagePref
         val household = store.languages.toSet()

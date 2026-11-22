@@ -47,6 +47,9 @@ class VoiceInput(
         active = true
         r.startListening(Intent(RecognizerIntent.ACTION_RECOGNIZE_SPEECH).apply {
             putExtra(RecognizerIntent.EXTRA_LANGUAGE_MODEL, RecognizerIntent.LANGUAGE_MODEL_FREE_FORM)
+            // The app's language / the country's accent (pt-BR, en-IN, en-GB…) instead of the phone's default.
+            putExtra(RecognizerIntent.EXTRA_LANGUAGE, com.home.tvremote.i18n.I18n.speech)
+            putExtra(RecognizerIntent.EXTRA_LANGUAGE_PREFERENCE, com.home.tvremote.i18n.I18n.speech)
             putExtra(RecognizerIntent.EXTRA_PARTIAL_RESULTS, true)
             putExtra(RecognizerIntent.EXTRA_MAX_RESULTS, 5)
             putExtra(RecognizerIntent.EXTRA_CALLING_PACKAGE, context.packageName)

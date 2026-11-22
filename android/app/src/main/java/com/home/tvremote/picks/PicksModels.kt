@@ -47,27 +47,49 @@ data class Title(
 data class Pick(val title: Title, val why: String)
 
 /** One service the user can turn on, with how to find it in TMDB and on the TV. */
-data class Service(val name: String, val tmdbNames: List<String>, val lgAppHints: List<String>)
+/** A streaming service: its TMDB names, hints to find its app on the TV, and the countries it's offered in at setup. */
+data class Service(val name: String, val tmdbNames: List<String>, val lgAppHints: List<String>,
+                   val countries: Set<String> = setOf("US", "BR", "IN", "CA", "GB", "AU"))
 
 object Catalog {
     /** Services offered in setup (US). TMDB provider IDs are looked up by name at runtime. */
     val SERVICES = listOf(
         Service("Netflix", listOf("Netflix"), listOf("netflix")),
         Service("Prime Video", listOf("Amazon Prime Video"), listOf("amazon")),
-        Service("Disney+", listOf("Disney Plus"), listOf("com.disney.disneyplus-prod", "disney")),
+        Service("Disney+", listOf("Disney Plus"), listOf("com.disney.disneyplus-prod", "disney"), setOf("US", "BR", "CA", "GB", "AU")),
         Service("Apple TV+", listOf("Apple TV Plus", "Apple TV+", "Apple TV"), listOf("com.apple.appletv", "appletv")),
-        Service("Max", listOf("Max", "HBO Max"), listOf("com.wbd.stream", "hbomax", "com.hbo", "max")),   // com.wbd.stream seen on our 2023 LG
-        Service("Hulu", listOf("Hulu"), listOf("hulu")),
-        Service("hoichoi", listOf("Hoichoi", "hoichoi"), listOf("hoichoi")),
-        Service("ZEE5", listOf("Zee5", "ZEE5"), listOf("zee5", "zee")),
-        Service("Peacock", listOf("Peacock Premium", "Peacock"), listOf("peacock")),
-        Service("Paramount+", listOf("Paramount Plus", "Paramount+"), listOf("paramount")),
+        Service("Max", listOf("Max", "HBO Max"), listOf("com.wbd.stream", "hbomax", "com.hbo", "max"), setOf("US", "BR")),   // com.wbd.stream seen on our 2023 LG
+        Service("Hulu", listOf("Hulu"), listOf("hulu"), setOf("US")),
+        Service("Peacock", listOf("Peacock Premium", "Peacock"), listOf("peacock"), setOf("US")),
+        Service("Paramount+", listOf("Paramount Plus", "Paramount+"), listOf("paramount"), setOf("US", "BR", "CA", "GB", "AU")),
+        // Brazil
+        Service("Globoplay", listOf("Globoplay"), listOf("globoplay", "globo"), setOf("BR")),
+        // India
+        Service("JioHotstar", listOf("JioHotstar", "Hotstar", "Disney Plus Hotstar"), listOf("hotstar", "jio"), setOf("IN")),
+        Service("ZEE5", listOf("Zee5", "ZEE5"), listOf("zee5", "zee"), setOf("US", "IN")),
+        Service("Sony LIV", listOf("Sony Liv", "SonyLIV"), listOf("sonyliv", "sony"), setOf("IN")),
+        Service("hoichoi", listOf("Hoichoi", "hoichoi"), listOf("hoichoi"), setOf("US", "IN", "BR")),
+        // Canada
+        Service("Crave", listOf("Crave"), listOf("crave", "bellmedia"), setOf("CA")),
+        // United Kingdom
+        Service("BBC iPlayer", listOf("BBC iPlayer"), listOf("iplayer", "bbc"), setOf("GB")),
+        Service("ITVX", listOf("ITVX", "ITV Hub"), listOf("itvx", "itv"), setOf("GB")),
+        Service("Channel 4", listOf("Channel 4"), listOf("channel4", "all4"), setOf("GB")),
+        Service("NOW", listOf("Now TV", "NOW", "Now TV Cinema"), listOf("nowtv"), setOf("GB")),
+        // Australia
+        Service("Stan", listOf("Stan"), listOf("stan"), setOf("AU")),
+        Service("Binge", listOf("BINGE", "Binge"), listOf("binge"), setOf("AU")),
+        Service("ABC iview", listOf("ABC iview"), listOf("iview", "abc"), setOf("AU")),
+        Service("SBS On Demand", listOf("SBS On Demand"), listOf("sbs"), setOf("AU")),
     )
+
+    /** Services offered at setup in [country] (the full list stays valid for lookups). */
+    fun servicesFor(country: String) = SERVICES.filter { country in it.countries }
 
     /** Languages offered in setup: label → ISO 639-1 (TMDB original_language). */
     val LANGUAGES = linkedMapOf(
         "English" to "en", "Bengali" to "bn", "Hindi" to "hi", "Tamil" to "ta", "Telugu" to "te",
-        "Spanish" to "es", "Korean" to "ko", "Japanese" to "ja", "French" to "fr",
+        "Spanish" to "es", "Korean" to "ko", "Japanese" to "ja", "French" to "fr", "Portuguese" to "pt", "Malayalam" to "ml",
     )
 
     fun languageLabel(code: String) = LANGUAGES.entries.firstOrNull { it.value == code }?.key ?: code.uppercase()

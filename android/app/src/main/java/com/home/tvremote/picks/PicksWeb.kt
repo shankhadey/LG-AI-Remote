@@ -54,10 +54,10 @@ class PicksWeb(
         val ok = q["k"] == token && (allowedIp == null || remote == allowedIp || remote == "127.0.0.1")
         val (status, type, body) = when {
             !ok -> Triple("403 Forbidden", "text/plain", "Forbidden")
-            path == "/" || path == "/picks" -> { log("page requested by the TV"); Triple("200 OK", "text/html; charset=utf-8", PAGE) }
-            path == "/e" -> { log(q["m"].orEmpty().take(160)); Triple("200 OK", "application/json", "{}") }
+            path == "/" || path == "/picks" -> { log("page requested by the TV"); Triple("200 OK", "text/html; charset=utf-8", localized()) }
+            path == "/e" -> { log(com.home.tvremote.i18n.I18n.english(q["m"].orEmpty()).take(160)); Triple("200 OK", "application/json", "{}") }
             path == "/s" -> Triple("200 OK", "application/json", state())
-            path == "/f" -> { focus(q["l"].orEmpty()); q["l"]?.takeIf { it.isNotEmpty() && it != "-" }?.let { log("pointing at $it") }; Triple("200 OK", "application/json", "{}") }
+            path == "/f" -> { focus(q["l"].orEmpty()); q["l"]?.takeIf { it.isNotEmpty() && it != "-" }?.let { log("pointing at ${com.home.tvremote.i18n.I18n.english(it)}") }; Triple("200 OK", "application/json", "{}") }
             path == "/a" -> { log("clicked " + q["do"].orEmpty() + " " + q["v"].orEmpty()); action(q["do"].orEmpty(), q["v"].orEmpty()); Triple("200 OK", "application/json", state()) }
             else -> Triple("404 Not Found", "text/plain", "Not found")
         }
@@ -72,6 +72,18 @@ class PicksWeb(
 
     companion object {
         /** 10-foot UI. Hovering focuses a button, so the remote's OK (Enter) clicks what the pointer is on. */
+        /** The page's fixed phrases, in the app's language (button values sent back stay in English). */
+        private val PHRASES = listOf("What should we watch?", "Choosing on the phone…", "Language", "Keep watching", "Pick a mood", "Surprise us",
+            "Anything good", "Finding picks…", "Not now", "Never", "Show 5 more", "Back to moods", "Point with your phone · tap to choose",
+            "Data from TMDB", "NEW")
+        fun localized(): String {
+            if (com.home.tvremote.i18n.I18n.lang == "en") return PAGE
+            var h = PAGE
+            for (p in PHRASES) h = h.replace(p, com.home.tvremote.i18n.I18n.t(p))
+            h = h.replace("Who\\'s watching", com.home.tvremote.i18n.I18n.t("Who's watching").replace("'", "\\'"))
+            h = h.replace("'▶ Play'", "'▶ " + com.home.tvremote.i18n.I18n.t("Play") + "'").replace("'Back','back'", "'" + com.home.tvremote.i18n.I18n.t("Back") + "','back'")
+            return h.replace("<html lang=\"en\">", "<html lang=\"pt-BR\">")
+        }
         val PAGE = """
 <!doctype html><html lang="en"><head><meta charset="utf-8"><title>What should we watch?</title>
 <meta name="viewport" content="width=device-width,initial-scale=1">
@@ -128,7 +140,7 @@ function show(s){if(!s||s.v===v)return;v=s.v;cur=s;var f=document.activeElement&
  if(s.phase==='choose'){
   if(!s.leanBack){h+='<div class="big">Choosing on the phone…<br><span style="font-size:2.6vh;color:#8E8E96">'+esc(s.summary)+'</span></div>';}
   else{
-   h+='<div class="lbl">Who\'s watching</div><div class="row">';s.who.forEach(function(w,i){h+=btn('w'+i,w.on?'on':'',esc(w.label),'who',w.label)});h+='</div>';
+   h+='<div class="lbl">Who\'s watching</div><div class="row">';s.who.forEach(function(w,i){h+=btn('w'+i,w.on?'on':'',esc(w.show||w.label),'who',w.label)});h+='</div>';
    if(s.langs.length>1){h+='<div class="lbl">Language</div><div class="row">';s.langs.forEach(function(l,i){h+=btn('l'+i,l.on?'on':'',esc(l.label),'lang',l.code)});h+='</div>';}
    if(s.keep){h+='<div class="lbl">Keep watching</div><div class="row">'+btn('kw','', '▶ '+esc(s.keep),'keep','')+'</div>';}
    h+='<div class="lbl">Pick a mood</div><div class="row">';s.moods.forEach(function(m,i){h+=btn('m'+i,'mood','<b>'+esc(m.label)+'</b><span>'+esc(m.hint)+'</span>','mood',m.id)});
