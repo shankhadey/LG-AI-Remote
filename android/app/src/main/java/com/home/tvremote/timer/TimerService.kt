@@ -62,7 +62,7 @@ class TimerService : Service() {
             }
             if (now >= s.endsAt) {
                 if (s.kind == TimerKind.TurnOff) {
-                    val ok = TimerEngine.withTv(this) { it.request("ssap://system/turnOff") }
+                    val ok = TimerEngine.withTv(this) { it.turnOff() }
                     if (ok) TimerEngine.onTvTurnedOff?.invoke()
                 } else {
                     toast("Time's up")
@@ -78,7 +78,7 @@ class TimerService : Service() {
 
     private fun toast(msg: String) = scope.launch {
         TimerEngine.withTv(this@TimerService) {
-            it.request("ssap://system.notifications/createToast", JSONObject().put("message", msg))
+            it.toast(msg)
         }
     }
 
@@ -91,11 +91,7 @@ class TimerService : Service() {
             val url = "http://$ip:${srv.port}/timer"
             var opened = false
             TimerEngine.withTv(this@TimerService) { tv ->
-                opened = runCatching { tv.request("ssap://system.launcher/open", JSONObject().put("target", url)) }.isSuccess ||
-                    runCatching {
-                        tv.request("ssap://system.launcher/launch", JSONObject().put("id", "com.webos.app.browser")
-                            .put("params", JSONObject().put("target", url)))
-                    }.isSuccess
+                opened = tv.openUrl(url)
             }
             if (!opened) TimerEngine.say("The TV didn't open the timer screen (details in Diagnostics). The timer is still running on your phone.")
         }

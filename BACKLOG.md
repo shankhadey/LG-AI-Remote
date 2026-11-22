@@ -70,6 +70,21 @@ Measure it: time from opening to Play, quick-backs, "Not now" count per session.
 - To test on the TV: Search 1/2 (Netflix search page with "The Crown" filled in).
 - Next: Prime Video and Disney+ title/search links (same 3-try test).
 
+## v1.1.0 — Samsung TVs (built 22 Nov, no real Samsung TV yet)
+- Done: one TvDriver interface per brand. LG moved behind it unchanged (all LG simulator tests pass as before); new SamsungDriver
+  (Tizen remote websocket 8002/8001 with Allow + token, REST 8001 for model / MAC / power / app in front, keys, typing via
+  ime events, installed apps, deep-link launch). App IDs translated at the driver edge, so picks / voice / icons are untouched.
+- Done: discovery finds Samsung (SSDP RemoteControlReceiver + subnet scan of 8001 confirmed by REST); a typed-in IP is asked
+  which brand it is. Brand is saved with the TV. Timer goes through the driver too.
+- Done: Simulated Samsung TV + 9 end-to-end tests (pairing, standby → turn on, off from app / own remote, drop → reconnect,
+  Netflix deep link, auto-type, touchpad → arrows).
+- Fixed (found by the Samsung simulator, affects LG too): pressing power while the app was still asking the TV's power state
+  could flip it back to "on". Samsung-only: closing right after KEY_POWER could drop the key.
+- Samsung differences: no free pointer (drag = arrows, tap = OK), no play state (no watching view), no on-TV toasts,
+  no volume level (only up/down), "in front" polled every 3 s.
+- Unverified until someone tries a real Samsung: Netflix metaTag format, Max / Peacock / Paramount+ Tizen IDs,
+  2016–2017 models (8001 only, no power state), whether the TV's browser opens the picks / timer pages.
+
 ## v1.0.0 — the redesign (8 screens, "one hero per screen")
 - Remote browsing: slim "What should we watch?" line, app icons without labels, touchpad, quiet glyph row
   (Back · Home · Timer · Mute), volume + mic. Remote watching (TV reports playing/paused): title + app + state +

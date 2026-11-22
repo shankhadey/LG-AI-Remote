@@ -739,12 +739,12 @@ fun SetupScreen(tv: TvController) {
     var manualIp by remember { mutableStateOf("") }
     LaunchedEffect(Unit) { if (tv.found.isEmpty()) tv.scan() }
     Column(Modifier.fillMaxSize().padding(horizontal = 20.dp, vertical = 24.dp), verticalArrangement = Arrangement.spacedBy(14.dp)) {
-        Text("Find your LG TV", color = Palette.text, fontSize = 28.sp, fontWeight = FontWeight.Bold)
+        Text("Find your TV", color = Palette.text, fontSize = 28.sp, fontWeight = FontWeight.Bold)
         Text("Turn the TV on and make sure this phone is on the same Wi-Fi.", color = Palette.muted, fontSize = 15.sp)
         PrimaryButton(if (tv.scanning) "Searching your Wi-Fi…" else "Search again", enabled = !tv.scanning) { tv.scan() }
         if (tv.scanning) Box(Modifier.fillMaxWidth(), contentAlignment = Alignment.Center) { CircularProgressIndicator(color = Palette.text) }
         for (f in tv.found) {
-            Row(Modifier.fillMaxWidth().card(RoundedCornerShape(16.dp)).clickable { tv.choose(f.ip, f.name) }.padding(16.dp),
+            Row(Modifier.fillMaxWidth().card(RoundedCornerShape(16.dp)).clickable { tv.choose(f.ip, f.name, f.brand) }.padding(16.dp),
                 verticalAlignment = Alignment.CenterVertically) {
                 Icon(Icons.Rounded.Tv, null, tint = Palette.text)
                 Spacer(Modifier.width(14.dp))
@@ -764,7 +764,7 @@ fun SetupScreen(tv: TvController) {
                 decorationBox = { inner -> Box { if (manualIp.isEmpty()) Text("192.168.1.50", color = Palette.faint); inner() } },
                 modifier = Modifier.weight(1f).card(RoundedCornerShape(14.dp)).padding(14.dp))
             Spacer(Modifier.width(10.dp))
-            Box(Modifier.card(RoundedCornerShape(14.dp)).clickable(enabled = manualIp.count { it == '.' } == 3) { tv.choose(manualIp, "LG TV") }.padding(14.dp)) {
+            Box(Modifier.card(RoundedCornerShape(14.dp)).clickable(enabled = manualIp.count { it == '.' } == 3) { tv.choose(manualIp, "TV") }.padding(14.dp)) {
                 Text("Connect", color = Palette.text, fontWeight = FontWeight.SemiBold)
             }
         }
@@ -779,7 +779,8 @@ fun PairingScreen(tv: TvController) {
         Spacer(Modifier.height(24.dp))
         Text("Look at your TV", color = Palette.text, fontSize = 26.sp, fontWeight = FontWeight.Bold)
         Spacer(Modifier.height(10.dp))
-        Text("A message is asking to allow \"TV Remote\". Select Accept with the LG remote — you only do this once.",
+        Text(if (tv.brand == "Samsung") "A message is asking to allow \"Phone remote\". Select Allow with the TV's own remote — you only do this once."
+            else "A message is asking to allow \"TV Remote\". Select Accept with the LG remote — you only do this once.",
             color = Palette.muted, fontSize = 16.sp, textAlign = TextAlign.Center)
         Spacer(Modifier.height(28.dp))
         CircularProgressIndicator(color = Palette.text)

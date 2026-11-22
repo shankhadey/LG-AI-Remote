@@ -20,16 +20,17 @@ import java.net.InetSocketAddress
 import java.net.SocketTimeoutException
 import java.net.URL
 
-data class FoundTv(val ip: String, val name: String, val model: String)
+data class FoundTv(val ip: String, val name: String, val model: String, val brand: String = "LG")
 
 /**
- * Finds LG webOS TVs. First asks via SSDP (multicast); many routers and mesh systems drop
+ * Finds LG webOS and Samsung Tizen TVs. First asks via SSDP (multicast); many routers and mesh systems drop
  * multicast, so if nothing answers it falls back to probing every address on the Wi-Fi
- * subnet for the TV's control port (3001/3000).
+ * subnet for the TVs' control ports (LG 3001/3000, Samsung 8002/8001).
  */
 object Discovery {
     private val TARGETS = listOf(
         "urn:lge-com:service:webos-second-screen:1",
+        "urn:samsung.com:device:RemoteControlReceiver:1",
         "urn:dial-multiscreen-org:service:dial:1",
         "ssdp:all",
     )
@@ -49,13 +50,21 @@ object Discovery {
     suspend fun lookupName(context: Context, ip: String): String? = withContext(Dispatchers.IO) {
         val net = wifiNetwork(context) ?: return@withContext null
         val loc = unicastSearch(net, ip)?.takeIf { it.isNotEmpty() } ?: return@withContext null
-        describe(ip, loc).name.takeIf { it != "LG TV" }?.let { prettyName(it) }
+        describe(ip, loc).name.takeIf { it != "LG TV" && it != "Samsung TV" }?.let { prettyName(it) }
     }
 
-    /** "[LG] webOS TV OLED65B3PUA" → "LG OLED65B3PUA"; a name the owner set is kept as is. */
+    /** "[LG] webOS TV OLED65B3PUA" → "LG OLED65B3PUA", "[TV] Samsung Q80 Series (65)" → "Samsung Q80 Series (65)";
+     *  a name the owner set is kept as is. */
     fun prettyName(friendly: String): String {
         val m = Regex("^\\[LG\\]\\s*webOS TV\\s*(.*)$", RegexOption.IGNORE_CASE).find(friendly.trim())
-        return if (m != null) ("LG " + m.groupValues[1]).trim() else friendly.trim()
+        if (m != null) return ("LG " + m.groupValues[1]).trim()
+        return friendly.trim().removePrefix("[TV]").trim()
+    }
+
+    /** Which brand of TV is at [ip], for an address typed in by hand: Samsung answers on its REST port, else LG. */
+    suspend fun brandAt(ip: String): String = withContext(Dispatchers.IO) {
+        val info = fetch("http://$ip:8001/api/v2/")
+        if (info != null && "samsung" in info.lowercase()) "Samsung" else "LG"
     }
 
     /** Addresses to probe around [ip]: the real subnet, capped at a /22 (1022 hosts). */
@@ -89,7 +98,7 @@ object Discovery {
         val wifi = context.applicationContext.getSystemService(Context.WIFI_SERVICE) as WifiManager
         // Android drops multicast traffic unless we hold this lock.
         val lock = wifi.createMulticastLock("tv-discovery").apply { setReferenceCounted(false); acquire() }
-        val found = linkedMapOf<String, String?>() // ip -> description URL
+        val found = linkedMapOf<String, Pair<String?, String>>() // ip -> (description URL, brand)
         try {
             DatagramSocket().use { sock ->
                 net?.bindSocket(sock) // make sure the search goes out over Wi-Fi, not mobile data
@@ -111,23 +120,37 @@ object Discovery {
                     val p = DatagramPacket(buf, buf.size)
                     try { sock.receive(p) } catch (_: SocketTimeoutException) { continue }
                     val text = String(p.data, 0, p.length)
-                    if (!looksLikeLg(text)) continue
+                    val brand = brandOf(text) ?: continue
                     val ip = p.address.hostAddress ?: continue
-                    if (ip !in found) found[ip] = header(text, "location")
+                    if (ip !in found) found[ip] = header(text, "location") to brand
                 }
             }
         } finally { lock.release() }
-        found.map { (ip, loc) -> describe(ip, loc) }
+        found.map { (ip, v) -> describe(ip, v.first, v.second) }
     }
 
-    internal fun looksLikeLg(ssdpResponse: String): Boolean {
+    internal fun looksLikeLg(ssdpResponse: String): Boolean = brandOf(ssdpResponse) == "LG"
+
+    /** "LG" or "Samsung" from an SSDP answer; null for other devices (and Samsung phones, soundbars…, which aren't TVs). */
+    internal fun brandOf(ssdpResponse: String): String? {
         val t = ssdpResponse.lowercase()
-        return "webos" in t || "lge" in t || "lg electronics" in t
+        return when {
+            "webos" in t || "lge" in t || "lg electronics" in t -> "LG"
+            "samsung" in t && ("remotecontrolreceiver" in t || "tizen" in t || "dial" in t) -> "Samsung"
+            else -> null
+        }
     }
 
-    private fun describe(ip: String, location: String?): FoundTv {
+    private fun describe(ip: String, location: String?, brand: String = "LG"): FoundTv {
         val xml = location?.takeIf { it.isNotEmpty() }?.let { fetch(it) } ?: ""
-        return FoundTv(ip, tag(xml, "friendlyName").ifEmpty { "LG TV" }, tag(xml, "modelName"))
+        return FoundTv(ip, tag(xml, "friendlyName").ifEmpty { "$brand TV" }, tag(xml, "modelName"), brand)
+    }
+
+    /** A Samsung TV's own description from its REST port, or null if [ip] isn't one. */
+    private fun samsungAt(ip: String): FoundTv? {
+        val d = fetch("http://$ip:8001/api/v2/")?.let { runCatching { org.json.JSONObject(it).optJSONObject("device") }.getOrNull() } ?: return null
+        if ("samsung" !in d.toString().lowercase() || d.optString("type").contains("phone", true)) return null
+        return FoundTv(ip, prettyName(d.optString("name").ifEmpty { "Samsung TV" }), d.optString("modelName"), "Samsung")
     }
 
     /** Probe every host on the /24 for an open LG control port. ~2-3 s for 254 hosts. */
@@ -140,14 +163,15 @@ object Discovery {
         val myIp = link.address.hostAddress!!
         val hosts = hostsToScan(myIp, link.prefixLength)
         lastReport = "This phone is $myIp. Checked ${hosts.size} addresses on its Wi-Fi network " +
-            "(${hosts.first()} – ${hosts.last()}) and none answered like an LG TV."
+            "(${hosts.first()} – ${hosts.last()}) and none answered like an LG or Samsung TV."
         val gate = Semaphore(64)
         val hits = hosts.map { ip ->
-            async { gate.withPermit { if (portOpen(n, ip, 3001) || portOpen(n, ip, 3000)) ip else null } }
+            async { gate.withPermit { if (portOpen(n, ip, 3001) || portOpen(n, ip, 3000) || portOpen(n, ip, 8001)) ip else null } }
         }.awaitAll().filterNotNull()
+        val samsungs = hits.mapNotNull { samsungAt(it) }
         // Port 3000 is common on other devices too; keep hosts that confirm they're LG over unicast SSDP,
         // or that have the webOS secure port.
-        hits.mapNotNull { ip ->
+        samsungs + hits.filter { h -> samsungs.none { it.ip == h } }.mapNotNull { ip ->
             val loc = unicastSearch(n, ip)
             when {
                 loc != null -> describe(ip, loc)

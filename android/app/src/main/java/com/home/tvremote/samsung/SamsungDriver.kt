@@ -1,7 +1,7 @@
 package com.home.tvremote.samsung
 
-import android.util.Base64
 import com.home.tvremote.lg.TvException
+import com.home.tvremote.tv.AppIds
 import com.home.tvremote.tv.TvDriver
 import com.home.tvremote.voice.TvApp
 import kotlinx.coroutines.CompletableDeferred
@@ -39,6 +39,7 @@ import javax.net.ssl.X509TrustManager
  *  - http://IP:8001/api/v2/ : model, Wi-Fi MAC, power state ("on"/"standby", 2018+);
  *    /api/v2/applications/<id> : is that app running / in front (polled for the few apps that matter).
  *
+ * App IDs: the rest of the app uses one shared name per app (LG's); this driver converts at the edge ([AppIds]).
  * No free pointer on Samsung: drags become arrow keys and a tap is OK. No play state and no on-screen notifications.
  * Written from the community-documented protocol; checked against [SimulatedSamsungTv], not yet a real TV.
  */
@@ -88,7 +89,7 @@ class SamsungDriver(
     }
 
     private suspend fun open(base: String, onPrompt: () -> Unit) {
-        val name = Base64.encodeToString("Phone remote".toByteArray(), Base64.NO_WRAP)
+        val name = java.util.Base64.getEncoder().encodeToString("Phone remote".toByteArray())
         val url = "$base/api/v2/channels/samsung.remote.control?name=$name" + (token?.let { "&token=$it" } ?: "")
         val opened = CompletableDeferred<Unit>()
         ready = CompletableDeferred()
@@ -138,7 +139,8 @@ class SamsungDriver(
     override fun close() {
         generation.incrementAndGet()
         pollJob?.cancel()
-        ws?.cancel(); ws = null
+        // close, not cancel: keys are fire-and-forget, and cancel would drop one still queued (e.g. KEY_POWER right before closing).
+        ws?.close(1000, null); ws = null
         if (!ready.isCompleted) ready.completeExceptionally(TvException("Connection closed"))
     }
 
@@ -171,19 +173,19 @@ class SamsungDriver(
         val reply = CompletableDeferred<JSONArray>().also { appsReply = it }
         send(JSONObject().put("method", "ms.channel.emit").put("params", JSONObject().put("event", "ed.installedApp.get").put("to", "host")), "installed apps")
         val arr = withTimeoutOrNull(4000) { reply.await() } ?: return null
-        return (0 until arr.length()).map { arr.getJSONObject(it) }.map { TvApp(it.optString("appId"), it.optString("name")) }
+        return (0 until arr.length()).map { arr.getJSONObject(it) }.map { TvApp(AppIds.canonical(it.optString("appId")), it.optString("name")) }
     }
 
     /** Apps whose "in front" status is polled (the TV has no event for it): the well-known ones plus the installed list. */
-    @Volatile var watchedApps: Set<String> = SamsungApps.COMMON.map { it.id }.toSet()
+    @Volatile var watchedApps: Set<String> = SamsungApps.COMMON.map { AppIds.forBrand(it.id, brand) }.toSet()
     @Volatile private var lastFront: String? = null
     @Volatile private var lastPower: String? = null
     private var foregroundCb: ((String) -> Unit)? = null
     private var powerCb: ((String) -> Unit)? = null
 
     override suspend fun foregroundApp(): String? {
-        for (id in watchedApps) if (rest("/api/v2/applications/$id")?.optBoolean("visible") == true) return id
-        return "samsung.home"   // nothing we know is in front: treat as the home screen
+        for (id in watchedApps) if (rest("/api/v2/applications/$id")?.optBoolean("visible") == true) return AppIds.canonical(id)
+        return "com.webos.app.home"   // nothing we know is in front: the home screen (shared name)
     }
     override suspend fun onForeground(cb: (String) -> Unit) { foregroundCb = cb }
     override suspend fun onPower(cb: (String) -> Unit) { powerCb = cb }
@@ -231,21 +233,22 @@ class SamsungDriver(
     override suspend fun openInput(hdmi: Int) = key("KEY_HDMI$hdmi")
 
     override suspend fun launch(appId: String, extras: JSONObject?, alternative: Boolean) {
-        if (alternative) { rest("/api/v2/applications/$appId", "POST") ?: throw TvException("The TV didn't open $appId"); log("OK  open $appId (REST)"); return }
+        val id = AppIds.forBrand(appId, brand)
+        if (alternative) { rest("/api/v2/applications/$id", "POST") ?: throw TvException("The TV didn't open $id"); log("OK  open $id (REST)"); return }
         ensure()
         // LG-shaped extras → Samsung's metaTag: Netflix's contentId string, or a URL / parameters for other apps.
         val meta = extras?.optString("contentId")?.ifEmpty { null } ?: extras?.optJSONObject("params")?.optString("contentTarget")?.ifEmpty { null }
-        val data = JSONObject().put("appId", appId).put("action_type", if (appId == SamsungApps.BROWSER) "NATIVE_LAUNCH" else "DEEP_LINK")
+        val data = JSONObject().put("appId", id).put("action_type", if (id == AppIds.forBrand("com.webos.app.browser", brand)) "NATIVE_LAUNCH" else "DEEP_LINK")
         meta?.let { data.put("metaTag", it) }
         send(JSONObject().put("method", "ms.channel.emit").put("params", JSONObject().put("event", "ed.apps.launch").put("to", "host").put("data", data)),
-            "open $appId${meta?.let { " · $it" } ?: ""}")
+            "open $id${meta?.let { " · $it" } ?: ""}")
     }
-    override suspend fun openUrl(url: String): Boolean = runCatching { launch(SamsungApps.BROWSER, JSONObject().put("contentId", url)) }.isSuccess
+    override suspend fun openUrl(url: String): Boolean = runCatching { launch("com.webos.app.browser", JSONObject().put("contentId", url)) }.isSuccess
 
     override suspend fun typeText(text: String) {
         ensure()
         send(JSONObject().put("method", "ms.remote.control").put("params", JSONObject()
-            .put("Cmd", Base64.encodeToString(text.toByteArray(), Base64.NO_WRAP)).put("DataOfCmd", "base64").put("TypeOfRemote", "SendInputString")), "type “$text”")
+            .put("Cmd", java.util.Base64.getEncoder().encodeToString(text.toByteArray())).put("DataOfCmd", "base64").put("TypeOfRemote", "SendInputString")), "type “$text”")
     }
     override suspend fun sendEnter() {
         ensure()
@@ -262,12 +265,11 @@ class SamsungDriver(
     }
 }
 
-/** Samsung Tizen app IDs for common apps (community-documented; some vary by model year). */
+/** Common apps on Samsung TVs, by their shared names (the driver converts to Tizen IDs). */
 object SamsungApps {
-    const val BROWSER = "org.tizen.browser"
     val COMMON = listOf(
-        TvApp("3201907018807", "Netflix"), TvApp("111299001912", "YouTube"), TvApp("3201910019365", "Prime Video"),
-        TvApp("3201901017640", "Disney+"), TvApp("3201601007625", "Hulu"), TvApp("3201807016597", "Apple TV"),
-        TvApp("3202301029760", "Max"), TvApp("3201606009684", "Spotify"), TvApp("3202006020991", "Peacock"), TvApp("3201710014981", "Paramount+"),
+        TvApp("netflix", "Netflix"), TvApp("youtube.leanback.v4", "YouTube"), TvApp("amazon", "Prime Video"),
+        TvApp("com.disney.disneyplus-prod", "Disney+"), TvApp("hulu", "Hulu"), TvApp("com.apple.appletv", "Apple TV"),
+        TvApp("com.wbd.stream", "Max"), TvApp("spotify-beehive", "Spotify"), TvApp("peacock", "Peacock"), TvApp("paramount", "Paramount+"),
     )
 }

@@ -93,11 +93,12 @@ object TimerEngine {
     }
 
     /** Opens a short-lived connection to the saved TV (independent of the remote screen). */
-    internal suspend fun withTv(context: Context, block: suspend (LgTv) -> Unit): Boolean {
+    internal suspend fun withTv(context: Context, block: suspend (com.home.tvremote.tv.TvDriver) -> Unit): Boolean {
         val prefs = context.getSharedPreferences("tv", Context.MODE_PRIVATE)
         val ip = prefs.getString("ip", null) ?: return false
         val key = prefs.getString("clientKey", null) ?: return false
-        val tv = LgTv(ip, key, onClientKey = { prefs.edit().putString("clientKey", it).apply() })
+        val tv = com.home.tvremote.TvController.net.driver(prefs.getString("brand", "LG") ?: "LG", ip, key,
+            onClientKey = { prefs.edit().putString("clientKey", it).apply() }, onDisconnect = {})
         return try {
             withTimeout(15_000) { tv.connect(); block(tv) }
             true

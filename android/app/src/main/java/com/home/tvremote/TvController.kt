@@ -49,7 +49,7 @@ class TvController(app: Application) : AndroidViewModel(app), TvActions {
     val picks = PicksController(PicksStore(app.getSharedPreferences("picks", Context.MODE_PRIVATE)), this, viewModelScope)
 
     var screen by mutableStateOf(if (prefs.getString("ip", null) != null) Screen.Remote else Screen.Setup)
-    var tvName by mutableStateOf(prefs.getString("name", "LG TV")!!)
+    var tvName by mutableStateOf(prefs.getString("name", "$brand TV")!!)
     var connected by mutableStateOf(false)
     var connecting by mutableStateOf(false)
     var scanning by mutableStateOf(false)
@@ -157,7 +157,7 @@ class TvController(app: Application) : AndroidViewModel(app), TvActions {
                     val i = found.indexOfFirst { it.ip == r.ip }
                     if (i >= 0) found[i] = r else found += r
                 }
-                if (found.isEmpty()) scanReport = Discovery.lastReport.ifEmpty { "No LG TV found." } +
+                if (found.isEmpty()) scanReport = Discovery.lastReport.ifEmpty { "No TV found." } +
                     " If the TV's address isn't in that range, the phone and TV are on different networks (e.g. a guest network). You can still enter the TV's IP below."
                 else scanReport = null
             } catch (e: Exception) { showError(e) }
@@ -165,10 +165,12 @@ class TvController(app: Application) : AndroidViewModel(app), TvActions {
         }
     }
 
-    fun choose(ip: String, name: String) {
-        if (ip != prefs.getString("ip", null)) { prefs.edit().remove("clientKey").remove("mac").apply(); macKnown = false }
-        prefs.edit().putString("ip", ip).putString("name", name).remove("nameCustom").apply()
-        tvName = name
+    /** Pair with the TV at [ip]. [brand] comes from discovery; for an address typed in by hand it's asked from the TV. */
+    fun choose(ip: String, name: String, brand: String? = null) = viewModelScope.launch {
+        val b = brand ?: Discovery.brandAt(ip)
+        if (ip != prefs.getString("ip", null) || b != this@TvController.brand) { prefs.edit().remove("clientKey").remove("mac").apply(); macKnown = false }
+        prefs.edit().putString("ip", ip).putString("brand", b).putString("name", if (brand == null) "$b TV" else name).remove("nameCustom").apply()
+        tvName = prefs.getString("name", name) ?: name
         tv?.close(); tv = null
         connect(pairing = true)
     }
@@ -208,6 +210,8 @@ class TvController(app: Application) : AndroidViewModel(app), TvActions {
                 // Ask the TV, don't guess: with Quick Start+ the app can connect to a TV that is in standby.
                 val state = runCatching { withTimeout(3000) { t.powerState() } }.getOrNull()
                 event("CONNECT ok in ${System.currentTimeMillis() - t0} ms, TV says ${state ?: "?"}")
+                // Turned off (or a newer attempt began) while we waited for that answer: it's stale, don't apply it.
+                if (epoch != connEpoch) return@launch
                 tvOff = state in STANDBY_STATES
                 screen = Screen.Remote
                 if (firstTime || pairing) {
