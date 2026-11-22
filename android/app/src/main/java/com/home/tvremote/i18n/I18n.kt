@@ -234,6 +234,10 @@ object I18n {
             "Devices can see each other" to "Os aparelhos se enxergam na rede",
             "Some routers block this (\"AP isolation\" or \"client isolation\"). Turning it off helps." to "Alguns roteadores bloqueiam isso (\"isolamento de AP\" ou \"de clientes\"). Desativar ajuda.",
             "Enter the TV's IP address" to "Digitar o IP da TV", "Details" to "Detalhes",
+            "This phone isn't on Wi-Fi, so it can't turn the TV on. Connect to your home Wi-Fi and try again." to
+                "Este celular não está no Wi-Fi, então não consegue ligar a TV. Conecte-se ao Wi-Fi de casa e tente de novo.",
+            "This phone is on a different network from the TV. Connect to the same Wi-Fi as the TV and try again." to
+                "Este celular está em outra rede, diferente da TV. Conecte-se ao mesmo Wi-Fi da TV e tente de novo.",
             // privacy
             "Privacy" to "Privacidade", "Share anonymous usage" to "Compartilhar uso anônimo", "Yes" to "Sim", "No" to "Não", "Not set" to "Não definido",
             "Share" to "Compartilhar", "Don't share" to "Não compartilhar", "No thanks" to "Não, obrigado",

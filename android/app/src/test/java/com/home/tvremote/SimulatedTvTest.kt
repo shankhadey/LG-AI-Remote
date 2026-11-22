@@ -140,6 +140,28 @@ class SimulatedTvTest {
         eventually("turns on, help gone", tv, ms = 10_000) { tv.connected && !tv.tvOff && tv.turnOnFailures == 0 }
     }
 
+    @Test fun phoneNotOnWifi_saysSo_noWakeAttempt_noTvHelp() {
+        sim.power = "Off"; sim.quickStart = false
+        val tv = openApp()
+        eventually("shows Turn on", tv, ms = 8000) { tv.tvOff }
+        sim.phoneWifi = null
+        onMain { tv.turnOn() }
+        eventually("explains the phone isn't on Wi-Fi", tv) { tv.feedback?.startsWith("This phone isn't on Wi-Fi") == true }
+        assertFalse("no wake loop", onMain { tv.waking })
+        assertEquals("not the TV's fault: no turn-on help", 0, onMain { tv.turnOnFailures })
+        assertTrue(onMain { tv.diagnostics() }.contains("WAKE phone not on Wi-Fi"))
+    }
+
+    @Test fun phoneOnAnotherNetwork_saysSo() {
+        sim.power = "Off"; sim.quickStart = false
+        val tv = openApp()
+        eventually("shows Turn on", tv, ms = 8000) { tv.tvOff }
+        sim.phoneWifi = "10.0.0.7" to 24   // e.g. a guest network
+        onMain { tv.turnOn() }
+        eventually("explains the different network", tv) { tv.feedback?.startsWith("This phone is on a different network") == true }
+        assertEquals(0, onMain { tv.turnOnFailures })
+    }
+
     @Test fun turnedOnWithTheTvRemoteWhileHelpShows_helpGoes() {
         sim.power = "Active Standby"
         val tv = openApp()

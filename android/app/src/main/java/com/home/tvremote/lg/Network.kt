@@ -81,6 +81,23 @@ object Discovery {
     }
 
     /** This phone's IPv4 address on Wi-Fi (for the TV to load the timer page from). */
+    /** The phone's Wi-Fi address and prefix length ("192.168.1.20", 24), or null when it isn't on Wi-Fi. */
+    fun phoneWifi(context: Context): Pair<String, Int>? {
+        val net = wifiNetwork(context) ?: return null
+        val cm = context.getSystemService(Context.CONNECTIVITY_SERVICE) as ConnectivityManager
+        val la = cm.getLinkProperties(net)?.linkAddresses?.firstOrNull { it.address is Inet4Address && !it.address.isLoopbackAddress } ?: return null
+        return la.address.hostAddress!! to la.prefixLength
+    }
+
+    /** Whether [ip] is on the same network as the phone's Wi-Fi address [phone]/[prefix]. */
+    fun sameNetwork(phone: String, prefix: Int, ip: String): Boolean {
+        fun n(a: String) = a.split('.').takeIf { it.size == 4 }?.map { it.toIntOrNull() ?: return null }?.fold(0) { acc, b -> (acc shl 8) or b }
+        val a = n(phone) ?: return true; val b = n(ip) ?: return true
+        val p = prefix.coerceIn(8, 32)
+        val mask = if (p == 32) -1 else (-1 shl (32 - p))
+        return (a and mask) == (b and mask)
+    }
+
     fun phoneWifiIp(context: Context): String? {
         val net = wifiNetwork(context) ?: return null
         val cm = context.getSystemService(Context.CONNECTIVITY_SERVICE) as ConnectivityManager
@@ -237,6 +254,8 @@ object WakeOnLan {
         val cm = context.getSystemService(Context.CONNECTIVITY_SERVICE) as ConnectivityManager
         @Suppress("DEPRECATION")
         val net = cm.allNetworks.firstOrNull { cm.getNetworkCapabilities(it)?.hasTransport(NetworkCapabilities.TRANSPORT_WIFI) == true }
+            // Not on Wi-Fi: the packets would go out over mobile data and could never reach the TV (they used to count as sent).
+            ?: throw IllegalStateException("this phone isn't on Wi-Fi")
         val link = net?.let { cm.getLinkProperties(it) }?.linkAddresses?.firstOrNull { it.address is Inet4Address }
         val targets = listOfNotNull("255.255.255.255", link?.let { subnetBroadcast(it.address.hostAddress!!, it.prefixLength) }, tvIp).distinct()
         var ok = 0

@@ -132,7 +132,11 @@ class SimulatedLgTv {
     fun dropsConnections() { for (s in sockets) runCatching { s.close(1001, "going away") }; sockets.clear(); subs.clear() }
 
     /** Network access as the app sees it, pointed at this simulated TV. */
+    /** The phone's Wi-Fi (address, prefix); null = the phone isn't on Wi-Fi. */
+    @Volatile var phoneWifi: Pair<String, Int>? = "192.168.1.20" to 24
+
     val net = object : TvController.Net {
+        override fun phoneWifi(context: Context): Pair<String, Int>? = this@SimulatedLgTv.phoneWifi
         override suspend fun reachable(ip: String, timeoutMs: Int) = power == "Active" || (power == "Active Standby" && quickStart)
         override suspend fun wake(context: Context, macs: List<String>, ip: String?): Int {
             if (power != "Active" && wakeWorks) Thread {

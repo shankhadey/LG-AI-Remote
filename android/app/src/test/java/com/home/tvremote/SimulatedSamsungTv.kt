@@ -114,7 +114,11 @@ class SimulatedSamsungTv {
     fun keyboardCloses() = sockets.forEach { it.send(JSONObject().put("event", "ms.remote.imeEnd").put("data", "").toString()) }
     fun dropsConnections() { for (s in sockets) runCatching { s.close(1001, "going away") }; sockets.clear() }
 
+    /** The phone's Wi-Fi (address, prefix); null = the phone isn't on Wi-Fi. */
+    @Volatile var phoneWifi: Pair<String, Int>? = "192.168.1.21" to 24
+
     val net = object : TvController.Net {
+        override fun phoneWifi(context: Context): Pair<String, Int>? = this@SimulatedSamsungTv.phoneWifi
         override suspend fun reachable(ip: String, timeoutMs: Int) = power != "off"
         override suspend fun wake(context: Context, macs: List<String>, ip: String?): Int {
             if (power != "on") Thread { Thread.sleep(wakeDelayMs); turnedOnByRemote() }.start()

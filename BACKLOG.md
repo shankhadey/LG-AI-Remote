@@ -70,6 +70,14 @@ Measure it: time from opening to Play, quick-backs, "Not now" count per session.
 - To test on the TV: Search 1/2 (Netflix search page with "The Crown" filled in).
 - Next: Prime Video and Disney+ title/search links (same 3-try test).
 
+## v1.4.1 — turn-on failed on 1.4.0 (22 Nov, 11:24) — open
+- 468 wake packets over 45 s, the TV never appeared on the network. First failed wake in all diagnostics (every
+  earlier one worked: ~3–5 s with Quick Start+, ~17 s without). Wake code unchanged since 1.2.1 (diffed).
+  User: phone and TV both on Wi-Fi, nothing changed but the app.
+- Added: the phone's network is logged at every turn-on ("WAKE phone on Wi-Fi a.b.c.d/24 · TV …"); not on Wi-Fi or on
+  another network → said plainly, no wake attempt, no TV help. Before, packets "sent" over mobile data counted as sent.
+- A/B: 1.3.3-retest (= 1.3.3 code, versionCode 57) to compare on the same TV after the same standby time.
+
 ## v1.4.0 — onboarding (approved 22 Nov)
 - Welcome screen on first launch only (never for people who already have a TV): what the app does, "Find my TV".
 - Turn-on help only when "Turn on" fails (brother's vivo + LG connected fine without it): the LG / Samsung menu path,

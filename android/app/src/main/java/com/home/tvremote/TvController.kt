@@ -736,6 +736,14 @@ class TvController(app: Application) : AndroidViewModel(app), TvActions {
             }
             return
         }
+        // Which network is the phone on? Logged every time, and checked: from mobile data or another Wi-Fi the wake-up
+        // signal can't reach the TV (22 Nov: a failed turn-on we couldn't explain because this wasn't known).
+        val phone = net.phoneWifi(getApplication())
+        event("WAKE phone ${phone?.let { "on Wi-Fi ${it.first}/${it.second}" } ?: "not on Wi-Fi"} · TV $ip")
+        if (phone == null) { say("This phone isn't on Wi-Fi, so it can't turn the TV on. Connect to your home Wi-Fi and try again.", error = true); return }
+        if (ip != null && !Discovery.sameNetwork(phone.first, phone.second, ip)) {
+            say("This phone is on a different network from the TV. Connect to the same Wi-Fi as the TV and try again.", error = true); return
+        }
         waking = true
         wakeSeconds = 0
         connEpoch++   // any connection attempt still running is now stale
@@ -970,6 +978,8 @@ class TvController(app: Application) : AndroidViewModel(app), TvActions {
         suspend fun wake(context: Context, macs: List<String>, ip: String?): Int
         fun driver(brand: String, ip: String, clientKey: String?, onClientKey: (String) -> Unit, onDisconnect: () -> Unit): TvDriver
         suspend fun lookupName(context: Context, ip: String): String?
+        /** The phone's Wi-Fi address and prefix, or null when it isn't on Wi-Fi. */
+        fun phoneWifi(context: Context): Pair<String, Int>? = Discovery.phoneWifi(context)
     }
     object RealNet : Net {
         override suspend fun reachable(ip: String, timeoutMs: Int) = WakeOnLan.reachable(ip, timeoutMs)
