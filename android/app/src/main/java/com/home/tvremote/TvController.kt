@@ -758,7 +758,9 @@ class TvController(app: Application) : AndroidViewModel(app), TvActions {
             is Command.OpenApp -> launch(cmd.app)
             is Command.Search -> if (!cmd.title || cmd.app?.id?.startsWith("youtube") == true) search(cmd.query, cmd.app) else viewModelScope.launch {
                 // "play / watch X": a show or film on their services first.
-                picks.resolvePerson(cmd.query)?.let { (person, kind) ->
+                // A person, trying the recognizer's other guesses too ("adam sanfler" → "adam sandler").
+                val guesses = listOf(cmd.query) + alternatives.mapNotNull { g -> (CommandParser(apps).parse(g) as? Command.Search)?.query }
+                for (q in guesses.distinct().take(4)) picks.resolvePerson(q)?.let { (person, kind) ->
                     say("Looking for ${person}…"); picks.showPerson(person, kind)?.let { say(it, error = true) }; return@launch
                 }
                 say("Looking for ${cmd.query}…")
@@ -768,11 +770,12 @@ class TvController(app: Application) : AndroidViewModel(app), TvActions {
                     is com.home.tvremote.picks.PicksController.Found.Elsewhere -> say(picks.elsewhere(r), error = true)
                     is com.home.tvremote.picks.PicksController.Found.NoApp -> say(picks.noAppMessage(r), error = true)
                     com.home.tvremote.picks.PicksController.Found.Nothing -> {
+                        // The AI next: a misheard person ("adam sanfler movies"), a description, or a mood (→ picks).
+                        val msg = picks.interpret(cmd.query) ?: return@launch
                         // "some funny movies", "a good thriller": a request for picks, not YouTube.
                         if (WANTS_PICKS.containsMatchIn(cmd.query)) { picks.openPicker(); if (picks.step == com.home.tvremote.picks.Step.Choose) picks.ask(cmd.query); return@launch }
-                        // Not a show or film anywhere: maybe a description; last resort YouTube (music, clips), saying so.
-                        val msg = picks.interpret(cmd.query)
-                        if (msg != null) { search(cmd.query, cmd.app); say("“${cmd.query}” isn't a show or film — searching YouTube") }
+                        // Last resort YouTube (music, clips), saying so.
+                        search(cmd.query, cmd.app); say("“${cmd.query}” isn't a show or film — searching YouTube")
                     }
                 }
             }

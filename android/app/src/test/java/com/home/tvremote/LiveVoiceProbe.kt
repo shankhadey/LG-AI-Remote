@@ -8,11 +8,13 @@ import org.junit.Test
 
 class LiveVoiceProbe {
     @Test fun probe() = runBlocking {
-        val key = System.getenv("TMDB_KEY"); assumeTrue(!key.isNullOrBlank())
         val p = CommandParser(emptyList())
-        for (s in listOf("open stranger things", "hoping stranger things", "hope in stranger things", "open stranger thanks", "play barbie", "play movies with jennifer aniston"))
+        for (s in listOf("show me some adam sandler movies", "show me some adam sanfler movies", "can you show me some adam sandler movies")) println("PROBE parse0 '$s' -> ${p.parse(s)}")
+        val key = System.getenv("TMDB_KEY"); assumeTrue(!key.isNullOrBlank())
+        for (s in listOf("show me some adam sandler movies", "show me some adam sanfler movies", "Show me some Adam Sandler movies", "can you show me some adam sandler movies", "open stranger things", "hoping stranger things", "hope in stranger things", "open stranger thanks", "play barbie", "play movies with jennifer aniston"))
             println("PROBE parse '$s' -> ${p.parse(s)}")
         val t = Tmdb(key!!)
+        println("PROBE person sanfler -> " + t.findPerson("adam sanfler"))
         println("PROBE search barbie -> " + t.search("barbie").map { "${it.name} (${it.year}) ${it.key}" })
         for (person in listOf("Jennifer Aniston", "Bryan Cranston")) {
             val c = t.personCredits(person)
