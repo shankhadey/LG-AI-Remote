@@ -206,6 +206,14 @@ object I18n {
             "Nothing matched — try another mood, language or “Any”" to "Nada combinou. Tente outro clima, outro idioma ou “Todos”.",
             "Double-tap to go back 10 seconds" to "Toque duas vezes para voltar 10 segundos", "Double-tap to skip 10 seconds" to "Toque duas vezes para avançar 10 segundos",
             "Fix" to "Corrigir", "Couldn't find anything with both" to "Nada encontrado com os dois juntos",
+            // privacy
+            "Privacy" to "Privacidade", "Share anonymous usage" to "Compartilhar uso anônimo", "Yes" to "Sim", "No" to "Não", "Not set" to "Não definido",
+            "Share" to "Compartilhar", "Don't share" to "Não compartilhar", "No thanks" to "Não, obrigado",
+            "Help improve TV Remote?" to "Quer ajudar a melhorar o TV Remote?",
+            "Share anonymous usage: which features get used, and in which country. Never names, titles or what you say." to
+                "Compartilhe dados de uso anônimos: quais recursos são usados e em qual país. Nunca nomes, títulos ou o que você fala.",
+            "Helps us see which features get used and in which countries. Never names, show titles, what you say or your TV's address. You can change this any time." to
+                "Ajuda a entender quais recursos são usados e em quais países. Nunca nomes, títulos, o que você fala ou o endereço da sua TV. Dá para mudar quando quiser.",
             // the picks page on the TV
             "Choosing on the phone…" to "Escolhendo no celular…", "Pick a mood" to "Escolha um clima", "Show 5 more" to "Mostrar mais 5",
             "Back to moods" to "Voltar aos climas", "Point with your phone · tap to choose" to "Aponte com o celular · toque para escolher", "Data from TMDB" to "Dados do TMDB",

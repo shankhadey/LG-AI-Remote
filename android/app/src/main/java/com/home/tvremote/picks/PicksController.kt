@@ -225,6 +225,7 @@ class PicksController(
     private fun run(ask: Ask, how: String, label: String) {
         val sess = session ?: return
         sess.how = how; sess.who = who; sess.language = ask.language ?: language ?: "any"
+        com.home.tvremote.analytics.Analytics.log(com.home.tvremote.analytics.Analytics.Event.PicksOpened, "how" to how.substringBefore(':').substringBefore(' ').lowercase())   // category only, never what was said
         store.countSlot(slot, "who", who)
         store.countSlot(slot, "lang", language ?: "any")
         if (ask.mood != Mood.Any && !how.startsWith("voice")) store.countSlot(slot, "mood", ask.mood.name)
@@ -345,6 +346,7 @@ class PicksController(
                 val v = store.linkVariant(svc.name)
                 tv.openTitle(appId, svc.name, DeepLinks.forService(svc.name, id, key, name, v))
                 remember(Opened(key, name, svc.name, appId, id, DeepLinks.variants(svc.name).filter { it != v }.map { "format:$it" } + "type"))
+                com.home.tvremote.analytics.Analytics.log(com.home.tvremote.analytics.Analytics.Event.PickPlayed, "service" to svc.name, "open" to "direct_$v")
                 tv.note("Opening $name on ${svc.name}")
             } else openAndType(key, name, svc, appId)
         } else openAndType(key, name, svc, appId)
@@ -352,6 +354,7 @@ class PicksController(
 
     /** No direct link: open the app, and type the name as soon as its search box is selected. */
     private fun openAndType(key: String, name: String, svc: Service, appId: String) {
+        com.home.tvremote.analytics.Analytics.log(com.home.tvremote.analytics.Analytics.Event.PickPlayed, "service" to svc.name, "open" to "app_and_type")
         tv.openApp(appId, svc.name)
         tv.typeWhenSearchOpens(name)
         scope.launch { delay(4000); tv.toastOnTv("Select Search — the remote will type “$name”") }
@@ -379,6 +382,7 @@ class PicksController(
         val o = lastOpened ?: return
         val s = o.steps.getOrNull(fixStep) ?: return
         tv.log("FIX $s for ${o.name}")
+        com.home.tvremote.analytics.Analytics.log(com.home.tvremote.analytics.Analytics.Event.NotIt, "service" to o.service, "step" to s)
         when {
             s.startsWith("format:") && o.titleId != null ->
                 tv.openTitle(o.appId, o.service, DeepLinks.forService(o.service, o.titleId, o.key, o.name, s.removePrefix("format:")))
@@ -606,7 +610,7 @@ class PicksController(
         val started = pendingStartedAt ?: return
         if (now - started < NO_START_MS) { p.outcome = "no-start"; store.saveSession(p); pendingStartedAt = null; return }
         val min = ((now - started) / 60_000).toInt()
-        if (min < 30) { p.leftAfterMin = min; p.outcome = "quick-back" } else p.outcome = "watched"
+        if (min < 30) { p.leftAfterMin = min; p.outcome = "quick-back"; com.home.tvremote.analytics.Analytics.log(com.home.tvremote.analytics.Analytics.Event.QuickBack, "service" to p.service, "minutes" to "$min") } else p.outcome = "watched"
         if (min >= 15) store.addLiked(p.who, p.playedKey!!, p.playedName ?: "") // 15–30 min is a weak signal, still liked
         store.saveSession(p); pending = null; pendingStartedAt = null
     }

@@ -245,6 +245,7 @@ class TvController(app: Application) : AndroidViewModel(app), TvActions {
                 }
             }
         }
+        viewModelScope.launch { com.home.tvremote.analytics.Analytics.log(com.home.tvremote.analytics.Analytics.Event.TvConnected, "brand" to t.brand, "model" to runCatching { t.modelName() }.getOrNull()) }
         if (!prefs.getBoolean("nameCustom", false)) viewModelScope.launch {
             // In the background so it never delays a button press.
             prefs.getString("ip", null)?.let { ip ->
@@ -537,6 +538,8 @@ class TvController(app: Application) : AndroidViewModel(app), TvActions {
         appendLine("Apps listed by TV: ${apps.size} · on screen: $foregroundApp · play state: ${mediaState ?: "unknown"}")
         TimerEngine.state?.let { appendLine("Timer: ${it.kind} ends in ${TimerEngine.format(it.endsAt - System.currentTimeMillis())}") }
         apps.firstOrNull { it.title.contains("netflix", true) }?.let { appendLine("Netflix id: ${it.id}") }
+        appendLine("Usage sharing: ${when (com.home.tvremote.analytics.Analytics.consent) { true -> "on"; false -> "off"; null -> "not asked" }}" +
+            (if (com.home.tvremote.analytics.Analytics.active) "" else " (not set up in this build)") + com.home.tvremote.analytics.Analytics.recent.take(5).joinToString("") { "\n  $it" })
         appendLine()
         events.forEach { appendLine(it) }
         tv?.history?.forEach { appendLine(it) }
@@ -623,7 +626,19 @@ class TvController(app: Application) : AndroidViewModel(app), TvActions {
     var wakeSeconds by mutableStateOf(0)
     fun appEvent(msg: String) = event(msg)
 
+    init { com.home.tvremote.analytics.Analytics.init(app); com.home.tvremote.analytics.Analytics.setProfile(picks.store.country, com.home.tvremote.i18n.Regions.resolve(picks.store.appLanguage)) }
     init { picks.commandHandler = ::pickerSpeech; com.home.tvremote.i18n.I18n.lang = com.home.tvremote.i18n.Regions.resolve(picks.store.appLanguage); com.home.tvremote.i18n.I18n.country = picks.store.country }
+
+    // ---- anonymous usage (asked once; Settings › Privacy) ----
+    var usageConsent by mutableStateOf(com.home.tvremote.analytics.Analytics.consent)
+        internal set
+    /** The one-time question shows on the remote once the TV is connected and the user hasn't answered. */
+    val askUsage get() = usageConsent == null && connected && !tvOff
+    fun changeUsageConsent(on: Boolean) {
+        com.home.tvremote.analytics.Analytics.setConsent(getApplication(), on); usageConsent = on
+        if (on) com.home.tvremote.analytics.Analytics.setProfile(picks.store.country, com.home.tvremote.i18n.Regions.resolve(picks.store.appLanguage))
+        event("SETTINGS usage sharing ${if (on) "on" else "off"}")
+    }
 
     // ---- language and country ----
     var appLanguage by mutableStateOf(picks.store.appLanguage)
@@ -686,11 +701,15 @@ class TvController(app: Application) : AndroidViewModel(app), TvActions {
                         // Mark on *before* leaving the turning-on state, so the screen goes straight to the remote.
                         connected = true; tvOff = false; waking = false
                         say("TV is on")
+                        com.home.tvremote.analytics.Analytics.log(com.home.tvremote.analytics.Analytics.Event.TurnOnFromPhone, "result" to "on", "brand" to brand)
                         tv?.let { afterConnect(it) }
                     }
-                    is WakeLoop.Result.GaveUp -> when {
-                        r.packetsSent == 0 -> say("This phone couldn't send the wake-up signal (${r.lastError?.message ?: "no Wi-Fi?"}). Make sure the phone is on Wi-Fi.", error = true)
-                        else -> say("The TV didn't respond to the wake-up signal. See Power-on settings (menu under the TV name) for what to check.", error = true)
+                    is WakeLoop.Result.GaveUp -> {
+                        com.home.tvremote.analytics.Analytics.log(com.home.tvremote.analytics.Analytics.Event.TurnOnFromPhone, "result" to "gave_up", "brand" to brand)
+                        when {
+                            r.packetsSent == 0 -> say("This phone couldn't send the wake-up signal (${r.lastError?.message ?: "no Wi-Fi?"}). Make sure the phone is on Wi-Fi.", error = true)
+                            else -> say("The TV didn't respond to the wake-up signal. See Power-on settings (menu under the TV name) for what to check.", error = true)
+                        }
                     }
                 }
             } finally { waking = false }
@@ -782,6 +801,7 @@ class TvController(app: Application) : AndroidViewModel(app), TvActions {
     }
 
     fun run(cmd: Command) {
+        com.home.tvremote.analytics.Analytics.log(com.home.tvremote.analytics.Analytics.Event.VoiceCommand, "kind" to cmd::class.simpleName?.lowercase())
         when (cmd) {
             is Command.Power -> if (cmd.on) powerOn() else turnOff()
             is Command.VolumeStep -> {

@@ -188,6 +188,7 @@ fun RemoteScreen(tv: TvController, hasMicPermission: () -> Boolean) {
         if (watching) NowShowing(tv)
         else {
             PicksLine(tv.picks)
+            if (tv.askUsage) UsageCard(tv)
             // Apps as icons only: the label is the brand.
             Row(Modifier.fillMaxWidth().padding(top = 14.dp), horizontalArrangement = Arrangement.SpaceBetween) {
                 for (app in tv.mostUsed()) AppTile(app) { haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove); tv.launch(app) }
@@ -398,6 +399,9 @@ private fun SettingsScreen(tv: TvController) {
     var tapDialog by remember { mutableStateOf(false) }
     var linkDialog by remember { mutableStateOf(false) }
     var langDialog by remember { mutableStateOf(false) }
+    var usageDialog by remember { mutableStateOf(false) }
+    if (usageDialog) ChoiceDialog("Share anonymous usage", listOf("on" to "Share", "off" to "Don't share"),
+        when (tv.usageConsent) { true -> "on"; false -> "off"; null -> "" }, USAGE_NOTE) { it?.let { v -> tv.changeUsageConsent(v == "on") }; usageDialog = false }
     var countryDialog by remember { mutableStateOf(false) }
     if (langDialog) ChoiceDialog("App language", com.home.tvremote.i18n.Regions.LANGUAGES, tv.appLanguage, "Follows the phone's language.") { it?.let(tv::changeAppLanguage); langDialog = false }
     if (countryDialog) ChoiceDialog("Country", com.home.tvremote.i18n.Regions.ALL.map { it.code to it.name }, tv.country,
@@ -426,6 +430,8 @@ private fun SettingsScreen(tv: TvController) {
             Section("Language & country")
             SettingRow("Language", com.home.tvremote.i18n.Regions.LANGUAGES.first { it.first == tv.appLanguage }.second) { langDialog = true }
             SettingRow("Country", com.home.tvremote.i18n.Regions.of(tv.country).name) { countryDialog = true }
+            Section("Privacy")
+            SettingRow("Share anonymous usage", when (tv.usageConsent) { true -> "Yes"; false -> "No"; null -> "Not set" }) { usageDialog = true }
             Section("More")
             SettingRow("Help & diagnostics", "") { tv.showHelp = true }
             SettingRow("Advanced", "keys, AI") { tv.openPicksSettings() }
@@ -671,6 +677,24 @@ private fun TapDialog(tv: TvController, onClose: () -> Unit) {
         confirmButton = { TextButton(onClick = onClose) { Text("Done") } },
         containerColor = Palette.surface, titleContentColor = Palette.text, textContentColor = Palette.muted,
     )
+}
+
+private const val USAGE_NOTE = "Helps us see which features get used and in which countries. Never names, show titles, what you say or your TV's address. You can change this any time."
+
+/** Asked once, after the TV first connects: share anonymous usage? Same choice as Settings › Privacy. */
+@Composable
+private fun UsageCard(tv: TvController) {
+    Column(Modifier.fillMaxWidth().padding(top = 12.dp).card(RoundedCornerShape(18.dp)).padding(16.dp)) {
+        Text("Help improve TV Remote?", color = Palette.text, fontSize = 15.sp, fontWeight = FontWeight.SemiBold)
+        Text("Share anonymous usage: which features get used, and in which country. Never names, titles or what you say.",
+            color = Palette.muted, fontSize = 13.sp, lineHeight = 18.sp, modifier = Modifier.padding(top = 4.dp))
+        Row(Modifier.fillMaxWidth().padding(top = 12.dp), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+            Box(Modifier.weight(1f).clip(RoundedCornerShape(12.dp)).background(Palette.surface2).clickable { tv.changeUsageConsent(false) }.padding(vertical = 11.dp),
+                contentAlignment = Alignment.Center) { Text("No thanks", color = Palette.text, fontSize = 14.sp, fontWeight = FontWeight.SemiBold) }
+            Box(Modifier.weight(1f).clip(RoundedCornerShape(12.dp)).background(Palette.primary).clickable { tv.changeUsageConsent(true) }.padding(vertical = 11.dp),
+                contentAlignment = Alignment.Center) { Text("Share", color = Palette.onPrimary, fontSize = 14.sp, fontWeight = FontWeight.SemiBold) }
+        }
+    }
 }
 
 /** Pick one of [options] (value to English label). Returns the value, or null when dismissed. */

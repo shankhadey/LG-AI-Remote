@@ -87,7 +87,17 @@ Measure it: time from opening to Play, quick-backs, "Not now" count per session.
   Netflix, assistir X na Netflix, o que vamos assistir…); AI understands Portuguese and writes reasons in Portuguese.
 - Next: native-speaker review on a real phone; Spanish (Mexico) if LatAm grows; Hindi UI for India later.
 
-## Usage analytics (backlog — needs a decision)
+## Usage analytics (built, waiting on: Firebase project + approval of the consent design)
+- Built: Analytics.kt (Firebase Analytics), off until the user says yes (one-time card on the remote, or Settings ›
+  Privacy). Never the advertising ID, names, titles, what was said or the TV address. Events: tv_connected (brand,
+  model), turn_on (result), picks_opened (how), pick_played (service, direct_X / app_and_type), not_it, quick_back,
+  voice_command (kind). User properties: home_country, app_language. Firebase adds country from the network itself.
+- To switch on: create a Firebase project (Android app id com.home.tvremote), download google-services.json,
+  add it to android/app/. The build picks it up automatically; without it analytics is a no-op (Diagnostics shows
+  "not set up in this build").
+- Before Play: privacy policy page (what's collected, why, how to opt out), Play Data safety form.
+
+### Earlier notes
 - Installs and countries: Google Play Console gives these for free once the app is on Play.
 - Per-install usage: an anonymous install ID + a few events (app open, TV brand/model, picks opened/played,
   quick-back, voice command kind, link worked/not). Options: Firebase Analytics (free, Google), PostHog (EU hosting

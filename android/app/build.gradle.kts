@@ -4,6 +4,9 @@ plugins {
     id("org.jetbrains.kotlin.plugin.compose")
     id("app.cash.paparazzi")
 }
+// Usage analytics (Firebase) only when the project's config is present: drop google-services.json into app/.
+// Without it the app builds and runs with analytics off.
+if (file("google-services.json").exists()) apply(plugin = "com.google.gms.google-services")
 
 android {
     namespace = "com.home.tvremote"
@@ -47,6 +50,9 @@ dependencies {
     implementation("io.coil-kt:coil-compose:2.7.0")
     // On-phone AI (Gemini Nano via Android's on-device AI, e.g. Pixel 9). Beta API.
     implementation("com.google.mlkit:genai-prompt:1.0.0-beta4")
+    // Anonymous usage analytics, off until the user agrees (see Analytics.kt).
+    implementation(platform("com.google.firebase:firebase-bom:33.7.0"))
+    implementation("com.google.firebase:firebase-analytics")
     testImplementation("junit:junit:4.13.2")
     testImplementation("org.json:json:20240303")
     testImplementation("com.squareup.okhttp3:mockwebserver:4.12.0")
