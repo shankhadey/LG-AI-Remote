@@ -100,7 +100,7 @@ class TvController(app: Application) : AndroidViewModel(app), TvActions {
         viewModelScope.launch {
             try {
                 val t0 = System.currentTimeMillis()
-                val up = WakeOnLan.reachable(ip)
+                val up = net.reachable(ip, 500)
                 event("CHECK TV ${if (up) "reachable" else "not reachable"} (${System.currentTimeMillis() - t0} ms)")
                 // Reachable doesn't mean on: with Quick Start+ an off TV stays on the network. connect() asks the TV.
                 if (up) connect() else tvOff = true
@@ -173,7 +173,7 @@ class TvController(app: Application) : AndroidViewModel(app), TvActions {
 
     // ---- connection -------------------------------------------------------
     /** The TV connection object, created on first need (also from the wake loop, which used to skip this). */
-    private fun ensureTv(ip: String): LgTv = tv ?: LgTv(
+    private fun ensureTv(ip: String): LgTv = tv ?: net.lgTv(
         ip, prefs.getString("clientKey", null),
         onClientKey = { prefs.edit().putString("clientKey", it).apply() },
         onDisconnect = {
@@ -211,8 +211,10 @@ class TvController(app: Application) : AndroidViewModel(app), TvActions {
                 if (epoch != connEpoch) return@launch   // stale: something newer (turning on, a later connect) is in charge
                 connected = false
                 if (screen == Screen.Pairing) screen = if (prefs.getString("clientKey", null) == null) Screen.Setup else Screen.Remote
-                // Unreachable after pairing = most likely switched off: show the "Turn on" screen instead of an error.
-                if (e.message?.startsWith("Can't reach") == true && prefs.getString("clientKey", null) != null) tvOff = true
+                // Paired before, and now unreachable or silent = switched off (with Quick Start+ a TV in standby takes the
+                // connection but never answers): show the "Turn on" screen instead of an error.
+                val silent = e.message?.let { it.startsWith("Can't reach") || it.startsWith("No answer") } == true
+                if (silent && prefs.getString("clientKey", null) != null) tvOff = true
                 else showError(e)
             } finally { connecting = false }
         }
@@ -234,7 +236,7 @@ class TvController(app: Application) : AndroidViewModel(app), TvActions {
         if (!prefs.getBoolean("nameCustom", false)) viewModelScope.launch {
             // In the background so it never delays a button press.
             prefs.getString("ip", null)?.let { ip ->
-                val n = Discovery.lookupName(getApplication(), ip)
+                val n = net.lookupName(getApplication(), ip)
                     ?: runCatching { t.request("ssap://system/getSystemInfo").optString("modelName") }.getOrNull()
                         ?.takeIf { it.isNotBlank() }?.let { "LG $it" }
                 if (n != null && n != tvName) { tvName = n; prefs.edit().putString("name", n).apply() }
@@ -556,7 +558,7 @@ class TvController(app: Application) : AndroidViewModel(app), TvActions {
             try {
                 val ip = prefs.getString("ip", null)
                 val t = tv
-                val reachable = (t?.isConnected == true) || (ip != null && WakeOnLan.reachable(ip))
+                val reachable = (t?.isConnected == true) || (ip != null && net.reachable(ip, 500))
                 if (!reachable) { powerOn(); return@launch }
                 say("Checking the TV…")
                 if (t != null && !t.isConnected) {
@@ -612,7 +614,7 @@ class TvController(app: Application) : AndroidViewModel(app), TvActions {
         if (macs.isEmpty()) {
             // Can't wake it, but it may already be on.
             viewModelScope.launch {
-                if (ip != null && WakeOnLan.reachable(ip)) { tvOff = false; connect() }
+                if (ip != null && net.reachable(ip, 500)) { tvOff = false; connect() }
                 else say("To turn the TV on I need its MAC address — add it from the menu under the TV name.", error = true)
             }
             return
@@ -625,8 +627,8 @@ class TvController(app: Application) : AndroidViewModel(app), TvActions {
         viewModelScope.launch {
             try {
                 val loop = WakeLoop(
-                    sendWake = { WakeOnLan.send(getApplication(), macs, ip) },
-                    reachable = { ip != null && WakeOnLan.reachable(ip, 400) },
+                    sendWake = { net.wake(getApplication(), macs, ip) },
+                    reachable = { ip != null && net.reachable(ip, 400) },
                     // Short attempts: just after waking, the TV accepts connections before its control
                     // service is ready. The loop creates the connection itself (no hand-off).
                     connectOnce = { ip != null && run { withTimeout(2500) { ensureTv(ip).connect() }; true } },
@@ -824,7 +826,28 @@ class TvController(app: Application) : AndroidViewModel(app), TvActions {
 
     override fun onCleared() { tv?.close() }
 
+    /**
+     * Everything that touches the network to reach the TV. Tests swap in a simulated LG TV (SimulatedTvTest);
+     * on the phone it's always [RealNet].
+     */
+    interface Net {
+        suspend fun reachable(ip: String, timeoutMs: Int): Boolean
+        suspend fun wake(context: Context, macs: List<String>, ip: String?): Int
+        fun lgTv(ip: String, clientKey: String?, onClientKey: (String) -> Unit, onDisconnect: () -> Unit): LgTv
+        suspend fun lookupName(context: Context, ip: String): String?
+    }
+    object RealNet : Net {
+        override suspend fun reachable(ip: String, timeoutMs: Int) = WakeOnLan.reachable(ip, timeoutMs)
+        override suspend fun wake(context: Context, macs: List<String>, ip: String?) = WakeOnLan.send(context, macs, ip)
+        override fun lgTv(ip: String, clientKey: String?, onClientKey: (String) -> Unit, onDisconnect: () -> Unit) =
+            LgTv(ip, clientKey, onClientKey = onClientKey, onDisconnect = onDisconnect)
+        override suspend fun lookupName(context: Context, ip: String) = Discovery.lookupName(context, ip)
+    }
+
     companion object {
+        /** Swapped only by tests. */
+        @Volatile var net: Net = RealNet
+
         /** Power states that mean "the TV is off" (the screen-off state still counts as on). */
         val STANDBY_STATES = setOf("Active Standby", "Suspend", "Power Off")
 

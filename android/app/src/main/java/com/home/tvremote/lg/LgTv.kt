@@ -103,6 +103,10 @@ class LgTv(
             override fun onFailure(webSocket: WebSocket, t: Throwable, response: Response?) {
                 opened.completeExceptionally(t); if (gen == generation.get()) dropped(t.message ?: "connection failed")
             }
+            override fun onClosing(webSocket: WebSocket, code: Int, reason: String) {
+                // The TV is closing the connection: finish closing and treat it as a drop straight away.
+                webSocket.close(1000, null); if (gen == generation.get()) dropped("closed by the TV")
+            }
             override fun onClosed(webSocket: WebSocket, code: Int, reason: String) { if (gen == generation.get()) dropped("closed") }
         })
         withTimeout(5000) { opened.await() }
@@ -176,7 +180,8 @@ class LgTv(
         if (clientKey == null) onPrompt()
         try {
             // A minute so someone can find the TV remote and accept the prompt.
-            withTimeout(if (clientKey == null) 60_000 else 8_000) { registered.await() }
+            // Paired TVs answer in well under a second when on; a TV in standby never does, so don't wait long.
+            withTimeout(if (clientKey == null) 60_000 else 4_000) { registered.await() }
         } catch (e: TimeoutCancellationException) {
             throw TvException("No answer from the TV. Accept the prompt on the TV screen and try again.")
         }

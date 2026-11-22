@@ -70,6 +70,18 @@ Measure it: time from opening to Play, quick-backs, "Not now" count per session.
 - To test on the TV: Search 1/2 (Netflix search page with "The Crown" filled in).
 - Next: Prime Video and Disney+ title/search links (same 3-try test).
 
+## Simulated LG TV (v0.9.7) — every build must pass it before reaching the phone
+- SimulatedLgTv (test code): speaks the TV's protocol over a real socket, scripted from our TV's Diagnostics —
+  pairing, power states incl. Quick Start+ standby that never answers pairing, app in front + play state, launch
+  replies, keyboard focus, pointer socket, TV-side drops, Wake-on-LAN. TvController talks to it through TvController.Net.
+- SimulatedTvTest: 8 end-to-end scenarios (~24 s): TV on at open; QS+ standby at open → Turn on → stays on; TV-remote
+  on/off followed; turn off from app; drop → auto-reconnect; Netflix link sent; title typed when search box opens;
+  tap pauses / pointed tap clicks / skip = arrows.
+- Found on first run: QS+ standby at app open waited 8 s then showed "No answer… accept the prompt" instead of
+  Turn on → fixed (paired + silent = off; 4 s pairing wait for paired TVs). Also: TV closing the connection is now a
+  drop straight away.
+- Can't simulate: inside apps (Netflix/Prime/Disney+ pages, profiles, their keyboards), LG's browser, speech.
+
 ## v0.9.6 (tests of 21 Nov evening, user was still on 0.9.4)
 - People: credits were talk shows and guest spots (Bryan Cranston → Family Guy, Seinfeld…; Aniston's 13 talk shows
   crowded out her films). Now real roles only (no "Self"/host, TV ≥ 4 episodes, film billing ≤ 8), most-voted first,
@@ -81,7 +93,6 @@ Measure it: time from opening to Play, quick-backs, "Not now" count per session.
   guess exactly, then other guesses exactly (skipping ones that are part of it), then loosely.
 - "play/watch … with <person>" goes to people, not titles.
 - Clicking Netflix's timeline paused instead: taps while watching after pointing now send a real click, not OK.
-- Pending: simulated LG TV for end-to-end tests before builds (user asked; not started).
 
 ## v0.9.5: skipping while watching
 - ⟲ 10 s / 10 s ⟳ buttons above the touchpad while something plays (hold = keep skipping; LEFT/RIGHT arrows).

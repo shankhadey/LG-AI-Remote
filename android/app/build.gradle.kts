@@ -12,8 +12,8 @@ android {
         applicationId = "com.home.tvremote"
         minSdk = 26
         targetSdk = 35
-        versionCode = 41
-        versionName = "0.9.6"
+        versionCode = 42
+        versionName = "0.9.7"
     }
     buildTypes {
         release {
