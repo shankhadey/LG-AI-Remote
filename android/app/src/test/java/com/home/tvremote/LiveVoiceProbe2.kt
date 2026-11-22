@@ -29,9 +29,12 @@ class LiveVoiceProbe2 {
             services = listOf("Netflix", "Prime Video", "Disney+", "Apple TV+", "Hulu", "hoichoi", "ZEE5")
         }
         val pc = PicksController(s, tv, CoroutineScope(StandardTestDispatcher()), onDevice = null, netflixIdOf = null)
+        for (q in listOf("show me some adam sandler movies", "some Adam Sandler movies", "adam sandler films", "movies by christopher nolan",
+                "pedro pascal shows", "show me some funny movies", "show me something scary", "the office", "movies with jennifer aniston and adam sandler"))
+            println("PROBE resolve '$q' -> ${pc.resolvePerson(q)}")
         val b = pc.findAndOpen("barbie")
         println("PROBE barbie -> $b · " + ((b as? PicksController.Found.Elsewhere)?.let { pc.elsewhere(it) } ?: ""))
-        for (q in listOf("jennifer aniston" to Kind.Movie, "bryan cranston" to null, "jennifer aniston and adam sandler" to Kind.Movie)) {
+        for (q in listOf("adam sandler" to Kind.Movie, "christopher nolan" to Kind.Movie, "jennifer aniston" to Kind.Movie, "bryan cranston" to null, "jennifer aniston and adam sandler" to Kind.Movie)) {
             pc.openPicker()
             val msg = pc.showPerson(q.first, q.second)
             println("PROBE person ${q.first} -> ${msg ?: pc.picks.joinToString { it.title.name + " (" + it.title.service + ")" }}")

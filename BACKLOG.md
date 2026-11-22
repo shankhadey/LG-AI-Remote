@@ -70,6 +70,15 @@ Measure it: time from opening to Play, quick-backs, "Not now" count per session.
 - To test on the TV: Search 1/2 (Netflix search page with "The Crown" filled in).
 - Next: Prime Video and Disney+ title/search links (same 3-try test).
 
+## v0.9.9
+- Skipping is a gesture now (user + "Jony" choice): double-tap the left/right half of the touchpad while watching
+  (keep tapping for more, ripple shows ±N s); faint ⟲ 10 / 10 ⟳ at the edges. Skip-button row removed (touchpad
+  was shrinking). Single tap waits ~0.26 s to rule out a double.
+- People in any phrasing, checked against TMDB: "show me some Adam Sandler movies", "Pedro Pascal shows", "movies by
+  Christopher Nolan" (directors/creators included). "some funny movies" / "a thriller" → picker, not YouTube.
+- Max message: "on Max, but the remote hasn't seen the Max app on this TV yet — open Max once" (was "not one of
+  your services" when the app ID wasn't known).
+
 ## v0.9.8 (dump of 21 Nov 19:30, v0.9.6)
 - Worked: Stranger Things (no more "Stranger"), Breaking Bad person, Aniston films → Dumplin' played in 13 s, Not it.
 - Max app on our LG is com.wbd.stream (wasn't recognised) → added; user hasn't added Max as a service.

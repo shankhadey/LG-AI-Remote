@@ -364,7 +364,7 @@ class PicksTest {
                 return when {
                     p.startsWith("/3/search/multi") && "barbie" in p.lowercase() -> json(JSONObject().put("results", org.json.JSONArray()
                         .put(JSONObject().put("media_type", "movie").put("id", 346698).put("title", "Barbie").put("release_date", "2023-07-21"))))
-                    p.startsWith("/3/search/person") -> json(JSONObject().put("results", org.json.JSONArray().put(JSONObject().put("id", 4491))))
+                    p.startsWith("/3/search/person") -> json(JSONObject().put("results", org.json.JSONArray().put(JSONObject().put("id", 4491).put("name", "Jennifer Aniston").put("popularity", 30.0))))
                     p.startsWith("/3/person/4491/combined_credits") -> json(JSONObject().put("cast", org.json.JSONArray()
                         .put(JSONObject().put("media_type", "tv").put("id", 1668).put("name", "Friends").put("vote_count", 9000).put("popularity", 90.0).put("episode_count", 236).put("character", "Rachel Green"))
                         .put(JSONObject().put("media_type", "tv").put("id", 70796).put("name", "The Morning Show").put("vote_count", 900).put("popularity", 50.0).put("episode_count", 30))
@@ -487,6 +487,16 @@ class PicksTest {
         val tv = object : TvActions by FakeTvShared { override fun knownAppIds() = setOf("com.wbd.stream") }
         val pc = PicksController(store(), tv, CoroutineScope(StandardTestDispatcher()), onDevice = null, netflixIdOf = null)
         assertEquals("com.wbd.stream", pc.appIdFor(Catalog.SERVICES.first { it.name == "Max" }))
+    }
+
+    @Test fun peopleInEverydayPhrasing() = runBlocking {
+        fakeTmdbForVoice()
+        val pc = PicksController(store(), OpenLog(), CoroutineScope(StandardTestDispatcher()), onDevice = null, netflixIdOf = null,
+            tmdbBase = server.url("/3").toString().trimEnd('/'))
+        assertEquals("Jennifer Aniston" to Kind.Movie, pc.resolvePerson("show me some jennifer aniston movies"))
+        assertEquals("Jennifer Aniston" to Kind.Tv, pc.resolvePerson("jennifer aniston shows"))
+        assertNull(pc.resolvePerson("show me some funny movies"))
+        assertNull(pc.resolvePerson("the office"))
     }
 
     private fun MockWebServer.takeRequestsPaths(): List<String> = (0 until requestCount).mapNotNull { takeRequest().path }

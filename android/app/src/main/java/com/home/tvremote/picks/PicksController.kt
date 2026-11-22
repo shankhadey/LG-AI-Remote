@@ -192,8 +192,10 @@ class PicksController(
     fun askSpoken(guesses: List<String>) {
         val text = guesses.firstOrNull()?.trim().orEmpty(); if (text.isEmpty()) return
         if (commandHandler?.invoke(guesses) == true) return
-        personIn(text)?.let { (person, kind) -> scope.launch { showPerson(person, kind)?.let { tv.note(it, error = true) } }; return }
-        ask(text)
+        scope.launch {
+            val p = resolvePerson(text)
+            if (p != null) showPerson(p.first, p.second)?.let { tv.note(it, error = true) } else ask(text)
+        }
     }
 
     fun ask(text: String) {
@@ -385,6 +387,8 @@ class PicksController(
         data object Opened : Found
         data class Elsewhere(val name: String, val services: List<String>) : Found
         data object Nothing : Found
+        /** On one of their services, but that app wasn't found on the TV. */
+        data class NoApp(val name: String, val service: String) : Found
     }
 
     suspend fun openByName(query: String, serviceHint: String? = null): Boolean = findAndOpen(query, serviceHint) == Found.Opened
@@ -406,17 +410,19 @@ class PicksController(
         // "Barbie: Dreamhouse Adventures" because that one happened to be on their services.)
         val exact = found.filter { norm(it.name) == norm(query) }.sortedByDescending { if (year != null && it.year == year) 1 else 0 }
         val ranked = if (exact.isNotEmpty() || exactOnly) exact else found
+        var noApp: Found.NoApp? = null
         for (t in ranked) {
             val e = runCatching { tmdb.enrich(t, mine) }.getOrDefault(t)
             val svcName = e.service?.takeIf { serviceHint == null || it == serviceHint }
                 ?: serviceHint?.takeIf { norm(t.name) == norm(query) }   // they said where it is; trust them
                 ?: continue
             val svc = Catalog.SERVICES.firstOrNull { it.name == svcName } ?: continue
-            val appId = appIdFor(svc) ?: continue
+            val appId = appIdFor(svc) ?: run { noApp = Found.NoApp(t.name, svc.name); null } ?: continue
             tv.log("VOICE “$query” → ${t.name} (${t.year}) on $svcName")
             openIn(t.key, t.name, svc, appId)
             return Found.Opened
         }
+        noApp?.let { tv.log("VOICE “$query” → ${it.name} on ${it.service}, but that app isn't known on this TV"); return it }
         // Found, but not on their services: say where it is instead of searching YouTube.
         ranked.firstOrNull { norm(it.name) == norm(query) }?.let { t ->
             val where = runCatching { tmdb.providerNames(t) }.getOrDefault(emptyList())
@@ -452,6 +458,7 @@ class PicksController(
                 when (val r = findAndOpen(name)) {
                     Found.Opened -> null
                     is Found.Elsewhere -> elsewhere(r)
+                    is Found.NoApp -> noAppMessage(r)
                     Found.Nothing -> "Couldn't find “$name”"
                 }
             } ?: "Didn't understand “$text”"
@@ -482,6 +489,28 @@ class PicksController(
         return name to kind
     }
 
+    /**
+     * People asked for in any common phrasing: "with/starring/by X", "X movies", "some X films", "X's shows",
+     * "movies by X and Y". The name is checked against TMDB's people, so "funny movies" isn't mistaken for a person.
+     */
+    suspend fun resolvePerson(text: String): Pair<String, Kind?>? {
+        personIn(text)?.let { return it }
+        if (store.tmdbKey.isBlank()) return null
+        val t = text.lowercase().trim()
+        val kind = when { Regex("\\b(movie|film)s?\\b").containsMatchIn(t) -> Kind.Movie; Regex("\\b(shows?|series)\\b").containsMatchIn(t) -> Kind.Tv; else -> null }
+        if (kind == null && !t.endsWith("'s stuff")) return null      // "<name> movies/shows" only; bare names are titles
+        val name = t.replace(Regex("^(show me|find me|find|play|watch|put on|give me|i want|i'd like|let's watch|open)\\s+"), "")
+            .replace(Regex("^(some|a few|any|the|good|best|top|great|latest|new|old|classic|all)\\s+"), "")
+            .replace(Regex("^(some|a few|any|the|good|best|top|great|latest|new|old|classic|all)\\s+"), "")
+            .replace(Regex("\\s+(tv shows|movies|films|shows|series|movie|film|show)(\\s+(on|from)\\s+.*)?$"), "")
+            .replace(Regex("'s$"), "").trim()
+        val people = splitPeople(name)
+        if (people.isEmpty() || people.any { it.split(' ').size !in 2..4 }) return null
+        val tmdb = Tmdb(store.tmdbKey, tmdbBase)
+        val real = people.map { tmdb.findPerson(it) ?: return null }
+        return real.joinToString(" and ") to kind
+    }
+
     private fun splitPeople(s: String) = s.split(Regex(" and | & |, ")).map { it.trim() }.filter { it.isNotEmpty() }
     private fun titleCase(s: String) = s.split(' ').joinToString(" ") { w -> w.replaceFirstChar { it.uppercase() } }
 
@@ -505,6 +534,9 @@ class PicksController(
         showList(list, "With $who") { t -> "With $who${if (t.year.isNotEmpty()) " · ${t.year}" else ""}." }
         null
     }
+
+    fun noAppMessage(r: Found.NoApp) =
+        "${r.name} is on ${r.service}, but the remote hasn't seen the ${r.service} app on this TV yet — open ${r.service} once from the TV, then ask again"
 
     /** "Barbie is on Max, which isn't one of your services". Provider names cleaned up ("HBO Max Amazon Channel" → Max). */
     fun elsewhere(r: Found.Elsewhere): String {

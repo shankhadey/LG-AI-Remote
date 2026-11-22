@@ -93,10 +93,24 @@ class Tmdb(private val key: String, private val base: String = "https://api.them
         return (0 until (flat?.length() ?: 0)).map { flat!!.getJSONObject(it).optString("provider_name") }
     }
 
+    /** The well-known person TMDB has under this name (e.g. "adam sandler" → "Adam Sandler"), or null. */
+    suspend fun findPerson(name: String): String? {
+        val p = runCatching { get("/search/person", mapOf("query" to name)).optJSONArray("results")?.optJSONObject(0) }.getOrNull() ?: return null
+        val found = p.optString("name")
+        fun n(s: String) = s.lowercase().replace(Regex("[^a-z]"), "")
+        return found.takeIf { p.optDouble("popularity", 0.0) >= 3.0 && (n(it) == n(name) || n(it).startsWith(n(name))) }
+    }
+
     /** A person's best-known series and films, most popular first ("shows with Jennifer Aniston"). */
     suspend fun personCredits(name: String): List<Title> {
         val p = get("/search/person", mapOf("query" to name)).optJSONArray("results")?.optJSONObject(0) ?: return emptyList()
-        val arr = get("/person/${p.optInt("id")}/combined_credits").optJSONArray("cast") ?: JSONArray()
+        val credits = get("/person/${p.optInt("id")}/combined_credits")
+        val arr = credits.optJSONArray("cast") ?: JSONArray()
+        // Directors and creators too ("movies by Christopher Nolan").
+        val crew = credits.optJSONArray("crew") ?: JSONArray()
+        for (i in 0 until crew.length()) crew.getJSONObject(i).let { c ->
+            if (c.optString("job") in setOf("Director", "Creator", "Showrunner")) arr.put(JSONObject(c.toString()).put("order", 0).put("episode_count", 99).put("character", ""))
+        }
         // Real roles only: not talk shows or appearances as themselves, not one-off guest spots, not tiny film parts.
         // (Raw credits put Jimmy Fallon and a Seinfeld guest spot ahead of Friends and Breaking Bad.)
         val junkTv = setOf(10763, 10764, 10767)

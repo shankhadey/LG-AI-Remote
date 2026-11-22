@@ -422,6 +422,8 @@ class TvController(app: Application) : AndroidViewModel(app), TvActions {
         say(if (seconds > 0) "Forward ${humanTime(seconds)}" else "Back ${humanTime(-seconds)}")
         enqueue { repeat(presses.coerceAtMost(60)) { tv().button(key); delay(180) } }
     }
+    /** One 10-second skip (double-tap on the touchpad's side while watching). */
+    fun skip(forward: Boolean) = button(if (forward) "RIGHT" else "LEFT")
     private fun humanTime(s: Int) = if (s >= 60 && s % 60 == 0) "${s / 60} min" else if (s >= 60) "${s / 60} min ${s % 60} s" else "$s s"
     /**
      * Opens an app and checks it actually came to the front. If the usual launch call is rejected
@@ -724,14 +726,11 @@ class TvController(app: Application) : AndroidViewModel(app), TvActions {
         }
         val parsed = CommandParser(apps).parse(t)
         if (parsed == null && fromVoice) {
-            picks.personIn(t)?.let { (person, kind) ->
-                say("Looking for ${person}…")
-                viewModelScope.launch { picks.showPerson(person, kind)?.let { say(it, error = true) } }
-                return true
-            }
-            // Rules didn't understand: let the AI try (a description, a mood). Never a silent YouTube search.
+            // Rules didn't understand: a person ("Adam Sandler movies")? a request for picks? else the AI. Never YouTube silently.
             say("Thinking…")
             viewModelScope.launch {
+                picks.resolvePerson(t)?.let { (person, kind) -> picks.showPerson(person, kind)?.let { say(it, error = true) }; return@launch }
+                if (WANTS_PICKS.containsMatchIn(t)) { picks.openPicker(); if (picks.step == com.home.tvremote.picks.Step.Choose) picks.ask(t); return@launch }
                 picks.interpret(t)?.let { say("$it. To search, say “search for …”", error = true) }
             }
             return true
@@ -759,7 +758,7 @@ class TvController(app: Application) : AndroidViewModel(app), TvActions {
             is Command.OpenApp -> launch(cmd.app)
             is Command.Search -> if (!cmd.title || cmd.app?.id?.startsWith("youtube") == true) search(cmd.query, cmd.app) else viewModelScope.launch {
                 // "play / watch X": a show or film on their services first.
-                picks.personIn(cmd.query)?.let { (person, kind) ->
+                picks.resolvePerson(cmd.query)?.let { (person, kind) ->
                     say("Looking for ${person}…"); picks.showPerson(person, kind)?.let { say(it, error = true) }; return@launch
                 }
                 say("Looking for ${cmd.query}…")
@@ -767,7 +766,10 @@ class TvController(app: Application) : AndroidViewModel(app), TvActions {
                 when (val r = picks.findAndOpen(cmd.query, hint)) {
                     com.home.tvremote.picks.PicksController.Found.Opened -> {}
                     is com.home.tvremote.picks.PicksController.Found.Elsewhere -> say(picks.elsewhere(r), error = true)
+                    is com.home.tvremote.picks.PicksController.Found.NoApp -> say(picks.noAppMessage(r), error = true)
                     com.home.tvremote.picks.PicksController.Found.Nothing -> {
+                        // "some funny movies", "a good thriller": a request for picks, not YouTube.
+                        if (WANTS_PICKS.containsMatchIn(cmd.query)) { picks.openPicker(); if (picks.step == com.home.tvremote.picks.Step.Choose) picks.ask(cmd.query); return@launch }
                         // Not a show or film anywhere: maybe a description; last resort YouTube (music, clips), saying so.
                         val msg = picks.interpret(cmd.query)
                         if (msg != null) { search(cmd.query, cmd.app); say("“${cmd.query}” isn't a show or film — searching YouTube") }
@@ -777,6 +779,7 @@ class TvController(app: Application) : AndroidViewModel(app), TvActions {
             is Command.NoSuchApp -> viewModelScope.launch {
                 // "open X" where X isn't an app: maybe it's a show or film, a person, or a description.
                 say("Looking for ${cmd.name}…")
+                picks.resolvePerson(cmd.name)?.let { (person, kind) -> picks.showPerson(person, kind)?.let { say(it, error = true) }; return@launch }
                 // Misheard titles: try each of the recognizer's guesses for an exact title before settling.
                 // Your first guess exactly, then the recognizer's other guesses exactly, then the first guess loosely.
                 val names = titleCandidates(cmd.name)
@@ -784,6 +787,7 @@ class TvController(app: Application) : AndroidViewModel(app), TvActions {
                 when (val r = picks.findAndOpen(cmd.name)) {
                     com.home.tvremote.picks.PicksController.Found.Opened -> {}
                     is com.home.tvremote.picks.PicksController.Found.Elsewhere -> say(picks.elsewhere(r), error = true)
+                    is com.home.tvremote.picks.PicksController.Found.NoApp -> say(picks.noAppMessage(r), error = true)
                     com.home.tvremote.picks.PicksController.Found.Nothing ->
                         picks.interpret("open ${cmd.name}")?.let { say("Couldn't find an app or a show called “${cmd.name}” on your services", error = true) }
                 }
@@ -847,6 +851,9 @@ class TvController(app: Application) : AndroidViewModel(app), TvActions {
     companion object {
         /** Swapped only by tests. */
         @Volatile var net: Net = RealNet
+
+        /** "movies", "a show", "something funny", "a thriller": asking for recommendations, not a title. */
+        val WANTS_PICKS = Regex("\\b(movies|films|shows|series|something|anything|comedy|comedies|thriller|thrillers|documentar(y|ies)|rom-?com|horror|drama)\\b", RegexOption.IGNORE_CASE)
 
         /** Power states that mean "the TV is off" (the screen-off state still counts as on). */
         val STANDBY_STATES = setOf("Active Standby", "Suspend", "Power Off")
