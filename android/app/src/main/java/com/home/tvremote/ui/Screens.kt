@@ -406,6 +406,18 @@ private fun SettingsScreen(tv: TvController) {
     var langDialog by remember { mutableStateOf(false) }
     var usageDialog by remember { mutableStateOf(false) }
     var confirmNewTv by remember { mutableStateOf(false) }
+    var about by remember { mutableStateOf(false) }
+    if (about) AlertDialog(
+        onDismissRequest = { about = false },
+        title = { RawText("TV Remote ${com.home.tvremote.BuildConfig.VERSION_NAME}") },
+        text = { Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+            Text("This product uses the TMDB API but is not endorsed or certified by TMDB.", fontSize = 14.sp)
+            Text("Where-to-watch data by JustWatch.", fontSize = 14.sp)
+            Text("Not affiliated with LG, Samsung or any streaming service.", fontSize = 14.sp)
+        } },
+        confirmButton = { TextButton(onClick = { about = false }) { Text("Close") } },
+        containerColor = Palette.surface, titleContentColor = Palette.text, textContentColor = Palette.muted,
+    )
     if (confirmNewTv) AlertDialog(
         onDismissRequest = { confirmNewTv = false },
         title = { Text("Use a different TV?") },
@@ -449,6 +461,7 @@ private fun SettingsScreen(tv: TvController) {
             Section("More")
             SettingRow("Help & diagnostics", "") { tv.showHelp = true }
             SettingRow("Advanced", "keys, AI") { tv.openPicksSettings() }
+            SettingRow("About", com.home.tvremote.BuildConfig.VERSION_NAME, raw = true) { about = true }
         } else {
             Text("Help & diagnostics", color = Palette.text, fontSize = 26.sp, fontWeight = FontWeight.Bold, modifier = Modifier.padding(top = 6.dp))
             Section("If something isn't right")

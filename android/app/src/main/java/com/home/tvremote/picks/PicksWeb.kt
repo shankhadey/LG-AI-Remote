@@ -75,7 +75,7 @@ class PicksWeb(
         /** The page's fixed phrases, in the app's language (button values sent back stay in English). */
         private val PHRASES = listOf("What should we watch?", "Choosing on the phone…", "Language", "Keep watching", "Pick a mood", "Surprise us",
             "Anything good", "Finding picks…", "Not now", "Never", "Show 5 more", "Back to moods", "Point with your phone · tap to choose",
-            "Data from TMDB", "NEW")
+            "Data from TMDB · where to watch by JustWatch", "NEW")
         fun localized(): String {
             if (com.home.tvremote.i18n.I18n.lang == "en") return PAGE
             var h = PAGE
@@ -156,7 +156,7 @@ function show(s){if(!s||s.v===v)return;v=s.v;cur=s;var f=document.activeElement&
    '<div class="acts">'+btn('p'+i,'primary','▶ Play','play',i)+btn('n'+i,'','Not now','notnow',i)+btn('x'+i,'','Never','never',i)+'</div></div>';});
   h+='</div><div class="row" style="margin-top:2.4vh">'+btn('more','','Show 5 more','more','')+(s.leanBack?btn('back','','Back to moods','back',''):'')+'</div>';
  }
- h+='<div class="foot"><span>Point with your phone · tap to choose</span><span>Data from TMDB</span></div>';
+ h+='<div class="foot"><span>Point with your phone · tap to choose</span><span>Data from TMDB · where to watch by JustWatch</span></div>';
  document.getElementById('app').innerHTML=h;
  var bs=[].slice.call(document.querySelectorAll('button'));
  bs.forEach(function(b){b.onclick=function(){act(b.getAttribute('data-d'),b.getAttribute('data-v'))};b.onmouseover=function(){b.focus()};b.onfocus=function(){tell(b)}});

@@ -1,2 +1,7 @@
 node_modules/
 config.json
+
+# Release signing: never commit
+keystore.properties
+*.jks
+*.keystore

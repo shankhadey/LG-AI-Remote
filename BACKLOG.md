@@ -1,5 +1,29 @@
 # Backlog
 
+## LAUNCH PLAN (started 22 Nov) — Android first, in market; no half-done ideas
+Critical path: Google requires new personal developer accounts to run a closed test with ≥12 testers for 14
+continuous days before production. Family + friends are those testers. Everything else happens during the 14 days.
+
+| # | Step | Who | Target |
+|---|------|-----|--------|
+| 1 | Google Play developer account ($25, ID verification takes 1–3 days) | You | Mon 23 Nov |
+| 2 | Product name + permanent package ID (can never change after first upload) | You (I propose) | Mon 23 Nov |
+| 3 | Release build: R8 shrinking, upload key kept outside the repo, Play App Signing | Me | Mon 23 Nov |
+| 4 | Target Android 16 (SDK 36) | Me | Tue 24 Nov |
+| 5 | Streaming-data attribution (JustWatch via TMDB) | Me | Mon 23 Nov |
+| 6 | Privacy policy page, Data safety answers, permission justifications | Me (you publish) | Tue 24 Nov |
+| 7 | Store listing: name, descriptions, screenshots, feature graphic, icon | Me (you approve) | Wed 25 Nov |
+| 8 | Picks for testers: TMDB key built into the closed-test build (stopgap, testers only) | Me | Wed 25 Nov |
+| 9 | Closed test live, 12+ testers opted in → 14-day clock starts | You invite, I upload | ~Thu 26 Nov |
+| 10 | Server for TMDB + AI (Cloudflare Worker or similar) replaces the built-in key | Me (you create the account) | during the 14 days |
+| 11 | Fixes from testers' Diagnostics; at least 3 more LG TVs + 1 Samsung in the test group | Both | during the 14 days |
+| 12 | TMDB terms check for launch model (free at launch = non-commercial use with attribution) | You decide | before production |
+| 13 | Production release (US, BR, IN, CA, GB, AU) | You press publish | ~Thu 10 Dec |
+
+Not on the launch path (after launch): iPhone app, analytics consent wiring (needs Firebase project), self-calibrating
+links, seasonal picks, Spanish/Hindi, licensed where-to-watch data for paid tiers.
+
+
 Things we decided to remember for later.
 
 ## To test on the TV

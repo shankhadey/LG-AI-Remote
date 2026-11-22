@@ -304,7 +304,7 @@ private fun ResultsPicks(pc: PicksController) {
                 Text("Other mood", color = Palette.text, fontSize = 14.sp, fontWeight = FontWeight.SemiBold)
             }
         }
-        Text("Data from TMDB · availability may vary", color = Palette.faint, fontSize = 11.sp, modifier = Modifier.align(Alignment.CenterHorizontally))
+        Text("Data from TMDB · where to watch by JustWatch", color = Palette.faint, fontSize = 11.sp, modifier = Modifier.align(Alignment.CenterHorizontally))
     }
 }
 

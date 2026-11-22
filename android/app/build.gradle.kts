@@ -1,3 +1,5 @@
+import java.util.Properties
+
 plugins {
     id("com.android.application")
     id("org.jetbrains.kotlin.android")
@@ -8,6 +10,13 @@ plugins {
 // Without it the app builds and runs with analytics off.
 if (file("google-services.json").exists()) apply(plugin = "com.google.gms.google-services")
 
+// Release signing: the upload key lives OUTSIDE the repo. Put keystore.properties next to this project's
+// settings.gradle.kts (it's gitignored) with storeFile, storePassword, keyAlias, keyPassword. Without it,
+// release builds are signed with the debug key (fine for sideloading, not for Play).
+val keystoreProps = Properties().apply {
+    rootProject.file("keystore.properties").takeIf { it.exists() }?.inputStream()?.use { load(it) }
+}
+
 android {
     namespace = "com.home.tvremote"
     compileSdk = 35
@@ -15,14 +24,24 @@ android {
         applicationId = "com.home.tvremote"
         minSdk = 26
         targetSdk = 35
-        versionCode = 60
-        versionName = "1.4.3"
+        versionCode = 61
+        versionName = "1.5.0"
+    }
+    signingConfigs {
+        if (keystoreProps.getProperty("storeFile") != null) create("upload") {
+            storeFile = file(keystoreProps.getProperty("storeFile"))
+            storePassword = keystoreProps.getProperty("storePassword")
+            keyAlias = keystoreProps.getProperty("keyAlias")
+            keyPassword = keystoreProps.getProperty("keyPassword")
+        }
     }
     buildTypes {
         release {
-            isMinifyEnabled = false
-            // Signed with the debug key so it can be sideloaded without a keystore.
-            signingConfig = signingConfigs.getByName("debug")
+            // Smaller, faster app: R8 removes unused code and resources.
+            isMinifyEnabled = true
+            isShrinkResources = true
+            proguardFiles(getDefaultProguardFile("proguard-android-optimize.txt"), "proguard-rules.pro")
+            signingConfig = signingConfigs.findByName("upload") ?: signingConfigs.getByName("debug")
         }
     }
     compileOptions {

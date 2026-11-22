@@ -179,7 +179,7 @@ object I18n {
             "Anything good" to "Qualquer coisa boa", "Never" to "Nunca", "Not now" to "Agora não", "NEW" to "NOVO",
             "  Listening… tap to stop" to "  Ouvindo… toque para parar", "  or say it — “something like Severance”" to "  ou diga: “algo como Ruptura”",
             "Tap to play · swipe left for “not now” · hold for “never”" to "Toque para assistir · deslize para a esquerda para “agora não” · segure para “nunca”",
-            "Other mood" to "Outro clima", "Data from TMDB · availability may vary" to "Dados do TMDB · a disponibilidade pode variar",
+            "Other mood" to "Outro clima", "Data from TMDB · where to watch by JustWatch" to "Dados do TMDB · onde assistir: JustWatch",
             "Shows you loved" to "Títulos que você amou", "Type a title…" to "Digite um título…", "Searching…" to "Procurando…",
             "Nothing found. Check the spelling, or the TMDB key in Picks settings." to "Nada encontrado. Confira a grafia ou a chave do TMDB nos ajustes de Sugestões.",
             "Series" to "Série", "Movie" to "Filme", "series" to "série", "movie" to "filme", "Added" to "Adicionado",
@@ -241,6 +241,10 @@ object I18n {
             "The TV's network connection is unstable. If this keeps happening, restart the TV fully (turn off Quick Start+, then off and on, or unplug it for a minute)." to
                 "A conexão de rede da TV está instável. Se isso continuar, reinicie a TV por completo (desative o Início rápido+ e desligue e ligue, ou tire da tomada por um minuto).",
             "This phone may be on a different network from the TV. Trying anyway." to "Este celular pode estar em outra rede, diferente da TV. Tentando mesmo assim.",
+            "About" to "Sobre",
+            "This product uses the TMDB API but is not endorsed or certified by TMDB." to "Este produto usa a API do TMDB, mas não é endossado nem certificado pelo TMDB.",
+            "Where-to-watch data by JustWatch." to "Dados de onde assistir fornecidos pelo JustWatch.",
+            "Not affiliated with LG, Samsung or any streaming service." to "Sem vínculo com LG, Samsung ou qualquer serviço de streaming.",
             // privacy
             "Privacy" to "Privacidade", "Share anonymous usage" to "Compartilhar uso anônimo", "Yes" to "Sim", "No" to "Não", "Not set" to "Não definido",
             "Share" to "Compartilhar", "Don't share" to "Não compartilhar", "No thanks" to "Não, obrigado",
@@ -251,7 +255,7 @@ object I18n {
                 "Ajuda a entender quais recursos são usados e em quais países. Nunca nomes, títulos, o que você fala ou o endereço da sua TV. Dá para mudar quando quiser.",
             // the picks page on the TV
             "Choosing on the phone…" to "Escolhendo no celular…", "Pick a mood" to "Escolha um clima", "Show 5 more" to "Mostrar mais 5",
-            "Back to moods" to "Voltar aos climas", "Point with your phone · tap to choose" to "Aponte com o celular · toque para escolher", "Data from TMDB" to "Dados do TMDB",
+            "Back to moods" to "Voltar aos climas", "Point with your phone · tap to choose" to "Aponte com o celular · toque para escolher", "Data from TMDB · where to watch by JustWatch" to "Dados do TMDB · onde assistir: JustWatch",
             // moods, genres, reasons, time
             "New" to "Novidades", "Out this year" to "Lançados este ano", "Light & funny" to "Leve e divertido", "Easy, no thinking" to "Fácil, sem pensar",
             "Cozy" to "Aconchegante", "Warm, comforting" to "Para relaxar e se sentir bem", "Gripping" to "Eletrizante", "Can't look away" to "Impossível parar de ver",
