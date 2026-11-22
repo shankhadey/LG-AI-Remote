@@ -475,6 +475,20 @@ class PicksTest {
             pc.elsewhere(PicksController.Found.Elsewhere("Barbie", listOf("HBO Max Amazon Channel", "TNT", "HBO Max"))))
     }
 
+    @Test fun theMovieAndYearsAreIgnoredWhenLookingUpTitles() = runBlocking {
+        fakeTmdbForVoice()
+        val pc = PicksController(store(), OpenLog(), CoroutineScope(StandardTestDispatcher()), clock = { at(Calendar.TUESDAY, 21, 30) }, onDevice = null,
+            netflixIdOf = null, tmdbBase = server.url("/3").toString().trimEnd('/'))
+        assertTrue(pc.findAndOpen("barbie the movie") is PicksController.Found.Elsewhere)
+        assertTrue(pc.findAndOpen("Barbie (2023)") is PicksController.Found.Elsewhere)
+    }
+
+    @Test fun maxIsRecognisedByItsLgAppId() {
+        val tv = object : TvActions by FakeTvShared { override fun knownAppIds() = setOf("com.wbd.stream") }
+        val pc = PicksController(store(), tv, CoroutineScope(StandardTestDispatcher()), onDevice = null, netflixIdOf = null)
+        assertEquals("com.wbd.stream", pc.appIdFor(Catalog.SERVICES.first { it.name == "Max" }))
+    }
+
     private fun MockWebServer.takeRequestsPaths(): List<String> = (0 until requestCount).mapNotNull { takeRequest().path }
 
     // ---------------- AI fallback chain ----------------

@@ -70,6 +70,12 @@ Measure it: time from opening to Play, quick-backs, "Not now" count per session.
 - To test on the TV: Search 1/2 (Netflix search page with "The Crown" filled in).
 - Next: Prime Video and Disney+ title/search links (same 3-try test).
 
+## v0.9.8 (dump of 21 Nov 19:30, v0.9.6)
+- Worked: Stranger Things (no more "Stranger"), Breaking Bad person, Aniston films → Dumplin' played in 13 s, Not it.
+- Max app on our LG is com.wbd.stream (wasn't recognised) → added; user hasn't added Max as a service.
+- "play Barbie the movie" → YouTube: "the movie"/"(2023)" broke title lookup → stripped; year picks the version.
+- To confirm: skip buttons / timeline click in Max (3 LEFT + 2 clicks logged while playing).
+
 ## Simulated LG TV (v0.9.7) — every build must pass it before reaching the phone
 - SimulatedLgTv (test code): speaks the TV's protocol over a real socket, scripted from our TV's Diagnostics —
   pairing, power states incl. Quick Start+ standby that never answers pairing, app in front + play state, launch

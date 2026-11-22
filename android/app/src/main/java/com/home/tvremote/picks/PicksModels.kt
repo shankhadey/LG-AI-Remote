@@ -56,7 +56,7 @@ object Catalog {
         Service("Prime Video", listOf("Amazon Prime Video"), listOf("amazon")),
         Service("Disney+", listOf("Disney Plus"), listOf("com.disney.disneyplus-prod", "disney")),
         Service("Apple TV+", listOf("Apple TV Plus", "Apple TV+", "Apple TV"), listOf("com.apple.appletv", "appletv")),
-        Service("Max", listOf("Max", "HBO Max"), listOf("hbomax", "com.hbo", "max")),
+        Service("Max", listOf("Max", "HBO Max"), listOf("com.wbd.stream", "hbomax", "com.hbo", "max")),   // com.wbd.stream seen on our 2023 LG
         Service("Hulu", listOf("Hulu"), listOf("hulu")),
         Service("hoichoi", listOf("Hoichoi", "hoichoi"), listOf("hoichoi")),
         Service("ZEE5", listOf("Zee5", "ZEE5"), listOf("zee5", "zee")),

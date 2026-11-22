@@ -393,14 +393,18 @@ class PicksController(
      * "open / play / watch <title>" (optionally "on <service>"): TMDB search, which of the household's services has
      * it, then open it like Play. [exactOnly]: only a title whose name matches exactly (used before a loose app match).
      */
-    suspend fun findAndOpen(query: String, serviceHint: String? = null, exactOnly: Boolean = false): Found {
+    suspend fun findAndOpen(rawQuery: String, serviceHint: String? = null, exactOnly: Boolean = false): Found {
         if (store.tmdbKey.isBlank()) return Found.Nothing
+        // "barbie the movie" → "barbie"; "Barbie (2023)" → "Barbie", preferring the 2023 one.
+        val year = Regex("\\((\\d{4})\\)|\\b(19|20)\\d{2}$").find(rawQuery)?.value?.filter { it.isDigit() }
+        val query = rawQuery.replace(Regex("\\(\\d{4}\\)"), "")
+            .replace(Regex("\\s+(the )?(movie|film|show|series|tv show)$", RegexOption.IGNORE_CASE), "").trim()
         val tmdb = Tmdb(store.tmdbKey, tmdbBase)
         val mine = Catalog.SERVICES.filter { it.name in store.services }
         val found = runCatching { tmdb.search(query) }.getOrDefault(emptyList()).take(5)
         // An exact name match means they meant that title: only it, or "it's on …". (Otherwise "play Barbie" opened
         // "Barbie: Dreamhouse Adventures" because that one happened to be on their services.)
-        val exact = found.filter { norm(it.name) == norm(query) }
+        val exact = found.filter { norm(it.name) == norm(query) }.sortedByDescending { if (year != null && it.year == year) 1 else 0 }
         val ranked = if (exact.isNotEmpty() || exactOnly) exact else found
         for (t in ranked) {
             val e = runCatching { tmdb.enrich(t, mine) }.getOrDefault(t)
