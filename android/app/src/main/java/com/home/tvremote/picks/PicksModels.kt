@@ -83,6 +83,21 @@ object Catalog {
         Service("SBS On Demand", listOf("SBS On Demand"), listOf("sbs"), setOf("AU")),
     )
 
+    /**
+     * Stores that rent or sell titles, for a title on none of their services (22 Nov: "The Odyssey" is only to
+     * buy, and should still be shown). Names are TMDB's rent/buy provider names. Prime Video sells to anyone with
+     * an Amazon account, Prime or not.
+     */
+    val STORES = listOf(
+        Service("Prime Video", listOf("Amazon Video"), listOf("amazon")),
+        Service("Apple TV", listOf("Apple TV", "Apple TV Store"), listOf("com.apple.appletv", "appletv")),
+        Service("YouTube", listOf("YouTube"), listOf("youtube.leanback.v4", "youtube")),
+        Service("Fandango at Home", listOf("Fandango At Home", "Vudu"), listOf("vudu", "fandango"), setOf("US")),
+    )
+
+    /** A subscription service or a store, by name. */
+    fun find(name: String?) = SERVICES.firstOrNull { it.name == name } ?: STORES.firstOrNull { it.name == name }
+
     /** Services offered at setup in [country] (the full list stays valid for lookups). */
     fun servicesFor(country: String) = SERVICES.filter { country in it.countries }
 

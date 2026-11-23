@@ -96,6 +96,13 @@ class Tmdb(private val key: String, private val base: String = "https://api.them
         return (0 until (flat?.length() ?: 0)).map { flat!!.getJSONObject(it).optString("provider_name") }
     }
 
+    /** Names of the stores that rent or sell a title in this region ("Amazon Video", "Apple TV"…). */
+    suspend fun rentBuyNames(t: Title): List<String> {
+        val path = if (t.kind == Kind.Movie) "/movie/${t.id}" else "/tv/${t.id}"
+        val r = runCatching { get("$path/watch/providers").optJSONObject("results")?.optJSONObject(region) }.getOrNull() ?: return emptyList()
+        return listOf("rent", "buy").flatMap { k -> r.optJSONArray(k)?.let { a -> (0 until a.length()).map { a.getJSONObject(it).optString("provider_name") } }.orEmpty() }.distinct()
+    }
+
     /** The well-known person TMDB has under this name (e.g. "adam sandler" → "Adam Sandler"), or null. */
     suspend fun findPerson(name: String): String? {
         val p = runCatching { get("/search/person", mapOf("query" to name)).optJSONArray("results")?.optJSONObject(0) }.getOrNull() ?: return null

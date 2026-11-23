@@ -308,6 +308,7 @@ object I18n {
         "Select {}'s search box: “{}” is typed as soon as it opens" to "Selecione a busca {de1}: “{2}” será digitado assim que ela abrir",
         "Didn't understand “{}”" to "Não entendi “{1}”", "Couldn't find “{}”" to "“{1}” não encontrado",
         "Nothing with {} on your services right now" to "Nada com {1} nos seus serviços agora", "Nothing with {} on your services" to "Nada com {1} nos seus serviços",
+        "To rent or buy on {}." to "Para alugar ou comprar {em1}.", "To rent or buy on {}. Also on {}." to "Para alugar ou comprar {em1}. Também {em2}.",
         "With {}." to "Com {1}.", "With {}" to "Com {1}",
         "{} is on {}, but the remote hasn't seen the {} app on this TV yet — open {} once from the TV, then ask again" to
             "{1} está {em2}, mas o controle ainda não viu o app {3} nesta TV. Abra o app uma vez pela TV e peça de novo.",

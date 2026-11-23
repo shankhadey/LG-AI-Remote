@@ -539,6 +539,7 @@ class PicksTest {
 
     @Test fun aTitleTheySaidWins_andThePersonPicksWhichOne() = runBlocking {
         // 22 Nov: "The Odyssey Christopher Nolan" → AI {"kind":"title|person"} → the app listed Nolan's other films.
+        var shop = "Amazon Video"
         server.dispatcher = object : Dispatcher() {
             override fun dispatch(r: RecordedRequest): MockResponse {
                 val p = r.path ?: ""
@@ -552,7 +553,7 @@ class PicksTest {
                     p.startsWith("/3/person/525/combined_credits") -> json(JSONObject().put("cast", org.json.JSONArray()).put("crew", org.json.JSONArray()
                         .put(JSONObject().put("media_type", "movie").put("id", 1368337).put("title", "The Odyssey").put("job", "Director").put("vote_count", 900).put("popularity", 400.0))))
                     p.startsWith("/3/movie/1368337/watch/providers") -> json(JSONObject().put("results", JSONObject().put("US", JSONObject()
-                        .put("buy", org.json.JSONArray().put(JSONObject().put("provider_name", "Amazon Video"))))))
+                        .put("buy", org.json.JSONArray().put(JSONObject().put("provider_name", shop))))))
                     else -> json(JSONObject())
                 }
             }
@@ -562,9 +563,18 @@ class PicksTest {
         val log = OpenLog()
         val pc = PicksController(store().apply { services = listOf("Netflix", "Prime Video") }, log, CoroutineScope(StandardTestDispatcher()),
             clock = { at(Calendar.TUESDAY, 21, 30) }, onDevice = ai, titleIdsOf = null, directLinks = false, tmdbBase = server.url("/3").toString().trimEnd('/'))
-        val msg = pc.interpret("The Odyssey Christopher Nolan")
-        assertEquals("The Odyssey isn't on a subscription service in the United States (only to rent or buy)", msg)
-        assertTrue("not Nolan's other films", pc.picks.isEmpty())
+        // Buy-only in the US: still shown (Nolan's, not the other two), and Play opens Prime Video's store.
+        assertNull(pc.interpret("The Odyssey Christopher Nolan"))
+        assertEquals(listOf("movie:1368337"), pc.picks.map { it.title.key })
+        assertEquals("To rent or buy on Prime Video.", pc.picks[0].why)
+        pc.play(0)
+        assertEquals("app amazon", log.calls.first())
+        // Sold only in a store whose app isn't on this TV: say so instead.
+        shop = "Apple TV"
+        val pc2 = PicksController(store().apply { services = listOf("Netflix") }, OpenLog(), CoroutineScope(StandardTestDispatcher()),
+            clock = { at(Calendar.TUESDAY, 21, 30) }, onDevice = ai, titleIdsOf = null, directLinks = false, tmdbBase = server.url("/3").toString().trimEnd('/'))
+        assertEquals("The Odyssey isn't on a subscription service in the United States (only to rent or buy)", pc2.interpret("The Odyssey Christopher Nolan"))
+        assertTrue("not Nolan's other films", pc2.picks.isEmpty())
         assertTrue(pc.saidIn("odyssey christopher nolan", "The Odyssey"))
         assertFalse(pc.saidIn("something jennifer aniston is in", "Breakfast at Tiffany's"))
     }

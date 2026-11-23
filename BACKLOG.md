@@ -340,12 +340,17 @@ Measure it: time from opening to Play, quick-backs, "Not now" count per session.
 - Test matrix: at least 3 more LG TVs across webOS versions (2020–2025); pairing, Wake-on-LAN, pointer, links.
 - Keys: no per-user TMDB/Groq keys in a shared app → our small server (see Before selling).
 
+## v1.5.2 — rent or buy titles are shown (22 Nov)
+- A title on none of their services but rented/sold by a store with an app on the TV (Prime Video, Apple TV,
+  YouTube, Fandango at Home) is shown as a pick: "To rent or buy on Prime Video. Also on Max." Play opens that store
+  (Prime Video first when they have Prime). Only when no such store app is on the TV does it fall back to the message.
+- Picks from moods still only use their subscriptions.
+
 ## v1.5.1 — "The Odyssey Christopher Nolan" (22 Nov)
 - The AI answered kind "title|person" and the "person wins" rule listed Nolan's other films. Now a title the user
   actually said wins; the person only chooses among same-named titles (6 × "The Odyssey"). It's buy-only in the US,
   so the answer is "isn't on a subscription service in the United States (only to rent or buy)".
 - Prompt: exactly one kind; titles in the language spoken (one answer came back as "Odisseia").
-- Idea: when a title is only to rent/buy and they have Prime Video, offer "Buy or rent it in Prime Video?".
 - Open question: a mic on the picks results screen (never had one; only the mood screen and "On TV" mode do).
 
 ## Decision (22 Nov): one small server for TMDB + AI; no bundled model

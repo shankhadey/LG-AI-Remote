@@ -303,7 +303,7 @@ class PicksController(
     fun playKeepWatching() { keep?.let { session?.how = "keep"; playTitle(it.playedKey ?: return, it.playedName ?: "", it.service) } }
 
     private fun playTitle(key: String, name: String, service: String?) {
-        val svc = Catalog.SERVICES.firstOrNull { it.name == service }
+        val svc = Catalog.find(service)
         val appId = svc?.let { appIdFor(it) }
         if (appId == null) {
             message = if (svc == null) "Couldn't tell which app has $name" else "Open ${svc.name} once from the TV, so the remote can learn it"
@@ -446,11 +446,30 @@ class PicksController(
         // Found, but not on their services: say where it is instead of searching YouTube.
         ranked.firstOrNull { norm(it.name) == norm(query) }?.let { t ->
             val where = runCatching { tmdb.providerNames(t) }.getOrDefault(emptyList())
+            if (offerToRent(runCatching { tmdb.enrich(t, mine) }.getOrDefault(t), where, tmdb)) return Found.Opened
             tv.log("VOICE “$query” → ${t.name}, on ${where.ifEmpty { listOf("no subscription service") }.joinToString()}")
             return Found.Elsewhere(t.name, where)
         }
         tv.log("VOICE “$query” → nothing found")
         return Found.Nothing
+    }
+
+    /**
+     * Not on their services, but a store on the TV rents or sells it: show it as a pick ("To rent or buy on Prime
+     * Video"), Play opens it there. Prime Video first when they have Prime (same app, same account).
+     */
+    private suspend fun offerToRent(t: Title, subscriptions: List<String>, tmdb: Tmdb): Boolean {
+        val names = runCatching { tmdb.rentBuyNames(t) }.getOrDefault(emptyList()).map { it.lowercase() }
+        val shop = Catalog.STORES.filter { s -> store.country in s.countries && s.tmdbNames.any { it.lowercase() in names } && appIdFor(s) != null }
+            .sortedByDescending { it.name in store.services }.firstOrNull() ?: return false
+        openPicker()
+        if (step != Step.Choose) return false   // first-run setup comes first
+        val also = subscriptions.firstNotNullOfOrNull { n -> Catalog.SERVICES.firstOrNull { s -> s.tmdbNames.any { it.equals(n, true) } }?.name }
+        tv.log("VOICE ${t.name}: on no subscription of theirs${also?.let { " (on $it)" } ?: ""}; to rent or buy on ${shop.name} (stores: ${names.joinToString()})")
+        showList(listOf(t.copy(service = shop.name)), t.name) {
+            if (also != null) "To rent or buy on ${shop.name}. Also on $also." else "To rent or buy on ${shop.name}."
+        }
+        return true
     }
 
     private fun norm(x: String) = x.lowercase().trim().removePrefix("the ").replace("&", "and").replace(Regex("[^a-z0-9]"), "")
