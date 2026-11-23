@@ -211,6 +211,11 @@ class ScreenshotTest {
         val tv = remoteTv().apply { foregroundApp = "com.apple.appletv"; mediaState = "playing"; picks.nowShowing = "Ted Lasso" to null; picks.nowShowingApp = "com.apple.appletv"; say("Opening Ted Lasso on Apple TV+") }
         shot { RemoteScreen(tv) { true } }
     }
+    @Test fun demoOff() { Palette.dark = false; val tv = remoteTv().apply { connected = false; tvOff = true }; shot { RemoteScreen(tv) { true } } }
+    @Test fun demoTyping() { Palette.dark = false; val tv = remoteTv().apply { tvKeyboardOpen = true; foregroundApp = "youtube.leanback.v4" }; shot { RemoteScreen(tv) { true } } }
+    @Test fun demoNetflix() { Palette.dark = false; val tv = remoteTv().apply { foregroundApp = "netflix" }; shot { RemoteScreen(tv) { true } } }
+    @Test fun demoYoutube() { Palette.dark = false; val tv = remoteTv().apply { foregroundApp = "youtube.leanback.v4" }; shot { RemoteScreen(tv) { true } } }
+    @Test fun demoPrime() { Palette.dark = false; val tv = remoteTv().apply { foregroundApp = "amazon" }; shot { RemoteScreen(tv) { true } } }
     @Test fun demoExportTvPage() {
         val dir = java.io.File("build/demo-video"); dir.mkdirs()   // the TV page + its data, for rendering the demo video
         java.io.File(dir, "page.html").writeText(com.home.tvremote.picks.PicksWeb.PAGE)

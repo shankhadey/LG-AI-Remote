@@ -21,7 +21,7 @@ android {
     namespace = "com.home.tvremote"
     // Android 16. Unit-test runs compile against 35 instead: Paparazzi 1.3.5 (screenshots, simulated TVs) can't
     // render with the 36 platform, and the app uses no Android 16 APIs. Drop with a stable Paparazzi 2.
-    compileSdk = if (gradle.startParameter.taskNames.any { it.contains("UnitTest", true) }) 35 else 36
+    compileSdk = if (gradle.startParameter.taskNames.any { it.contains("UnitTest", true) || it.contains("Paparazzi", true) }) 35 else 36
     defaultConfig {
         applicationId = "com.home.tvremote"
         minSdk = 26
