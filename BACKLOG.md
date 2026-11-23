@@ -26,6 +26,16 @@ links, seasonal picks, Spanish/Hindi, licensed where-to-watch data for paid tier
 
 Things we decided to remember for later.
 
+## Working rule: marketing assets (demo videos, store screenshots) — added 23 Nov
+Learned from the LinkedIn demo (four rounds to get it right). Before rendering anything:
+1. **Cause-and-effect script first.** One line per shot: what is tapped → what the TV shows → what the phone shows → how it leads into the next shot. Nothing is clicked without its result on screen; captions only name actions that actually happen.
+2. **Real, not placeholder.** Real room/TV photo, real app screens (Paparazzi + the app's own TV pages rendered in a browser), real logos and posters (TMDB). Fake names only for people (Alex, Sam). Ask for missing inputs (photo, keys) up front.
+3. **Phone and TV always agree.** Same app label, same mode (touchpad vs list when On TV), same timer value, same typed text, same search results.
+4. **Viewer pass before sending.** Watch it cold, as a stranger with no sound: can every tap be followed? Each screen holds ≥1 s after it changes.
+5. **Check the network/keys first.** Confirm reachable hosts and saved secrets before picking sources (TMDB token is saved on the cloud environment; image.tmdb.org and Wikimedia are allowed).
+6. **Play Store screenshots stay generic** — no third-party logos or posters (Google rejects them). Real artwork is fine for our own social posts.
+Pipeline lives outside the repo for now (room.py, screens.py, tvframes.py); demo frames come from ScreenshotTest `demo*` tests.
+
 ## To test on the TV
 - **v0.5.0 "What should we watch?"** — first run: enter names, services, languages, bedtimes, TMDB key (and Groq
   key for AI). Check: picks are on your services; hoichoi / ZEE5 coverage; "Not now" / "Never" swap a pick;
