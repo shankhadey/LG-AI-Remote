@@ -218,6 +218,13 @@ class ScreenshotTest {
     @Test fun demoPrime() { Palette.dark = false; val tv = remoteTv().apply { foregroundApp = "amazon" }; shot { RemoteScreen(tv) { true } } }
     @Test fun demoOnTvTouchpad() { Palette.dark = false; val pc = picks(com.home.tvremote.picks.Step.Choose).apply { showOnTv = true; tvPageOn = true; pointingAt = "Light & funny" }; shot { com.home.tvremote.ui.PicksScreen(pc) } }
     @Test fun demoExportTimerPage() { java.io.File("build/demo-video").mkdirs(); java.io.File("build/demo-video/timer.html").writeText(com.home.tvremote.timer.TimerServer.PAGE) }
+    @Test fun demoDisney() { Palette.dark = false; val tv = remoteTv().apply { foregroundApp = "com.disney.disneyplus-prod"; mediaState = "playing"; picks.nowShowing = "The Bear" to null; picks.nowShowingApp = "com.disney.disneyplus-prod" }; shot { RemoteScreen(tv) { true } } }
+    @Test fun demoTimerRunning() {
+        Palette.dark = false
+        TimerEngine.state = TimerState(TimerKind.OnScreen, System.currentTimeMillis() + 9 * 60_000L + 58_000L, 10 * 60_000L)
+        try { val tv = remoteTv().apply { foregroundApp = "com.webos.app.browser" }; shot { RemoteScreen(tv) { true } } } finally { TimerEngine.state = null }
+    }
+    @Test fun demoOnTvPicks() { Palette.dark = false; val pc = picks(com.home.tvremote.picks.Step.Results).apply { showOnTv = true; tvPageOn = true; pointingAt = "Ted Lasso · Play" }; shot { com.home.tvremote.ui.PicksScreen(pc) } }
     @Test fun demoExportTvPage() {
         val dir = java.io.File("build/demo-video"); dir.mkdirs()   // the TV page + its data, for rendering the demo video
         java.io.File(dir, "page.html").writeText(com.home.tvremote.picks.PicksWeb.PAGE)
