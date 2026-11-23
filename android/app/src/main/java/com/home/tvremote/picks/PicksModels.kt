@@ -40,6 +40,10 @@ data class Title(
     val fresh: Boolean = false,
     /** Position in TMDB's trending-this-week list (0 = top), or -1. */
     val trendRank: Int = -1,
+    /** Stores that rent or sell it here (TMDB names, "Amazon Video"…), filled in by enrich. */
+    val storeNames: List<String> = emptyList(),
+    /** Set when it's on none of their services and is shown to rent or buy: the store ("Prime Video"). */
+    val rentFrom: String? = null,
 ) {
     val key get() = "${if (kind == Kind.Movie) "movie" else "tv"}:$id"
 }

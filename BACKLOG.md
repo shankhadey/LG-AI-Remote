@@ -340,6 +340,16 @@ Measure it: time from opening to Play, quick-backs, "Not now" count per session.
 - Test matrix: at least 3 more LG TVs across webOS versions (2020–2025); pairing, Wake-on-LAN, pointer, links.
 - Keys: no per-user TMDB/Groq keys in a shared app → our small server (see Before selling).
 
+## v1.5.3 — rent or buy everywhere they ask for something specific (23 Nov)
+- Why rent/buy never showed: the app was built on "only what's in your subscriptions" — TMDB's rent/buy lists were
+  never read. 1.5.2 fixed asking for a title by name; 1.5.3 extends it to a person ("Nolan movies") and to a
+  description ("the one where a guy relives the same day"): their services first, then "· To rent or buy on Prime
+  Video". A single described match that's only to rent/buy is shown, not opened, so they see it costs money.
+- Mood picks stay subscription-only (deliberate).
+- Rent/buy stores come from the same TMDB request as the subscription check (no extra calls).
+- I18n fix: a pattern like "With {}." swallowed "· To rent or buy on …" and left it in English; parts now win.
+- Still open: a misheard name only gets the rent card on an exact match.
+
 ## v1.5.2 — rent or buy titles are shown (22 Nov)
 - A title on none of their services but rented/sold by a store with an app on the TV (Prime Video, Apple TV,
   YouTube, Fandango at Home) is shown as a pick: "To rent or buy on Prime Video. Also on Max." Play opens that store

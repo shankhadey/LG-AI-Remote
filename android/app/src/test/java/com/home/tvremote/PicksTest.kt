@@ -579,6 +579,38 @@ class PicksTest {
         assertFalse(pc.saidIn("something jennifer aniston is in", "Breakfast at Tiffany's"))
     }
 
+    @Test fun aPersonsTitlesToRentOrBuyComeAfterTheOnesOnTheirServices() = runBlocking {
+        // 22 Nov: anything asked for by name or person should show, even if it's only to rent or buy.
+        server.dispatcher = object : Dispatcher() {
+            override fun dispatch(r: RecordedRequest): MockResponse {
+                val p = r.path ?: ""
+                fun json(o: Any) = MockResponse().setBody(o.toString())
+                fun providers(k: String, n: String) = json(JSONObject().put("results", JSONObject().put("US", JSONObject().put(k, org.json.JSONArray().put(JSONObject().put("provider_name", n))))))
+                return when {
+                    p.startsWith("/3/search/person") -> json(JSONObject().put("results", org.json.JSONArray().put(JSONObject().put("id", 525).put("name", "Christopher Nolan").put("popularity", 20.0))))
+                    p.startsWith("/3/person/525/combined_credits") -> json(JSONObject().put("cast", org.json.JSONArray()).put("crew", org.json.JSONArray()
+                        .put(JSONObject().put("media_type", "movie").put("id", 1).put("title", "Oppenheimer").put("release_date", "2023-07-19").put("job", "Director").put("vote_count", 9000))
+                        .put(JSONObject().put("media_type", "movie").put("id", 2).put("title", "Inception").put("release_date", "2010-07-15").put("job", "Director").put("vote_count", 8000))
+                        .put(JSONObject().put("media_type", "movie").put("id", 3).put("title", "Tenet").put("release_date", "2020-08-22").put("job", "Director").put("vote_count", 7000))))
+                    p.startsWith("/3/movie/1/watch/providers") -> providers("buy", "Amazon Video")
+                    p.startsWith("/3/movie/2/watch/providers") -> providers("flatrate", "Netflix")
+                    p.startsWith("/3/movie/3/watch/providers") -> providers("rent", "Apple TV")   // no Apple TV app on this TV
+                    else -> json(JSONObject())
+                }
+            }
+        }
+        server.start()
+        val pc = PicksController(store().apply { services = listOf("Netflix") }, OpenLog(), CoroutineScope(StandardTestDispatcher()),
+            clock = { at(Calendar.TUESDAY, 21, 30) }, onDevice = null, titleIdsOf = null, directLinks = false, tmdbBase = server.url("/3").toString().trimEnd('/'))
+        assertNull(pc.showPerson("christopher nolan", Kind.Movie))
+        assertEquals(listOf("Inception", "Oppenheimer"), pc.picks.map { it.title.name })   // Tenet: no store app on the TV
+        assertEquals("With Christopher Nolan · 2010.", pc.picks[0].why)
+        assertEquals("With Christopher Nolan · 2023 · To rent or buy on Prime Video.", pc.picks[1].why)
+        com.home.tvremote.i18n.I18n.lang = "pt"
+        try { assertEquals("Com Christopher Nolan · 2023 · Para alugar ou comprar no Prime Video.", com.home.tvremote.i18n.I18n.t(pc.picks[1].why)) }
+        finally { com.home.tvremote.i18n.I18n.lang = "en" }
+    }
+
     @Test fun aiNamingAPersonWinsOverAnInventedTitleList() = runBlocking {
         fakeTmdbForVoice()
         val ai = FakeEngine("On-phone", """{"kind":"title","titles":["Breakfast at Tiffany's"],"person":"Jennifer Aniston"}""")

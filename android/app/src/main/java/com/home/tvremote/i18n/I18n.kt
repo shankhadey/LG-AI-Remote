@@ -37,13 +37,20 @@ object I18n {
     fun translate(s: String): String? {
         if (lang == "en") return s
         PT[s]?.let { return it }
-        for ((re, out) in PT_PATTERNS) re.matchEntire(s)?.let { m -> return fill(out, m.groupValues.drop(1)) }
+        // A pattern whose {} swallowed a " · " ("With {}." over "With X · 2023 · To rent or buy on Y.") is only a
+        // fallback: translating each part is better when that covers every part with words in it.
+        var swallowed: String? = null
+        for ((re, out) in PT_PATTERNS) re.matchEntire(s)?.let { m ->
+            if (m.groupValues.drop(1).none { " · " in it }) return fill(out, m.groupValues.drop(1))
+            if (swallowed == null) swallowed = fill(out, m.groupValues.drop(1))
+        }
         if (" · " in s && '\n' !in s) {
             val parts = s.split(" · ")
             val tr = parts.map { p -> PT[p] ?: PT_PATTERNS.firstNotNullOfOrNull { (re, out) -> re.matchEntire(p)?.let { fill(out, it.groupValues.drop(1)) } } }
-            if (tr.any { it != null }) return parts.indices.joinToString(" · ") { tr[it] ?: parts[it] }
+            val complete = parts.indices.all { tr[it] != null || !parts[it].any(Char::isLetter) }
+            if (tr.any { it != null } && (swallowed == null || complete)) return parts.indices.joinToString(" · ") { tr[it] ?: parts[it] }
         }
-        return null
+        return swallowed
     }
 
     /** Back to English, for logs (e.g. a label the TV page reports). Unknown text is returned as is. */
@@ -308,6 +315,7 @@ object I18n {
         "Select {}'s search box: “{}” is typed as soon as it opens" to "Selecione a busca {de1}: “{2}” será digitado assim que ela abrir",
         "Didn't understand “{}”" to "Não entendi “{1}”", "Couldn't find “{}”" to "“{1}” não encontrado",
         "Nothing with {} on your services right now" to "Nada com {1} nos seus serviços agora", "Nothing with {} on your services" to "Nada com {1} nos seus serviços",
+        "Matches what you described" to "Combina com o que você descreveu",
         "To rent or buy on {}." to "Para alugar ou comprar {em1}.", "To rent or buy on {}. Also on {}." to "Para alugar ou comprar {em1}. Também {em2}.",
         "With {}." to "Com {1}.", "With {}" to "Com {1}",
         "{} is on {}, but the remote hasn't seen the {} app on this TV yet — open {} once from the TV, then ask again" to

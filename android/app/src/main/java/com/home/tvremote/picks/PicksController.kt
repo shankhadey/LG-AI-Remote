@@ -446,7 +446,7 @@ class PicksController(
         // Found, but not on their services: say where it is instead of searching YouTube.
         ranked.firstOrNull { norm(it.name) == norm(query) }?.let { t ->
             val where = runCatching { tmdb.providerNames(t) }.getOrDefault(emptyList())
-            if (offerToRent(runCatching { tmdb.enrich(t, mine) }.getOrDefault(t), where, tmdb)) return Found.Opened
+            if (offerToRent(runCatching { tmdb.enrich(t, mine) }.getOrDefault(t), where)) return Found.Opened
             tv.log("VOICE “$query” → ${t.name}, on ${where.ifEmpty { listOf("no subscription service") }.joinToString()}")
             return Found.Elsewhere(t.name, where)
         }
@@ -458,19 +458,35 @@ class PicksController(
      * Not on their services, but a store on the TV rents or sells it: show it as a pick ("To rent or buy on Prime
      * Video"), Play opens it there. Prime Video first when they have Prime (same app, same account).
      */
-    private suspend fun offerToRent(t: Title, subscriptions: List<String>, tmdb: Tmdb): Boolean {
-        val names = runCatching { tmdb.rentBuyNames(t) }.getOrDefault(emptyList()).map { it.lowercase() }
-        val shop = Catalog.STORES.filter { s -> store.country in s.countries && s.tmdbNames.any { it.lowercase() in names } && appIdFor(s) != null }
-            .sortedByDescending { it.name in store.services }.firstOrNull() ?: return false
+    private fun offerToRent(t: Title, subscriptions: List<String>): Boolean {
+        val r = withStore(t)?.takeIf { it.rentFrom != null } ?: return false
         openPicker()
         if (step != Step.Choose) return false   // first-run setup comes first
         val also = subscriptions.firstNotNullOfOrNull { n -> Catalog.SERVICES.firstOrNull { s -> s.tmdbNames.any { it.equals(n, true) } }?.name }
-        tv.log("VOICE ${t.name}: on no subscription of theirs${also?.let { " (on $it)" } ?: ""}; to rent or buy on ${shop.name} (stores: ${names.joinToString()})")
-        showList(listOf(t.copy(service = shop.name)), t.name) {
-            if (also != null) "To rent or buy on ${shop.name}. Also on $also." else "To rent or buy on ${shop.name}."
+        tv.log("VOICE ${t.name}: on no subscription of theirs${also?.let { " (on $it)" } ?: ""}; to rent or buy on ${r.rentFrom} (stores: ${t.storeNames.joinToString()})")
+        showList(listOf(r), t.name) {
+            if (also != null) "To rent or buy on ${r.rentFrom}. Also on $also." else "To rent or buy on ${r.rentFrom}."
         }
         return true
     }
+
+    /**
+     * An enriched title as something they can watch: on one of their services as is; otherwise to rent or buy
+     * from a store whose app is on the TV (Prime Video first when they have Prime); otherwise null.
+     */
+    internal fun withStore(t: Title): Title? {
+        if (t.service != null) return t
+        val names = t.storeNames.map { it.lowercase() }
+        val shop = Catalog.STORES.filter { s -> store.country in s.countries && s.tmdbNames.any { it.lowercase() in names } && appIdFor(s) != null }
+            .sortedByDescending { it.name in store.services }.firstOrNull() ?: return null
+        return t.copy(service = shop.name, rentFrom = shop.name)
+    }
+
+    /** Their services first, then ones to rent or buy (Kotlin's sort is stable, so best known first within each). */
+    private fun watchable(ts: List<Title>) = ts.mapNotNull { withStore(it) }.sortedBy { it.rentFrom != null }
+
+    /** "With Christopher Nolan · 2026." → "With Christopher Nolan · 2026 · To rent or buy on Prime Video." */
+    private fun rentNote(t: Title, why: String) = t.rentFrom?.let { "${why.removeSuffix(".")} · To rent or buy on $it." } ?: why
 
     private fun norm(x: String) = x.lowercase().trim().removePrefix("the ").replace("&", "and").replace(Regex("[^a-z0-9]"), "")
 
@@ -492,7 +508,8 @@ class PicksController(
         tv.log("VOICE AI “$text” → $j")
         val tmdb = tmdb()
         val mine = Catalog.SERVICES.filter { it.name in store.services }
-        suspend fun onMine(ts: List<Title>) = ts.take(10).map { runCatching { tmdb.enrich(it, mine) }.getOrDefault(it) }.filter { it.service != null }
+        // On their services, or to rent or buy (22 Nov: anything they ask for by name or person should show).
+        suspend fun onMine(ts: List<Title>) = watchable(ts.take(10).map { runCatching { tmdb.enrich(it, mine) }.getOrDefault(it) })
         val titles = j.optJSONArray("titles")?.let { a -> (0 until a.length()).map { a.getString(it) } }.orEmpty().filter { it.isNotBlank() }
         val personName = j.optJSONArray("person")?.let { a -> (0 until a.length()).joinToString(" and ") { a.getString(it) } }?.takeIf { it.isNotBlank() }
             ?: j.optString("person").takeIf { it.isNotBlank() && it != "null" }
@@ -525,13 +542,14 @@ class PicksController(
             "person" -> {
                 val person = j.optString("person").takeIf { it.isNotBlank() && it != "null" } ?: return "Didn't understand “$text”"
                 val list = onMine(runCatching { tmdb.personCredits(person) }.getOrDefault(emptyList()))
-                if (list.isEmpty()) "Nothing with $person on your services" else { showList(list, "With $person") { "With $person." }; null }
+                if (list.isEmpty()) "Nothing with $person on your services" else { showList(list, "With $person") { rentNote(it, "With $person.") }; null }
             }
             "description" -> {
                 val list = onMine(titles.mapNotNull { n -> runCatching { tmdb.search(n) }.getOrNull()?.firstOrNull() }.distinctBy { it.key })
                 when {
-                    list.size == 1 -> { val t = list[0]; Catalog.SERVICES.firstOrNull { it.name == t.service }?.let { s -> appIdFor(s)?.let { openIn(t.key, t.name, s, it) } }; null }
-                    list.isNotEmpty() -> { showList(list, "“$text”") { "Matches what you described." }; null }
+                    // One match on their services opens; one only to rent or buy is shown first, so they see the cost.
+                    list.size == 1 && list[0].rentFrom == null -> { val t = list[0]; Catalog.find(t.service)?.let { s -> appIdFor(s)?.let { openIn(t.key, t.name, s, it) } }; null }
+                    list.isNotEmpty() -> { showList(list, "“$text”") { rentNote(it, "Matches what you described.") }; null }
                     else -> "Nothing like that on your services"
                 }
             }
@@ -575,7 +593,8 @@ class PicksController(
     private fun titleCase(s: String) = s.split(' ').joinToString(" ") { w -> w.replaceFirstChar { it.uppercase() } }
 
     /**
-     * A person's titles (or, for "A and B", titles with all of them) on the household's services, best known first,
+     * A person's titles (or, for "A and B", titles with all of them) on the household's services, then ones to rent
+     * or buy, best known first,
      * shown as picks. Returns a message when there are none.
      */
     suspend fun showPerson(person: String, kind: Kind? = null): String? = kotlinx.coroutines.coroutineScope {
@@ -586,12 +605,12 @@ class PicksController(
         val each = people.map { p -> async { runCatching { tmdb.personCredits(p) }.getOrDefault(emptyList()).filter { kind == null || it.kind == kind } } }.map { it.await() }
         val shared = each.drop(1).fold(each.firstOrNull().orEmpty()) { acc, l -> acc.filter { t -> l.any { it.key == t.key } } }
         // Check where each is streaming, all at once.
-        val list = shared.take(20).map { t -> async { runCatching { tmdb.enrich(t, mine) }.getOrDefault(t) } }.map { it.await() }.filter { it.service != null }
+        val list = watchable(shared.take(20).map { t -> async { runCatching { tmdb.enrich(t, mine) }.getOrDefault(t) } }.map { it.await() })
         val who = people.joinToString(" and ") { titleCase(it) }
         tv.log("VOICE person “$who” (${kind ?: "any"}) → ${list.joinToString { it.name }.ifEmpty { "nothing on your services (${shared.size} found)" }}")
         if (list.isEmpty()) return@coroutineScope if (shared.isEmpty()) "Couldn't find ${if (people.size > 1) "anything with both" else "titles with $who"}"
             else "Nothing with $who on your services right now"
-        showList(list, "With $who") { t -> "With $who${if (t.year.isNotEmpty()) " · ${t.year}" else ""}." }
+        showList(list, "With $who") { t -> rentNote(t, "With $who${if (t.year.isNotEmpty()) " · ${t.year}" else ""}.") }
         null
     }
 

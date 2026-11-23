@@ -96,13 +96,6 @@ class Tmdb(private val key: String, private val base: String = "https://api.them
         return (0 until (flat?.length() ?: 0)).map { flat!!.getJSONObject(it).optString("provider_name") }
     }
 
-    /** Names of the stores that rent or sell a title in this region ("Amazon Video", "Apple TV"…). */
-    suspend fun rentBuyNames(t: Title): List<String> {
-        val path = if (t.kind == Kind.Movie) "/movie/${t.id}" else "/tv/${t.id}"
-        val r = runCatching { get("$path/watch/providers").optJSONObject("results")?.optJSONObject(region) }.getOrNull() ?: return emptyList()
-        return listOf("rent", "buy").flatMap { k -> r.optJSONArray(k)?.let { a -> (0 until a.length()).map { a.getJSONObject(it).optString("provider_name") } }.orEmpty() }.distinct()
-    }
-
     /** The well-known person TMDB has under this name (e.g. "adam sandler" → "Adam Sandler"), or null. */
     suspend fun findPerson(name: String): String? {
         val p = runCatching { get("/search/person", mapOf("query" to name)).optJSONArray("results")?.optJSONObject(0) }.getOrNull() ?: return null
@@ -145,10 +138,11 @@ class Tmdb(private val key: String, private val base: String = "https://api.them
             else -> d.optJSONArray("episode_run_time")?.let { a -> (0 until a.length()).map { a.getInt(it) }.minOrNull() }
                 ?: d.optJSONObject("last_episode_to_air")?.optInt("runtime")?.takeIf { it > 0 }
         }
-        val flat = runCatching { get("$path/watch/providers").optJSONObject("results")?.optJSONObject(region)?.optJSONArray("flatrate") }.getOrNull()
-        val names = (0 until (flat?.length() ?: 0)).map { flat!!.getJSONObject(it).optString("provider_name").lowercase() }
+        val here = runCatching { get("$path/watch/providers").optJSONObject("results")?.optJSONObject(region) }.getOrNull()
+        fun list(k: String) = here?.optJSONArray(k)?.let { a -> (0 until a.length()).map { a.getJSONObject(it).optString("provider_name") } }.orEmpty()
+        val names = list("flatrate").map { it.lowercase() }
         val service = services.firstOrNull { s -> s.tmdbNames.any { it.lowercase() in names } }?.name
-        return t.copy(runtimeMin = runtime, service = service ?: t.service)
+        return t.copy(runtimeMin = runtime, service = service ?: t.service, storeNames = (list("rent") + list("buy")).distinct())
     }
 
     /** TMDB's "recommendations" for a title: used for "Fans of X also loved it". */
