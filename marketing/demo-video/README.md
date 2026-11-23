@@ -21,8 +21,8 @@ Read the **Working rule: marketing assets** section in `BACKLOG.md` before chang
 | `build.sh` | Runs everything in order |
 | `fetch_art.py` | Downloads TMDB posters, backdrops and title logos, plus app logos from Wikimedia, and adds posters to the picks-page states |
 | `prepare.py` | Turns the room photo upright and builds the timer-sheet phone frame |
-| `screens.py` + `shoot.js` | TV home, Netflix, Prime Video, YouTube (search letter by letter, results), Disney+ and Apple TV+ players |
-| `render_tv.js` / `shoot_timer.js` | The app's real picks page and timer page |
+| `screens.py` + `shoot.cjs` | TV home, Netflix, Prime Video, YouTube (search letter by letter, results), Disney+ and Apple TV+ players |
+| `render_tv.cjs` / `shoot_timer.cjs` | The app's real picks page and timer page |
 | `tvframes.py` | Simple fallback TV frames (`tv_off.png` is still used) |
 | `room.py` | The scenes. Each scene is a function of time; `SC` holds the order and durations |
 | `soundtrack.py` | The music, with soft taps at the times `room.py` writes to `timing.json` |

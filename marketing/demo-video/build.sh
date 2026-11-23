@@ -11,10 +11,10 @@ cd "$W"
 [ -f room.jpg ] || { echo "Put the room photo at $W/room.jpg"; exit 1; }
 python3 "$HERE/prepare.py"
 python3 "$HERE/fetch_art.py"                # posters, logos, and posters on the picks page
-node "$HERE/render_tv.js"                 # the app's picks page: choose / picks / playing
-node "$HERE/shoot_timer.js"               # the app's timer page, 10:00 → 9:56
+node "$HERE/render_tv.cjs"                 # the app's picks page: choose / picks / playing
+node "$HERE/shoot_timer.cjs"               # the app's timer page, 10:00 → 9:56
 python3 "$HERE/tvframes.py"               # off-screen frame
-python3 "$HERE/screens.py" && node "$HERE/shoot.js"   # TV home, apps, search, players
+python3 "$HERE/screens.py" && node "$HERE/shoot.cjs"   # TV home, apps, search, players
 python3 "$HERE/room.py" --sheet           # contact sheet: sheet_room.png — look before the full render
 python3 "$HERE/room.py" && python3 "$HERE/soundtrack.py"
 ffmpeg -y -loglevel error -i demo_room.mp4 -i music.wav -c:v copy -c:a aac -b:a 192k -shortest -movflags +faststart sofapal-living-room-demo.mp4
