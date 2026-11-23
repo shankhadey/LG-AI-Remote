@@ -216,6 +216,8 @@ class ScreenshotTest {
     @Test fun demoNetflix() { Palette.dark = false; val tv = remoteTv().apply { foregroundApp = "netflix" }; shot { RemoteScreen(tv) { true } } }
     @Test fun demoYoutube() { Palette.dark = false; val tv = remoteTv().apply { foregroundApp = "youtube.leanback.v4" }; shot { RemoteScreen(tv) { true } } }
     @Test fun demoPrime() { Palette.dark = false; val tv = remoteTv().apply { foregroundApp = "amazon" }; shot { RemoteScreen(tv) { true } } }
+    @Test fun demoOnTvTouchpad() { Palette.dark = false; val pc = picks(com.home.tvremote.picks.Step.Choose).apply { showOnTv = true; tvPageOn = true; pointingAt = "Light & funny" }; shot { com.home.tvremote.ui.PicksScreen(pc) } }
+    @Test fun demoExportTimerPage() { java.io.File("build/demo-video").mkdirs(); java.io.File("build/demo-video/timer.html").writeText(com.home.tvremote.timer.TimerServer.PAGE) }
     @Test fun demoExportTvPage() {
         val dir = java.io.File("build/demo-video"); dir.mkdirs()   // the TV page + its data, for rendering the demo video
         java.io.File(dir, "page.html").writeText(com.home.tvremote.picks.PicksWeb.PAGE)
