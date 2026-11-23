@@ -6,11 +6,11 @@ continuous days before production. Family + friends are those testers. Everythin
 
 | # | Step | Who | Target |
 |---|------|-----|--------|
-| 1 | Google Play developer account ($25, ID verification takes 1–3 days) | You | Mon 23 Nov |
-| 2 | Product name + permanent package ID (can never change after first upload) | You (I propose) | Mon 23 Nov |
-| 3 | Release build: R8 shrinking, upload key kept outside the repo, Play App Signing | Me | Mon 23 Nov |
+| 1 | Google Play developer account — going organization (D-U-N-S in progress). Org accounts skip the 12-tester/14-day rule | You | D-U-N-S dependent |
+| 2 | ~~Product name~~ Sofapal chosen; package ID `com.favngroup.sofapal` not applied yet (rename before first upload) | You (I propose) | Mon 23 Nov |
+| 3 | ~~Release build: R8 shrinking, upload key kept outside the repo~~ done; Play App Signing at first upload | Me | Mon 23 Nov |
 | 4 | ~~Target Android 16 (SDK 36)~~ done v1.5.4 (AGP 8.11.1) | Me | Tue 24 Nov |
-| 5 | Streaming-data attribution (JustWatch via TMDB) | Me | Mon 23 Nov |
+| 5 | ~~Streaming-data attribution (JustWatch via TMDB)~~ done | Me | Mon 23 Nov |
 | 6 | Privacy policy page, Data safety answers, permission justifications | Me (you publish) | Tue 24 Nov |
 | 7 | Store listing: name, descriptions, screenshots, feature graphic, icon | Me (you approve) | Wed 25 Nov |
 | 8 | Picks for testers: TMDB key built into the closed-test build (stopgap, testers only) | Me | Wed 25 Nov |
