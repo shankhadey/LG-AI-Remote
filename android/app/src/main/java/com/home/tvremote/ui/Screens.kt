@@ -459,6 +459,15 @@ private fun SettingsScreen(tv: TvController) {
             if (tv.usageAvailable) Section("Privacy")
             if (tv.usageAvailable) SettingRow("Share anonymous usage", when (tv.usageConsent) { true -> "Yes"; false -> "No"; null -> "Not set" }) { usageDialog = true }
             Section("More")
+            val ctx = androidx.compose.ui.platform.LocalContext.current
+            SettingRow("Send to family", "") {
+                // WhatsApp is how apps spread in India and Brazil: a short message in their language and the Play link.
+                val name = ctx.applicationInfo.loadLabel(ctx.packageManager).toString()
+                val text = tr("I control our TV from my phone with $name, and it finds something to watch. Free, no ads:") +
+                    " https://play.google.com/store/apps/details?id=${com.home.tvremote.BuildConfig.APPLICATION_ID}"
+                ctx.startActivity(android.content.Intent.createChooser(android.content.Intent(android.content.Intent.ACTION_SEND)
+                    .setType("text/plain").putExtra(android.content.Intent.EXTRA_TEXT, text), null))
+            }
             SettingRow("Help & diagnostics", "") { tv.showHelp = true }
             SettingRow("Advanced", "keys, AI") { tv.openPicksSettings() }
             SettingRow("About", com.home.tvremote.BuildConfig.VERSION_NAME, raw = true) { about = true }

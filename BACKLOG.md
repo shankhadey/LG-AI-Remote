@@ -340,6 +340,14 @@ Measure it: time from opening to Play, quick-backs, "Not now" count per session.
 - Test matrix: at least 3 more LG TVs across webOS versions (2020–2025); pairing, Wake-on-LAN, pointer, links.
 - Keys: no per-user TMDB/Groq keys in a shared app → our small server (see Before selling).
 
+## v1.5.5 — review prompt + "Send to family" (23 Nov)
+- Play's in-app review sheet after 3 successes (TV turned on from the phone, a pick played) on 2+ different days,
+  never right after a failed turn-on or an unstable-network warning; asked once (Engagement.kt). Only appears for
+  Play installs, so it can't be tested from a sideloaded APK — check it in the closed test.
+- Settings › More › "Send to family": share sheet (WhatsApp etc.) with a one-line message in their language + the
+  Play link (uses the app's name and package ID, so the Sofapal rename carries over).
+- Next from the growth plan: small "sofapal" mark on the "Show on TV" screen; store listings in EN / PT-BR / Hindi.
+
 ## v1.5.4 — Android 16 (23 Nov)
 - targetSdk/compileSdk 36, AGP 8.11.1. Unit-test runs compile against 35: Paparazzi 1.3.5 can't render with the 36
   platform (it copies Build fields from its Android 15 renderer); newer layoutlib fails "init Bridge" and Paparazzi

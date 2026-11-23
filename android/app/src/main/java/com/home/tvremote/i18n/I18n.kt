@@ -317,6 +317,9 @@ object I18n {
         "Nothing with {} on your services right now" to "Nada com {1} nos seus serviços agora", "Nothing with {} on your services" to "Nada com {1} nos seus serviços",
         "Matches what you described" to "Combina com o que você descreveu",
         "To rent or buy on {}." to "Para alugar ou comprar {em1}.", "To rent or buy on {}. Also on {}." to "Para alugar ou comprar {em1}. Também {em2}.",
+        "Send to family" to "Enviar para a família",
+        "I control our TV from my phone with {}, and it finds something to watch. Free, no ads:" to
+            "Controlo nossa TV pelo celular com o {1}, e ele encontra algo para assistir. Grátis, sem anúncios:",
         "With {}." to "Com {1}.", "With {}" to "Com {1}",
         "{} is on {}, but the remote hasn't seen the {} app on this TV yet — open {} once from the TV, then ask again" to
             "{1} está {em2}, mas o controle ainda não viu o app {3} nesta TV. Abra o app uma vez pela TV e peça de novo.",

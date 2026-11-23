@@ -302,6 +302,9 @@ class PicksController(
 
     fun playKeepWatching() { keep?.let { session?.how = "keep"; playTitle(it.playedKey ?: return, it.playedName ?: "", it.service) } }
 
+    /** Called after Play opened a title (a success, for when to ask for a review). */
+    var onPlayed: () -> Unit = {}
+
     private fun playTitle(key: String, name: String, service: String?) {
         val svc = Catalog.find(service)
         val appId = svc?.let { appIdFor(it) }
@@ -315,6 +318,7 @@ class PicksController(
         }
         pending = session; pendingStartedAt = null
         openIn(key, name, svc, appId)
+        onPlayed()
         session = null
         open = false
         scope.launch { delay(30_000); stopTvPage() }

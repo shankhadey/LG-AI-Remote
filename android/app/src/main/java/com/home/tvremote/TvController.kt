@@ -46,7 +46,15 @@ class TvController(app: Application) : AndroidViewModel(app), TvActions {
         // Kept across app restarts, so Diagnostics shows what happened before the app was reopened.
         prefs.getString("events", "").orEmpty().split('\n').filter { it.isNotBlank() })
     /** "What should we watch?" (declared early: onForeground() forwards to it). */
+    private val engagement = Engagement(app.getSharedPreferences("engagement", Context.MODE_PRIVATE))
+    /** Set when the app has clearly worked enough times to ask for a Play review (MainActivity shows Play's sheet). */
+    var askForReview by mutableStateOf(false)
+        private set
+    private fun succeeded() { if (engagement.success(troubleNow = turnOnFailures > 0 || System.currentTimeMillis() - unstableSaidAt < 30 * 60_000)) askForReview = true }
+    fun reviewShown() { askForReview = false; engagement.reviewAsked() }
+
     val picks = PicksController(PicksStore(app.getSharedPreferences("picks", Context.MODE_PRIVATE), app.getSharedPreferences("secrets", Context.MODE_PRIVATE)), this, viewModelScope)
+        .also { it.onPlayed = { succeeded() } }
 
     var screen by mutableStateOf(if (prefs.getString("ip", null) != null) Screen.Remote else Screen.Setup)
     var tvName by mutableStateOf(prefs.getString("name", "$brand TV")!!)
@@ -810,6 +818,7 @@ class TvController(app: Application) : AndroidViewModel(app), TvActions {
                         // Mark on *before* leaving the turning-on state, so the screen goes straight to the remote.
                         connected = true; tvOff = false; waking = false; turnOnFailures = 0
                         say("TV is on")
+                        succeeded()
                         com.home.tvremote.analytics.Analytics.log(com.home.tvremote.analytics.Analytics.Event.TurnOnFromPhone, "result" to "on", "brand" to brand)
                         tv?.let { afterConnect(it) }
                     }

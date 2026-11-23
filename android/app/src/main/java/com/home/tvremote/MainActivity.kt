@@ -35,6 +35,15 @@ class MainActivity : ComponentActivity() {
             Palette.dark = isSystemInDarkTheme()
             val scheme = if (Palette.dark) darkColorScheme(primary = Palette.text, background = Palette.bg, surface = Palette.surface)
                 else lightColorScheme(primary = Palette.text, background = Palette.bg, surface = Palette.surface)
+            // Play's own review sheet, once the app has clearly worked (see Engagement). Nothing shows for copies
+            // not installed from Play.
+            androidx.compose.runtime.LaunchedEffect(tv.askForReview) {
+                if (!tv.askForReview) return@LaunchedEffect
+                kotlinx.coroutines.delay(2500)   // let the TV-on / opening moment land first
+                val rm = com.google.android.play.core.review.ReviewManagerFactory.create(this@MainActivity)
+                rm.requestReviewFlow().addOnCompleteListener { t -> if (t.isSuccessful) rm.launchReviewFlow(this@MainActivity, t.result) }
+                tv.reviewShown()
+            }
             MaterialTheme(colorScheme = scheme) {
                 Box(Modifier.fillMaxSize().background(Palette.bg).safeDrawingPadding().imePadding()) {
                     when (tv.screen) {

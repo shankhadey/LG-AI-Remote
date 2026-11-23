@@ -26,8 +26,8 @@ android {
         applicationId = "com.home.tvremote"
         minSdk = 26
         targetSdk = 36
-        versionCode = 65
-        versionName = "1.5.4"
+        versionCode = 66
+        versionName = "1.5.5"
     }
     signingConfigs {
         if (keystoreProps.getProperty("storeFile") != null) create("upload") {
@@ -60,6 +60,7 @@ kotlin {
 dependencies {
     val composeBom = platform("androidx.compose:compose-bom:2024.10.01")
     implementation(composeBom)
+    implementation("com.google.android.play:review-ktx:2.0.2")   // Play's in-app review sheet
     implementation("androidx.compose.ui:ui")
     implementation("androidx.compose.material3:material3")
     implementation("androidx.compose.material:material-icons-extended")
