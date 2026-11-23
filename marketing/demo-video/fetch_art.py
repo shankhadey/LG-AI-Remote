@@ -1,7 +1,7 @@
 """Downloads real posters, backdrops and title logos from TMDB, app logos from Wikimedia Commons,
 and adds posters to the picks TV-page states. Run from work/. The TMDB read token is injected by
 the cloud environment's network proxy (Authorization: Bearer); locally set TMDB_TOKEN instead."""
-import json, os, urllib.request, urllib.parse, time
+import json, os, urllib.request, urllib.error, urllib.parse, time
 os.makedirs("art", exist_ok=True); os.makedirs("logos", exist_ok=True)
 TOKEN = os.environ.get("TMDB_TOKEN")
 def get(u):
@@ -29,8 +29,14 @@ for kind, q, y, k in (("movie", "Dune: Part Two", None, 4), ("movie", "Dune", 20
     for b in get(f"https://api.themoviedb.org/3/{kind}/{i}/images?include_image_language=null")["backdrops"][:k]:
         save("https://image.tmdb.org/t/p/w780" + b["file_path"], f"art/dune{n}.jpg"); n += 1
 for f in ["Netflix_2015_logo.svg", "YouTube_Logo_2017.svg", "Amazon_Prime_Video_logo.svg", "Disney+_logo.svg", "Apple_TV_Plus_Logo.svg"]:
+    if os.path.exists("logos/" + f): continue
     req = urllib.request.Request("https://commons.wikimedia.org/wiki/Special:FilePath/" + f, headers={"User-Agent": "DemoVideoBuilder/1.0 (one-off script)"})
-    open("logos/" + f, "wb").write(urllib.request.urlopen(req, timeout=30).read()); time.sleep(2)
+    for wait in (5, 15, 30, 60, 0):   # Wikimedia rate-limits (429): back off and retry
+        try: open("logos/" + f, "wb").write(urllib.request.urlopen(req, timeout=30).read()); break
+        except urllib.error.HTTPError as e:
+            if e.code != 429 or not wait: raise
+            time.sleep(wait)
+    time.sleep(2)
 for fn in ("state_picks.json", "state_choose.json", "state_playing.json"):   # the app shows posters on its TV page when it has a TMDB key
     d = json.load(open(fn))
     for p in d.get("picks") or []:
