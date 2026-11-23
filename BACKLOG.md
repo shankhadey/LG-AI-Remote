@@ -9,7 +9,7 @@ continuous days before production. Family + friends are those testers. Everythin
 | 1 | Google Play developer account ($25, ID verification takes 1–3 days) | You | Mon 23 Nov |
 | 2 | Product name + permanent package ID (can never change after first upload) | You (I propose) | Mon 23 Nov |
 | 3 | Release build: R8 shrinking, upload key kept outside the repo, Play App Signing | Me | Mon 23 Nov |
-| 4 | Target Android 16 (SDK 36) | Me | Tue 24 Nov |
+| 4 | ~~Target Android 16 (SDK 36)~~ done v1.5.4 (AGP 8.11.1) | Me | Tue 24 Nov |
 | 5 | Streaming-data attribution (JustWatch via TMDB) | Me | Mon 23 Nov |
 | 6 | Privacy policy page, Data safety answers, permission justifications | Me (you publish) | Tue 24 Nov |
 | 7 | Store listing: name, descriptions, screenshots, feature graphic, icon | Me (you approve) | Wed 25 Nov |
@@ -339,6 +339,13 @@ Measure it: time from opening to Play, quick-backs, "Not now" count per session.
 - Region: TMDB region is fixed to US; make it a setting (availability + providers differ per country).
 - Test matrix: at least 3 more LG TVs across webOS versions (2020–2025); pairing, Wake-on-LAN, pointer, links.
 - Keys: no per-user TMDB/Groq keys in a shared app → our small server (see Before selling).
+
+## v1.5.4 — Android 16 (23 Nov)
+- targetSdk/compileSdk 36, AGP 8.11.1. Unit-test runs compile against 35: Paparazzi 1.3.5 can't render with the 36
+  platform (it copies Build fields from its Android 15 renderer); newer layoutlib fails "init Bridge" and Paparazzi
+  2.0 alphas need AGP 9. Revisit when Paparazzi 2 is stable.
+- Flaky (seen once in 4 runs): SimulatedTvTest "Dispatchers.Main is used concurrently with setting it" — two tests
+  set Main in parallel. Fix by setting Main once per class.
 
 ## v1.5.3 — rent or buy everywhere they ask for something specific (23 Nov)
 - Why rent/buy never showed: the app was built on "only what's in your subscriptions" — TMDB's rent/buy lists were

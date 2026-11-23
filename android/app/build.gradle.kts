@@ -19,13 +19,15 @@ val keystoreProps = Properties().apply {
 
 android {
     namespace = "com.home.tvremote"
-    compileSdk = 35
+    // Android 16. Unit-test runs compile against 35 instead: Paparazzi 1.3.5 (screenshots, simulated TVs) can't
+    // render with the 36 platform, and the app uses no Android 16 APIs. Drop with a stable Paparazzi 2.
+    compileSdk = if (gradle.startParameter.taskNames.any { it.contains("UnitTest", true) }) 35 else 36
     defaultConfig {
         applicationId = "com.home.tvremote"
         minSdk = 26
-        targetSdk = 35
-        versionCode = 64
-        versionName = "1.5.3"
+        targetSdk = 36
+        versionCode = 65
+        versionName = "1.5.4"
     }
     signingConfigs {
         if (keystoreProps.getProperty("storeFile") != null) create("upload") {
@@ -77,3 +79,4 @@ dependencies {
     testImplementation("com.squareup.okhttp3:mockwebserver:4.12.0")
     testImplementation("org.jetbrains.kotlinx:kotlinx-coroutines-test:1.9.0")
 }
+
