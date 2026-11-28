@@ -5,3 +5,7 @@ config.json
 keystore.properties
 *.jks
 *.keystore
+tools/catalog/*.jsonl
+tools/catalog/*.log
+tools/catalog/compare_results.json
+tools/catalog/__pycache__/
