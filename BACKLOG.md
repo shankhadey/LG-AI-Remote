@@ -23,6 +23,11 @@ continuous days before production. Family + friends are those testers. Everythin
 Not on the launch path (after launch): iPhone app, analytics consent wiring (needs Firebase project), self-calibrating
 links, seasonal picks, Spanish/Hindi, licensed where-to-watch data for paid tiers.
 
+**Future: more Indian languages (added 28 Nov).** Picks catalogue and UI beyond Hindi: Tamil, Telugu, Malayalam,
+Bengali, Marathi, Kannada. Catalogue: add Wikidata labels in ta/te/ml/bn/mr/kn for Indian titles (one extra pass, CC0) so
+names show and voice search matches in the viewer's language; mood/language filters by original language. UI: translate
+screens per language like Portuguese. Do after the own-catalogue switch passes its coverage test.
+
 
 Things we decided to remember for later.
 
