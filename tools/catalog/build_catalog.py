@@ -18,6 +18,10 @@ def q(sparql, tries=4):
         except Exception as e:
             print("  retry", i, type(e).__name__, str(e)[:80], file=sys.stderr); time.sleep(15 * (i + 1))
     return None
+def num(x):
+    """Wikidata uses blank nodes for "unknown value"; treat anything non-numeric as missing."""
+    try: return int(float(x))
+    except (TypeError, ValueError): return None
 def val(b, k): return b[k]["value"] if k in b else None
 def qid(u): return u.rsplit("/", 1)[1]
 
@@ -76,10 +80,10 @@ WHERE {{ VALUES ?i {{ {vals} }} ?i wikibase:sitelinks ?links.
                 name = v.get("en") or v.get("pt") or v.get("hi")
                 if not name: continue
                 r = {"id": qid(v["i"]), "kind": "tv" if v.get("tt") or v.get("disney_series") or v.get("apple_show") else "movie",
-                     "year": int(v["year"]) if v.get("year") else None, "name": name, "name_pt": v.get("pt"), "name_hi": v.get("hi"),
+                     "year": num(v.get("year")), "name": name, "name_pt": v.get("pt"), "name_hi": v.get("hi"),
                      "links": int(v.get("links", 0)), "genres": [g for g in v.get("genres", "").split("|") if g],
                      "langs": [g for g in v.get("langs", "").split("|") if g], "countries": [g for g in v.get("countries", "").split("|") if g],
-                     "runtime": int(float(v["dur"])) if v.get("dur") else None, "imdb": v.get("imdb"),
+                     "runtime": num(v.get("dur")), "imdb": v.get("imdb"),
                      "tmdb": ("movie/" + v["tm"]) if v.get("tm") else ("tv/" + v["tt"]) if v.get("tt") else None,
                      "svc": {k: v[k] for k in SVC if v.get(k)}}
                 f.write(json.dumps(r, ensure_ascii=False) + "\n")
